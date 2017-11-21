@@ -23,6 +23,7 @@ import com.nimbusds.oauth2.sdk.SerializeException;
 
 import pl.edu.icm.unity.exceptions.EngineException;
 import pl.edu.icm.unity.idpcommon.EopException;
+import pl.edu.icm.unity.oauth.as.OAuthAuthzContext;
 import pl.edu.icm.unity.oauth.as.OAuthErrorResponseException;
 import pl.edu.icm.unity.oauth.as.OAuthProcessor;
 import pl.edu.icm.unity.oauth.as.preferences.OAuthPreferences;
@@ -36,7 +37,7 @@ import pl.edu.icm.unity.server.authn.InvocationContext;
 import pl.edu.icm.unity.server.translation.out.TranslationResult;
 import pl.edu.icm.unity.server.utils.Log;
 import pl.edu.icm.unity.server.utils.RoutingServlet;
-import pl.edu.icm.unity.types.basic.Attribute;
+import pl.edu.icm.unity.types.basic.DynamicAttribute;
 import pl.edu.icm.unity.types.basic.IdentityParam;
 
 /**
@@ -123,7 +124,7 @@ public class ASConsentDeciderServlet extends HttpServlet
 		if (preferences.isDoNotAsk())
 			return false;
 		
-		return !oauthCtx.isSkipConsent();
+		return !oauthCtx.getConfig().isSkipConsent();
 	}
 	
 	/**
@@ -151,9 +152,9 @@ public class ASConsentDeciderServlet extends HttpServlet
 		{
 			TranslationResult userInfo = idpEngine.getUserInfo(oauthCtx);
 			IdentityParam selectedIdentity = idpEngine.getIdentity(userInfo, 
-					oauthCtx.getSubjectIdentityType());
+					oauthCtx.getConfig().getSubjectIdentityType());
 			log.debug("Authentication of " + selectedIdentity);
-			Collection<Attribute<?>> attributes = processor.filterAttributes(userInfo, 
+			Collection<DynamicAttribute> attributes = processor.filterAttributes(userInfo, 
 					oauthCtx.getRequestedAttrs());
 			respDoc = processor.prepareAuthzResponseAndRecordInternalState(attributes, selectedIdentity, 
 					oauthCtx, tokensMan);

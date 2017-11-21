@@ -34,6 +34,8 @@ import pl.edu.icm.unity.stdext.attr.IntegerAttribute;
 import pl.edu.icm.unity.stdext.attr.IntegerAttributeSyntax;
 import pl.edu.icm.unity.stdext.attr.StringAttribute;
 import pl.edu.icm.unity.stdext.attr.StringAttributeSyntax;
+import pl.edu.icm.unity.stdext.attr.VerifiableEmailAttribute;
+import pl.edu.icm.unity.stdext.attr.VerifiableEmailAttributeSyntax;
 import pl.edu.icm.unity.stdext.credential.CertificateVerificatorFactory;
 import pl.edu.icm.unity.stdext.credential.PasswordToken;
 import pl.edu.icm.unity.stdext.credential.PasswordVerificatorFactory;
@@ -80,6 +82,7 @@ public abstract class AbstractTestIdpBase extends DBIntegrationTestBase
 	@Autowired
 	private TranslationProfileManagement profilesMan;
 	
+	
 	@Before
 	public void setup()
 	{
@@ -112,23 +115,22 @@ public abstract class AbstractTestIdpBase extends DBIntegrationTestBase
 		List<OutputTranslationRule> rules = new ArrayList<>();
 		OutputTranslationAction action1 = (OutputTranslationAction) tactionReg.getByName(
 				CreateAttributeActionFactory.NAME).getInstance(
-				"memberOf", 
-				"groups");
+				"memberOf", "groups", "false");
 		rules.add(new OutputTranslationRule(action1, new TranslationCondition()));
 		OutputTranslationAction action2 = (OutputTranslationAction) tactionReg.getByName(
 				CreateAttributeActionFactory.NAME).getInstance(
-				"unity:identity:userName", 
-				"idsByType['userName']");
+				"unity:identity:userName",
+				"idsByType['userName']", "false");
 		rules.add(new OutputTranslationRule(action2, new TranslationCondition("idsByType['userName'] != null")));
 		OutputTranslationAction action3 = (OutputTranslationAction) tactionReg.getByName(
 				CreateAttributeActionFactory.NAME).getInstance(
 				"unity:identity:x500Name", 
-				"idsByType['x500Name']");
+				"idsByType['x500Name']", "false");
 		rules.add(new OutputTranslationRule(action3, new TranslationCondition("idsByType['x500Name'] != null")));
 		OutputTranslationAction action4 = (OutputTranslationAction) tactionReg.getByName(
 				CreateAttributeActionFactory.NAME).getInstance(
 				"unity:identity:persistent", 
-				"idsByType['persistent']");
+				"idsByType['persistent']", "false");
 		rules.add(new OutputTranslationRule(action4, new TranslationCondition("idsByType['persistent'] != null")));
 		return new OutputTranslationProfile("testOutProfile", rules, tactionReg);
 	}
@@ -159,6 +161,7 @@ public abstract class AbstractTestIdpBase extends DBIntegrationTestBase
 				e2, false);
 		idsMan.setEntityCredential(new EntityParam(added2), "credential1", new PasswordToken("mockPassword2").toJson());
 		
+		attrsMan.addAttributeType(new AttributeType("emailA", new VerifiableEmailAttributeSyntax()));
 		attrsMan.addAttributeType(new AttributeType("stringA", new StringAttributeSyntax()));
 		attrsMan.addAttributeType(new AttributeType("intA", new IntegerAttributeSyntax()));
 		AttributeType fAT = new AttributeType("floatA", new FloatingPointAttributeSyntax());
@@ -172,6 +175,8 @@ public abstract class AbstractTestIdpBase extends DBIntegrationTestBase
 		vals.add(124.1);
 		vals.add(14.2);
 		attrsMan.setAttribute(e1, new FloatingPointAttribute("floatA", "/", AttributeVisibility.full, vals), false);
+		attrsMan.setAttribute(e1, new VerifiableEmailAttribute("emailA", "/", AttributeVisibility.full, 
+				"example@example.com"), false);
 
 		attrsMan.setAttribute(e2, new StringAttribute("stringA", "/", AttributeVisibility.full), false);
 		attrsMan.setAttribute(e2, new IntegerAttribute("intA", "/", AttributeVisibility.full, 1), false);

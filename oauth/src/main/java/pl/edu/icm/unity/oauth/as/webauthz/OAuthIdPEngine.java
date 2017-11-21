@@ -13,6 +13,7 @@ import com.nimbusds.oauth2.sdk.http.HTTPResponse;
 
 import pl.edu.icm.unity.exceptions.EngineException;
 import pl.edu.icm.unity.exceptions.IllegalGroupValueException;
+import pl.edu.icm.unity.oauth.as.OAuthAuthzContext;
 import pl.edu.icm.unity.oauth.as.OAuthErrorResponseException;
 import pl.edu.icm.unity.oauth.as.OAuthSystemAttributesProvider.GrantFlow;
 import pl.edu.icm.unity.server.api.internal.CommonIdPProperties;
@@ -91,7 +92,7 @@ public class OAuthIdPEngine
 		LoginSession ae = InvocationContext.getCurrent().getLoginSession();
 		String flow = ctx.getRequest().getResponseType().impliesCodeFlow() ? 
 				GrantFlow.authorizationCode.toString() : GrantFlow.implicit.toString();
-		Boolean skipImport = ctx.getProperties().getBooleanValue(CommonIdPProperties.SKIP_USERIMPORT);
+		Boolean skipImport = ctx.getConfig().getBooleanValue(CommonIdPProperties.SKIP_USERIMPORT);
 		TranslationResult translationResult = idpEngine.obtainUserInformation(new EntityParam(ae.getEntityId()), 
 				ctx.getUsersGroup(), 
 				ctx.getTranslationProfile(), 
