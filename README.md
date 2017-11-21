@@ -22,3 +22,15 @@ after finished the new feature.
 When developinf a new CLARIN specific feature, create a new feature branch based on the ldapEndpoint-clarin-1.9.6 and create
 a pull request after finishing the feature.
 
+
+# LDAP partitions
+
+At first start the `ldap/src/main/resources/partitions.zip` file is extracted 
+and used to initialise the LDAP directory. In order to customize or add new LDAP
+definitions:
+
+1. extract this file in a temporary location.
+2. make your changes.
+3. zip the `partitions` directory again and make sure it is included as the root.
+of the zip archive.
+4. replace the old `ldap/src/main/resources/partitions.zip` with the new `partitions.zip` file.
