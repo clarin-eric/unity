@@ -35,3 +35,13 @@ definitions:
 3. zip the `partitions` directory again and make sure it is included as the root.
 of the zip archive.
 4. replace the old `ldap/src/main/resources/partitions.zip` with the new `partitions.zip` file.
+
+# Running integration tests
+
+1. Download a [chrome](http://chromedriver.storage.googleapis.com/index.html) or [firefox](https://developer.mozilla.org/en-US/docs/Mozilla/QA/Marionette/WebDriver) driver
+2. Specify the path to the driver you want to use via the `webdriver.chrome.driver` system property.
+
+Example:
+```
+mvn clean install -DargLine="-Dwebdriver.chrome.driver=/Users/wilelb/Downloads/chromedriver"
+```
