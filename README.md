@@ -45,3 +45,68 @@ Example:
 ```
 mvn clean install -DargLine="-Dwebdriver.chrome.driver=/Users/wilelb/Downloads/chromedriver"
 ```
+
+# Configuration
+
+The LDAP server endpoint configuration is stored in `<conf>/endpoints/ldap.properties`.
+The following properties can be used the configure the LDAP endpoint:
+
+| Property                                          | Type    | Description          |
+| ------------------------------------------------- | ------- | -------------------- |
+| unity.ldapServer.host                             | string  | Bind to a specific ip address or use 0.0.0.0 to bind to all addresses. Leave empty for default server address. |
+| unity.ldapServer.ldapPort                         | integer | =10000|
+| unity.ldapServer.ldapsPort                        | integer | =10443|
+| unity.ldapServer.tls                              | boolean | =true |
+| unity.ldapServer.certPassword                     | string  | =p4ss|
+| unity.ldapServer.keystoreName                     | string  | # keystore filename - relative to working directory, =ldap.keystore|
+| unity.ldapServer.groupMember                      | string  | =member |
+| unity.ldapServer.groupMemberDnRegexp              | string  | =cn=([^,]+)(,.+)?|
+| #unity.ldapServer.groupOfNamesReturnFormat        | string  | |
+| unity.ldapServer.returnedUserAttributes           | string  | =cn,entryDN,jpegPhoto # return these attributes if the operation requests all user attributes \ # e.g., values of SchemaConstants.CN_AT |
+| unity.ldapServer.userNameAliases                  | string  | =uid,cn,mail|
+
+## Attribute mapping
+
+Configure how to map the unity attributes to LDAP attributes:
+
+| Property                                          | Type   | Description          |
+| ------------------------------------------------- | ------ | -------------------- |
+| unity.ldapServer.attributes.<num>.ldap.at         | string | LDAP at name         |
+| unity.ldapServer.attributes.<num>.ldap.oid        | string | LDAP oid name        |
+| unity.ldapServer.attributes.<num>.unity.identity  | string | unity identity type  |
+| unity.ldapServer.attributes.<num>.unity.attribute | string | unity attribute name |
+
+## Example
+```
+# leave empty for default server address
+unity.ldapServer.host=0.0.0.0
+# default ldap port is 389
+unity.ldapServer.ldapPort=10000
+unity.ldapServer.ldapsPort=10443
+
+# see LdapServer::setCertificatePassword
+unity.ldapServer.tls=true
+# self signed certificate and keystore password
+unity.ldapServer.certPassword=verysafeanddifficulttoguesspassword
+# keystore filename - relative to working directory
+unity.ldapServer.keystoreName=ldap.keystore
+
+unity.ldapServer.groupMember=member
+unity.ldapServer.groupMemberDnRegexp=cn=([^,]+)(,.+)?
+#unity.ldapServer.groupOfNamesReturnFormat=
+
+# return these attributes if the operation requests all user attributes
+# e.g., values of SchemaConstants.CN_AT
+unity.ldapServer.returnedUserAttributes=cn,entryDN,jpegPhoto
+unity.ldapServer.userNameAliases=uid,cn,mail
+
+#Unity attribute to LDAP attribute mappings
+#Map an unity email identity to the LDAP mail attribute
+unity.ldapServer.attributes.1.ldap.at=mail
+unity.ldapServer.attributes.1.ldap.oid=0.9.2342.19200300.100.1.3
+unity.ldapServer.attributes.1.unity.identity=email
+#Also map the unity fullName attribute to the LDAP displayName attribute
+unity.ldapServer.attributes.2.ldap.at=displayName
+unity.ldapServer.attributes.2.ldap.oid=2.16.840.1.113730.3.1.241
+unity.ldapServer.attributes.2.unity.identity=email
+```
