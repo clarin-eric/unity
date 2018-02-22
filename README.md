@@ -77,7 +77,7 @@ Configure how to map the unity attributes to LDAP attributes:
 | unity.ldapServer.attributes.<num>.unity.attribute | string | unity attribute name |
 
 ## Example
-```
+```bash
 # leave empty for default server address
 unity.ldapServer.host=0.0.0.0
 # default ldap port is 389
@@ -110,3 +110,16 @@ unity.ldapServer.attributes.2.ldap.at=displayName
 unity.ldapServer.attributes.2.ldap.oid=2.16.840.1.113730.3.1.241
 unity.ldapServer.attributes.2.unity.identity=email
 ```
+
+# Logging
+
+Logging of the LDAP module can be configured as follows:
+
+```
+log4j.logger.unity.server.ldap.endpoint=DEBUG
+log4j.logger.org.apache.directory.server=DEBUG
+```
+
+Where `log4j.logger.unity.server.ldap.endpoint` controls the log verbosity
+of this endpoint and `log4j.logger.org.apache.directory.server` controls
+ the log verbosity of the underlying LDAP library.
