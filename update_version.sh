@@ -11,8 +11,8 @@
 #				release candidate releases where # is replaced by a sequence number
 #
 
-CURRENT_VERSION="1.9.6-clarin-1.0.0"
-NEW_VERSION="1.9.6-clarin-1.0.0_beta1"
+CURRENT_VERSION="1.9.6-clarin-1.0.0_beta1"
+NEW_VERSION="1.9.6-clarin-2.2.0_beta1"
 
 echo "Updating all versions from ${CURRENT_VERSION} to ${NEW_VERSION}"
-find . -name pom.xml -exec sed -i '' "s/<version>${CURRENT_VERSION}<\/version/<version>${NEW_VERSION}<\/version>/g" {} \;
+find . -name pom.xml -exec sed -i '' "s/<version>${CURRENT_VERSION}<\/version>/<version>${NEW_VERSION}<\/version>/g" {} \;
