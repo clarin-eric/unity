@@ -76,6 +76,8 @@ Configure how to map the unity attributes to LDAP attributes:
 | unity.ldapServer.attributes.<num>.unity.identity  | string | unity identity type  |
 | unity.ldapServer.attributes.<num>.unity.attribute | string | unity attribute name |
 
+Either `unity.ldapServer.attributes.<num>.unity.identity` or `unity.ldapServer.attributes.<num>.unity.attribute` must be specified.
+
 ## Example
 ```bash
 # leave empty for default server address
