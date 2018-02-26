@@ -135,6 +135,7 @@ public class LdapApacheDSInterceptor extends BaseInterceptor
     public void setLdapServerFacade(LdapServerFacade lsf)
     {
         this.lsf = lsf;
+        this.attributeUtils.setLdapServerFacade(lsf);
     }
 
     /**
