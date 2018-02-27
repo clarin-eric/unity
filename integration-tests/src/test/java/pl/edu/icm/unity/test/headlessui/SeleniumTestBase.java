@@ -15,6 +15,7 @@ import org.openqa.selenium.By;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.chrome.ChromeDriver;
+import org.openqa.selenium.chrome.ChromeOptions;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.ContextConfiguration;
@@ -51,7 +52,14 @@ public class SeleniumTestBase
 	public void setUp() throws Exception
 	{
 		httpServer.start();
-		driver = new ChromeDriver();
+                
+                //System.getProperty("")
+                //System.getProperty("")
+                
+                ChromeOptions options = new ChromeOptions();
+                //options.setBinary("/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary");
+                //options.addArguments("--headless");
+		driver = new ChromeDriver(options);
 		driver.manage().timeouts().implicitlyWait(WAIT_TIME_S, TimeUnit.SECONDS);
 	}
 
