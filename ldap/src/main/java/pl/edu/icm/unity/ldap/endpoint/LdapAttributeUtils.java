@@ -30,7 +30,7 @@ public class LdapAttributeUtils {
     private static final Logger log = Log.getLogger(Log.U_SERVER_LDAP_ENDPOINT, LdapAttributeUtils.class);
     
     private final IdentitiesManagement identitiesMan;
-    private final LdapServerFacade lsf;
+    private LdapServerFacade lsf;
     private final LdapServerProperties props;
     private final Set<String> keys;
     
@@ -42,6 +42,10 @@ public class LdapAttributeUtils {
         this.identitiesMan = identitiesMan;
         this.props = props;
         this.keys = props.getStructuredListKeys(LdapServerProperties.ATTRIBUTES_MAP_PFX);
+    }
+    
+    public void setLdapServerFacade(LdapServerFacade lsf) {
+        this.lsf = lsf;
     }
     
     /**
