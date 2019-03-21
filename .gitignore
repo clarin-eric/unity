@@ -1,6 +1,2 @@
-target/
-.classpath
-.project
-.settings/
-.idea/
-integration-tests/debug.log
+nbactions.xml
+target
