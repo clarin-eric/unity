@@ -18,13 +18,12 @@ import com.vaadin.shared.ui.ContentMode;
 import com.vaadin.ui.Button;
 import com.vaadin.ui.Button.ClickEvent;
 import com.vaadin.ui.Button.ClickListener;
+import com.vaadin.ui.ComboBox;
 import com.vaadin.ui.Component;
 import com.vaadin.ui.HorizontalLayout;
 import com.vaadin.ui.Label;
+import com.vaadin.ui.TextField;
 import com.vaadin.ui.VerticalLayout;
-import com.vaadin.v7.ui.ComboBox;
-import com.vaadin.v7.ui.Table;
-import com.vaadin.v7.ui.TextField;
 
 import pl.edu.icm.unity.engine.api.attributes.AttributeValueSyntax;
 import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
@@ -32,14 +31,15 @@ import pl.edu.icm.unity.exceptions.IllegalAttributeTypeException;
 import pl.edu.icm.unity.exceptions.IllegalAttributeValueException;
 import pl.edu.icm.unity.stdext.attr.EnumAttributeSyntax;
 import pl.edu.icm.unity.webui.common.ComponentsContainer;
+import pl.edu.icm.unity.webui.common.GenericElementsTable;
 import pl.edu.icm.unity.webui.common.Images;
 import pl.edu.icm.unity.webui.common.SingleActionHandler;
-import pl.edu.icm.unity.webui.common.SmallGrid;
-import pl.edu.icm.unity.webui.common.SmallTableDeprecated;
 import pl.edu.icm.unity.webui.common.attributes.AttributeSyntaxEditor;
-import pl.edu.icm.unity.webui.common.attributes.AttributeValueEditor;
+import pl.edu.icm.unity.webui.common.attributes.AttributeViewerContext;
 import pl.edu.icm.unity.webui.common.attributes.WebAttributeHandler;
 import pl.edu.icm.unity.webui.common.attributes.WebAttributeHandlerFactory;
+import pl.edu.icm.unity.webui.common.attributes.edit.AttributeEditContext;
+import pl.edu.icm.unity.webui.common.attributes.edit.AttributeValueEditor;
 
 /**
  * Enum attribute handler for the web
@@ -57,9 +57,12 @@ public class EnumAttributeHandler implements WebAttributeHandler
 	}
 
 	@Override
-	public Component getRepresentation(String value)
+	public Component getRepresentation(String value, AttributeViewerContext context)
 	{
-		return new Label(value.toString(), ContentMode.PREFORMATTED);
+		Label label = new Label(value.toString(), ContentMode.PREFORMATTED);
+		if (context.isCustomWidth())
+			label.setWidth(context.getCustomWidth(), context.getCustomWidthUnit());
+		return label;
 	}
 	
 	@Override
@@ -72,8 +75,9 @@ public class EnumAttributeHandler implements WebAttributeHandler
 	{
 		private String value;
 		private String label;
-		private ComboBox field;
+		private ComboBox<String> field;
 		private boolean required;
+		private AttributeEditContext context;
 		
 		public EnumValueEditor(String value, String label)
 		{
@@ -82,30 +86,34 @@ public class EnumAttributeHandler implements WebAttributeHandler
 		}
 
 		@Override
-		public ComponentsContainer getEditor(boolean required, boolean adminMode)
+		public ComponentsContainer getEditor(AttributeEditContext context)
 		{
-			this.required = required;
-			field = new ComboBox(label);
-			field.setNullSelectionAllowed(!required);
-			field.setRequired(required);
+			this.required = context.isRequired();
+			this.context = context;
+			field = new ComboBox<>();
+			setLabel(label);
+			field.setRequiredIndicatorVisible(required);
 			field.setTextInputAllowed(true);
+			field.setEmptySelectionAllowed(!required);
 			List<String> sortedAllowed = new ArrayList<>(syntax.getAllowed());
 			Collections.sort(sortedAllowed);
-			for (String allowed: sortedAllowed)
-				field.addItem(allowed);
+			field.setItems(sortedAllowed);	
 			if (value != null)
 				field.setValue(value);
 			else if (required)
 				field.setValue(sortedAllowed.get(0));
+			if (context.isCustomWidth())
+				field.setWidth(context.getCustomWidth(), context.getCustomWidthUnit());
 			return new ComponentsContainer(field);
 		}
 
 		@Override
 		public String getCurrentValue() throws IllegalAttributeValueException
-		{
-			String cur = (String)field.getValue();
+		{	
+			String cur = field.getValue();
 			if (cur == null && !required)
 				return null;
+			
 			try
 			{
 				syntax.validate(cur);
@@ -121,7 +129,10 @@ public class EnumAttributeHandler implements WebAttributeHandler
 		@Override
 		public void setLabel(String label)
 		{
-			field.setCaption(label);
+			if (context.isShowLabelInline())
+				field.setPlaceholder(label);
+			else
+				field.setCaption(label);
 		}
 	}
 
@@ -133,18 +144,13 @@ public class EnumAttributeHandler implements WebAttributeHandler
 
 	@Override
 	public Component getSyntaxViewer()
-	{
-		Table allowedTable = new SmallTableDeprecated();
+	{	
+		GenericElementsTable<String> allowedTable = new GenericElementsTable<>(
+				msg.getMessage("EnumAttributeHandler.allowed"));
 		allowedTable.setHeight(12, Unit.EM);
 		allowedTable.setWidth(26, Unit.EM);
-		allowedTable.addContainerProperty(msg.getMessage("EnumAttributeHandler.allowed"), 
-				String.class, null);
-		List<String> sortedAllowed = new ArrayList<>(syntax.getAllowed());
-		Collections.sort(sortedAllowed);
-		for (String allowed: sortedAllowed)
-			allowedTable.addItem(new Object[] {allowed}, allowed);
-		allowedTable.setReadOnly(true);
-		
+		allowedTable.setInput(syntax.getAllowed());
+		 
 		VerticalLayout ret = new VerticalLayout();
 		ret.setMargin(false);
 		ret.setSpacing(false);
@@ -157,7 +163,7 @@ public class EnumAttributeHandler implements WebAttributeHandler
 		private EnumAttributeSyntax initial;
 		private TextField value;
 		private Button add;
-		private Table current;
+		private GenericElementsTable<String> current;
 		private UnityMessageSource msg;
 		
 		public EnumSyntaxEditor(EnumAttributeSyntax initial, UnityMessageSource msg)
@@ -187,7 +193,9 @@ public class EnumAttributeHandler implements WebAttributeHandler
 					String v = value.getValue(); 
 					if (!v.equals(""))
 					{
-						current.addItem(new Object[] {v}, v);
+						if (current.getElements().contains(v))
+							return;
+						current.addElement(v);
 						value.setValue("");
 					}
 				}
@@ -197,21 +205,18 @@ public class EnumAttributeHandler implements WebAttributeHandler
 			hl.setMargin(false);
 			
 			vl.addComponent(hl);
-			
-			current = new SmallTableDeprecated();
-			current.addContainerProperty(msg.getMessage("EnumAttributeHandler.allowed"), 
-					String.class, null);
+	
+			current = new GenericElementsTable<>(msg.getMessage("EnumAttributeHandler.allowed"));
 			current.setHeight(12, Unit.EM);
 			current.setWidth(26, Unit.EM);
-			current.addActionHandler(new RemoveActionHandler());
+			current.addActionHandler(getDeleteAction());
+			
 			vl.addComponent(current);
 			
 			if (initial != null)
 			{
-				List<String> sortedAllowed = new ArrayList<>(initial.getAllowed());
-				Collections.sort(sortedAllowed);
-				for (String a: sortedAllowed)
-					current.addItem(new Object[] {a}, a);
+				current.setInput(initial.getAllowed());
+				
 			}
 			return vl;
 		}
@@ -222,8 +227,8 @@ public class EnumAttributeHandler implements WebAttributeHandler
 		{
 			EnumAttributeSyntax ret = new EnumAttributeSyntax();
 			Set<String> allowed = new HashSet<>();
-			for (Object itemId: current.getItemIds())
-				allowed.add((String)itemId);
+			allowed.addAll(current.getElements());
+			
 			if (allowed.isEmpty())
 				throw new IllegalAttributeTypeException(
 						msg.getMessage("EnumAttributeHandler.errorNoValues"));
@@ -231,24 +236,18 @@ public class EnumAttributeHandler implements WebAttributeHandler
 			return ret;
 		}
 		
-		private class RemoveActionHandler extends SingleActionHandler
+		private SingleActionHandler<String> getDeleteAction()
 		{
-			public RemoveActionHandler()
-			{
-				super(msg.getMessage("EnumAttributeHandler.removeAction"), Images.delete.getResource());
-			}
-
-			@Override
-			public void handleAction(Object sender, final Object target)
-			{
-				current.removeItem(target);
-			}
+			return SingleActionHandler.builder4Delete(msg, String.class)
+					.withHandler(this::deleteHandler)
+					.build();
 		}
-
+		
+		private void deleteHandler(Set<String> items)
+		{	
+			current.removeElement(items.iterator().next());
+		}
 	}
-	
-	
-	
 	
 	@org.springframework.stereotype.Component
 	public static class EnumAttributeHandlerFactory implements WebAttributeHandlerFactory

@@ -43,7 +43,7 @@ import pl.edu.icm.unity.oauth.as.OAuthAuthzContext.ScopeInfo;
 import pl.edu.icm.unity.oauth.as.OAuthSystemAttributesProvider.GrantFlow;
 import pl.edu.icm.unity.stdext.attr.EnumAttribute;
 import pl.edu.icm.unity.stdext.attr.StringAttribute;
-import pl.edu.icm.unity.stdext.credential.PasswordToken;
+import pl.edu.icm.unity.stdext.credential.pass.PasswordToken;
 import pl.edu.icm.unity.stdext.identity.TargetedPersistentIdentity;
 import pl.edu.icm.unity.stdext.identity.UsernameIdentity;
 import pl.edu.icm.unity.types.basic.DynamicAttribute;
@@ -58,9 +58,11 @@ public class OAuthTestUtils
 	public static final String ISSUER = "https://localhost:233/foo/token";
 	public static final String BASE_ADDR = "https://localhost:233/foo";
 	
+	public static final int DEFAULT_ACCESS_TOKEN_VALIDITY = 100;
+	
 	public static OAuthASProperties getConfig()
 	{
-		return getConfig(100, 0);
+		return getConfig(DEFAULT_ACCESS_TOKEN_VALIDITY, 0);
 	}
 	
 	public static OAuthASProperties getConfig(int accessTokenValidity, int maxValidity)
@@ -172,19 +174,18 @@ public class OAuthTestUtils
 			groupsMan.addGroup(new Group("/oauth-users"));
 		groupsMan.addMemberFromParent("/oauth-users", e1);
 		
-		attrsMan.setAttribute(e1, EnumAttribute.of(OAuthSystemAttributesProvider.ALLOWED_FLOWS, 
+		attrsMan.createAttribute(e1, EnumAttribute.of(OAuthSystemAttributesProvider.ALLOWED_FLOWS, 
 				"/oauth-clients", 
 				Lists.newArrayList(GrantFlow.authorizationCode.name(),
-						GrantFlow.client.name())), 
-				false);
-		attrsMan.setAttribute(e1, StringAttribute.of(OAuthSystemAttributesProvider.ALLOWED_RETURN_URI, 
-				"/oauth-clients", "https://dummy-return.net"), false);
+						GrantFlow.client.name())));
+		attrsMan.createAttribute(e1, StringAttribute.of(OAuthSystemAttributesProvider.ALLOWED_RETURN_URI, 
+				"/oauth-clients", "https://dummy-return.net"));
 		
-		attrsMan.setAttribute(e1, StringAttribute.of(OAuthSystemAttributesProvider.CLIENT_NAME, 
-				"/oauth-clients", "clientName"), false);
+		attrsMan.createAttribute(e1, StringAttribute.of(OAuthSystemAttributesProvider.CLIENT_NAME, 
+				"/oauth-clients", "clientName"));
 		
-		attrsMan.setAttribute(e1, EnumAttribute.of(RoleAttributeTypeProvider.AUTHORIZATION_ROLE, 
-				"/", "Regular User"), false);
+		attrsMan.createAttribute(e1, EnumAttribute.of(RoleAttributeTypeProvider.AUTHORIZATION_ROLE, 
+				"/", "Regular User"));
 		return clientId1;
 	}
 	

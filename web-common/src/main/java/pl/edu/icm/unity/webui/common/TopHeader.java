@@ -6,14 +6,13 @@ package pl.edu.icm.unity.webui.common;
 
 import com.vaadin.ui.Alignment;
 import com.vaadin.ui.Button;
-import com.vaadin.ui.Button.ClickEvent;
 import com.vaadin.ui.HorizontalLayout;
 import com.vaadin.ui.Label;
 
 import pl.edu.icm.unity.engine.api.authn.InvocationContext;
 import pl.edu.icm.unity.engine.api.authn.LoginSession;
 import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
-import pl.edu.icm.unity.webui.authn.WebAuthenticationProcessor;
+import pl.edu.icm.unity.webui.authn.StandardWebAuthenticationProcessor;
 
 /**
  * Top bar with header. Allows to logout.
@@ -22,26 +21,25 @@ import pl.edu.icm.unity.webui.authn.WebAuthenticationProcessor;
 public class TopHeader extends TopHeaderLight
 {
 	protected UnityMessageSource msg;
-	protected WebAuthenticationProcessor authnProcessor;
+	protected StandardWebAuthenticationProcessor authnProcessor;
+	protected HorizontalLayout loggedPanel;
 	
-	public TopHeader(String title, WebAuthenticationProcessor authnProcessor, UnityMessageSource msg)
+	public TopHeader(String title, StandardWebAuthenticationProcessor authnProcessor, UnityMessageSource msg)
 	{
 		super(title, msg);
 		this.msg = msg;
 		this.authnProcessor = authnProcessor;
 		
-		HorizontalLayout loggedPanel = new HorizontalLayout();
+		loggedPanel = new HorizontalLayout();
 		loggedPanel.setSizeUndefined();
 		loggedPanel.setSpacing(true);
 		loggedPanel.setMargin(false);
 		addComponent(loggedPanel);
 		setComponentAlignment(loggedPanel, Alignment.MIDDLE_RIGHT);
-		
-		addLoggedInfo(loggedPanel);
-		addButtons(loggedPanel);
+		addLoggedInfo();
 	}
 	
-	protected void addLoggedInfo(HorizontalLayout loggedPanel)
+	protected void addLoggedInfo()
 	{
 		LoginSession entity = InvocationContext.getCurrent().getLoginSession();
 		String label = entity.getEntityLabel() == null ? "" : entity.getEntityLabel();
@@ -53,28 +51,15 @@ public class TopHeader extends TopHeaderLight
 		loggedPanel.setComponentAlignment(loggedEntity, Alignment.MIDDLE_RIGHT);
 	}
 	
-	protected void addButtons(HorizontalLayout loggedPanel)
-	{
-		Button logout = createLogoutButton();
-		loggedPanel.addComponent(logout);
-		loggedPanel.setComponentAlignment(logout, Alignment.MIDDLE_RIGHT);
-	}
-	
 	protected Button createLogoutButton()
 	{
 		Button logout = new Button();
-		logout.setIcon(Images.exit32.getResource());
+		logout.setIcon(Images.exit.getResource());
 		logout.setDescription(msg.getMessage("MainHeader.logout"));
 		logout.setId("MainHeader.logout");
 		logout.addStyleName(Styles.vButtonLink.toString());
-		logout.addClickListener(new Button.ClickListener()
-		{
-			@Override
-			public void buttonClick(ClickEvent event)
-			{
-				authnProcessor.logout();
-			}
-		});
+		logout.addStyleName(Styles.largeIcon.toString());
+		logout.addClickListener((e) -> authnProcessor.logout());
 		return logout;
 	}
 }

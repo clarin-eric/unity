@@ -7,17 +7,17 @@ package pl.edu.icm.unity.unicore.samlidp.web;
 import javax.servlet.Servlet;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.ApplicationContext;
 
 import pl.edu.icm.unity.engine.api.PKIManagement;
 import pl.edu.icm.unity.engine.api.attributes.AttributeTypeSupport;
 import pl.edu.icm.unity.engine.api.config.UnityServerConfiguration;
-import pl.edu.icm.unity.engine.api.idp.CommonIdPProperties;
 import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
 import pl.edu.icm.unity.engine.api.server.NetworkServer;
 import pl.edu.icm.unity.engine.api.utils.ExecutorsService;
+import pl.edu.icm.unity.engine.api.utils.FreemarkerAppHandler;
 import pl.edu.icm.unity.engine.api.utils.PrototypeComponent;
-import pl.edu.icm.unity.saml.idp.FreemarkerHandler;
 import pl.edu.icm.unity.saml.idp.web.SamlAuthVaadinEndpoint;
 import pl.edu.icm.unity.saml.idp.web.filter.ErrorHandler;
 import pl.edu.icm.unity.saml.metadata.srv.RemoteMetadataService;
@@ -38,8 +38,8 @@ public class SamlAuthETDVaadinEndpoint extends SamlAuthVaadinEndpoint
 	
 	@Autowired
 	public SamlAuthETDVaadinEndpoint(NetworkServer server, ApplicationContext applicationContext,
-			FreemarkerHandler freemarkerHandler,
-			PKIManagement pkiManagement, ExecutorsService executorsService,
+			FreemarkerAppHandler freemarkerHandler,
+			@Qualifier("insecure")  PKIManagement pkiManagement, ExecutorsService executorsService,
 			UnityServerConfiguration mainConfig, SAMLLogoutProcessorFactory logoutProcessorFactory, 
 			SLOReplyInstaller sloReplyInstaller, 
 			UnicoreIdpConsentDeciderServlet.Factory dispatcherServletFactory,
@@ -62,7 +62,6 @@ public class SamlAuthETDVaadinEndpoint extends SamlAuthVaadinEndpoint
 	protected Servlet getSamlParseServlet(String endpointURL, String uiUrl)
 	{
 		return new SamlETDParseServlet(myMetadataManager, 
-				endpointURL, uiUrl, new ErrorHandler(aTypeSupport, freemarkerHandler),
-				samlProperties.getBooleanValue(CommonIdPProperties.ASSUME_FORCE));
+				endpointURL, uiUrl, new ErrorHandler(aTypeSupport, freemarkerHandler));
 	}
 }

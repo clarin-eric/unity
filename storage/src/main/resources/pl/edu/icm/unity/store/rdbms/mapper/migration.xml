@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="pl.edu.icm.unity.store.rdbms.mapper.Maintenance">
+
+	<update id="updateSchema-20300-00">
+		UPDATE UVOS_FLAG SET VAL = '2_3_0'
+	</update>
+	
+	<update id="updateSchema-20400-00">
+		UPDATE UVOS_FLAG SET VAL = '2_4_0'
+	</update>
+	
+	<update id="updateSchema-20500-00">
+		UPDATE UVOS_FLAG SET VAL = '2_5_0'
+	</update>
+	
+	<update id="updateSchema-20600-00">
+		UPDATE UVOS_FLAG SET VAL = '2_6_0'
+	</update>
+	
+	<update id="updateSchema-20700-00">
+		UPDATE UVOS_FLAG SET VAL = '2_7_0'
+	</update>
+</mapper>

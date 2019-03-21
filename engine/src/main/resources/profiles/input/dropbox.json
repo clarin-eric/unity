@@ -1,0 +1,148 @@
+{
+	"ver": "2",
+	"name": "sys:dropbox",
+	"description": "Translation profile for dropbox authn",
+	"type": "INPUT",
+	"rules": [
+		{
+			"condition": {
+				"conditionValue": "true"
+			},
+			"action": {
+				"name": "mapIdentity",
+				"parameters": [
+					"identifier",
+					"attr['uid']",
+					"sys:all",
+					"CREATE_OR_MATCH"
+				]
+			}
+		},
+		{
+			"condition": {
+				"conditionValue": "true"
+			},
+			"action": {
+				"name": "mapAttribute",
+				"parameters": [
+					"name",
+					"/",
+					"attrObj.?name.?display_name",
+					"CREATE_OR_UPDATE"
+				]
+			}
+		},
+		{
+			"condition": {
+				"conditionValue": "true"
+			},
+			"action": {
+				"name": "mapAttribute",
+				"parameters": [
+					"email",
+					"/",
+					"attr['email'] + ((attr contains 'email_verified') ? (( attr['email_verified'] == true) ? '[CONFIRMED]' : '[UNCONFIRMED]') : '[UNCONFIRMED]')",
+					"CREATE_OR_UPDATE"
+				]
+			}
+		},
+		{
+			"condition": {
+				"conditionValue": "true"
+			},
+			"action": {
+				"name": "mapAttribute",
+				"parameters": [
+					"firstname",
+					"/",
+					"attrObj.?name.?given_name",
+					"CREATE_OR_UPDATE"
+				]
+			}
+		},
+		{
+			"condition": {
+				"conditionValue": "true"
+			},
+			"action": {
+				"name": "mapAttribute",
+				"parameters": [
+					"surname",
+					"/",
+					"attrObj.?name.?surname",
+					"CREATE_OR_UPDATE"
+				]
+			}
+		},
+		{
+			"condition": {
+				"conditionValue": "true"
+			},
+			"action": {
+				"name": "mapAttribute",
+				"parameters": [
+					"country",
+					"/",
+					"attr['country']",
+					"CREATE_OR_UPDATE"
+				]
+			}
+		},
+		{
+			"condition": {
+				"conditionValue": "true"
+			},
+			"action": {
+				"name": "mapAttribute",
+				"parameters": [
+					"locale",
+					"/",
+					"attr['locale']",
+					"CREATE_OR_UPDATE"
+				]
+			}
+		},
+		{
+			"condition": {
+				"conditionValue": "true"
+			},
+			"action": {
+				"name": "mapAttribute",
+				"parameters": [
+					"quota",
+					"/",
+					"attrObj.?quota_info.?quota",
+					"CREATE_OR_UPDATE"
+				]
+			}
+		},
+		{
+			"condition": {
+				"conditionValue": "true"
+			},
+			"action": {
+				"name": "mapAttribute",
+				"parameters": [
+					"teamname",
+					"/",
+					"attrObj.?team.?name",
+					"CREATE_OR_UPDATE"
+				]
+			}
+		},
+		{
+			"condition": {
+				"conditionValue": "true"
+			},
+			"action": {
+				"name": "mapAttribute",
+				"parameters": [
+					"profileURL",
+					"/",
+					"attr['profile_photo_url']",
+					"CREATE_OR_UPDATE"
+				]
+			}
+		}
+	]
+}

@@ -89,7 +89,7 @@ public abstract class BaseResponseProcessor<T extends XmlObject, C extends Reque
 		return getErrorResponse(convert2SAMLError(e, message, false));
 	}	
 
-	private String getRequestIssuer()
+	public String getRequestIssuer()
 	{
 		NameIDType requestIssuer = getContext().getRequest().getIssuer();
 		return requestIssuer.getStringValue();
@@ -294,7 +294,7 @@ public abstract class BaseResponseProcessor<T extends XmlObject, C extends Reque
 
 	private boolean findValue(String value, Attribute attr)
 	{
-		AttributeValueSyntax<?> syntax = aTypeSupport.getSyntax(attr);
+		AttributeValueSyntax<?> syntax = aTypeSupport.getSyntaxFallingBackToDefault(attr);
 		for (String object : attr.getValues())
 		{
 			if (syntax.areEqualStringValue(value, object))

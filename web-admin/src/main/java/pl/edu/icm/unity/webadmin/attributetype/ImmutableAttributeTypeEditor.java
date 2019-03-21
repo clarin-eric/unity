@@ -4,7 +4,7 @@
  */
 package pl.edu.icm.unity.webadmin.attributetype;
 
-import com.vaadin.v7.ui.CheckBox;
+import com.vaadin.ui.CheckBox;
 import com.vaadin.ui.Component;
 import com.vaadin.ui.FormLayout;
 import com.vaadin.ui.Label;
@@ -22,7 +22,7 @@ import pl.edu.icm.unity.webui.common.i18n.I18nTextField;
  * 
  * @author K. Benedyczak
  */
-public class ImmutableAttributeTypeEditor extends FormLayout implements AttributeTypeEditor
+class ImmutableAttributeTypeEditor extends FormLayout implements AttributeTypeEditor
 {
 	private UnityMessageSource msg;
 	
@@ -32,7 +32,7 @@ public class ImmutableAttributeTypeEditor extends FormLayout implements Attribut
 	private I18nTextArea typeDescription;
 	private CheckBox selfModificable;
 	
-	public ImmutableAttributeTypeEditor(UnityMessageSource msg, AttributeType toEdit)
+	ImmutableAttributeTypeEditor(UnityMessageSource msg, AttributeType toEdit)
 	{
 		super();
 		this.msg = msg;

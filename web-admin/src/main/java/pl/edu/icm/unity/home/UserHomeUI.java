@@ -15,16 +15,17 @@ import org.springframework.stereotype.Component;
 import com.vaadin.annotations.Theme;
 import com.vaadin.server.VaadinRequest;
 import com.vaadin.ui.Alignment;
-import com.vaadin.v7.ui.VerticalLayout;
+import com.vaadin.ui.VerticalLayout;
 
-import pl.edu.icm.unity.engine.api.authn.AuthenticationOption;
+import pl.edu.icm.unity.engine.api.authn.AuthenticationFlow;
 import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
 import pl.edu.icm.unity.types.I18nString;
 import pl.edu.icm.unity.types.endpoint.ResolvedEndpoint;
+import pl.edu.icm.unity.webadmin.utils.ProjectManagementHelper;
 import pl.edu.icm.unity.webui.EndpointRegistrationConfiguration;
 import pl.edu.icm.unity.webui.UnityEndpointUIBase;
 import pl.edu.icm.unity.webui.UnityWebUI;
-import pl.edu.icm.unity.webui.authn.WebAuthenticationProcessor;
+import pl.edu.icm.unity.webui.authn.StandardWebAuthenticationProcessor;
 import pl.edu.icm.unity.webui.common.TopHeader;
 import pl.edu.icm.unity.webui.forms.enquiry.EnquiresDialogLauncher;
 
@@ -39,21 +40,22 @@ import pl.edu.icm.unity.webui.forms.enquiry.EnquiresDialogLauncher;
 public class UserHomeUI extends UnityEndpointUIBase implements UnityWebUI
 {
 	private UserAccountComponent userAccount;
-	private WebAuthenticationProcessor authnProcessor;
+	private StandardWebAuthenticationProcessor authnProcessor;
 	private HomeEndpointProperties config;
+	private ProjectManagementHelper projectManHelper;
 
 	@Autowired
 	public UserHomeUI(UnityMessageSource msg, UserAccountComponent userAccountComponent,
-			WebAuthenticationProcessor authnProcessor, EnquiresDialogLauncher enquiryDialogLauncher)
+			StandardWebAuthenticationProcessor authnProcessor, EnquiresDialogLauncher enquiryDialogLauncher, ProjectManagementHelper projectManHelper)
 	{
 		super(msg, enquiryDialogLauncher);
 		this.userAccount = userAccountComponent;
 		this.authnProcessor = authnProcessor;
+		this.projectManHelper = projectManHelper;
 	}
 
 	@Override
-	public void configure(ResolvedEndpoint description,
-			List<AuthenticationOption> authenticators,
+	public void configure(ResolvedEndpoint description, List<AuthenticationFlow> authenticators,
 			EndpointRegistrationConfiguration regCfg, Properties endpointProperties)
 	{
 		super.configure(description, authenticators, regCfg, endpointProperties);
@@ -61,23 +63,24 @@ public class UserHomeUI extends UnityEndpointUIBase implements UnityWebUI
 	}
 
 	@Override
-	protected void appInit(VaadinRequest request)
+	protected void enter(VaadinRequest request)
 	{
 		VerticalLayout contents = new VerticalLayout();
+		contents.setMargin(false);
+		contents.setSpacing(false);
 		I18nString displayedName = endpointDescription.getEndpoint().getConfiguration().getDisplayedName();
-		TopHeader header = new TopHeader(displayedName.getValue(msg), authnProcessor, msg);
+		TopHeader header = new HomeTopHeader(displayedName.getValue(msg), authnProcessor, msg,
+				projectManHelper.getProjectManLinkIfAvailable(config));
 		contents.addComponent(header);
 
 		userAccount.initUI(config, sandboxRouter, getSandboxServletURLForAssociation());
-		
+
 		userAccount.setWidth(80, Unit.PERCENTAGE);
 		contents.addComponent(userAccount);
 		contents.setComponentAlignment(userAccount, Alignment.TOP_CENTER);
 		contents.setExpandRatio(userAccount, 1.0f);
-		
+
 		setSizeFull();
 		setContent(contents);
 	}
 }
-
-

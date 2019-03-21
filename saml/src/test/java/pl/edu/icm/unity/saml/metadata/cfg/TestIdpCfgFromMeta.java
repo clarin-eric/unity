@@ -34,34 +34,53 @@ import static pl.edu.icm.unity.saml.idp.SamlIdpProperties.P;
 import static pl.edu.icm.unity.saml.idp.SamlIdpProperties.SPMETA_PREFIX;
 
 import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.security.cert.X509Certificate;
 import java.util.Properties;
 import java.util.Set;
 
+import org.apache.logging.log4j.Logger;
 import org.awaitility.Awaitility;
 import org.awaitility.Duration;
+import org.junit.Before;
 import org.junit.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 
 import eu.emi.security.authn.x509.impl.CertificateUtils;
 import eu.emi.security.authn.x509.impl.CertificateUtils.Encoding;
+import eu.unicore.samly2.exceptions.SAMLValidationException;
+import eu.unicore.util.configuration.ConfigurationException;
+import pl.edu.icm.unity.base.utils.Log;
 import pl.edu.icm.unity.engine.DBIntegrationTestBase;
 import pl.edu.icm.unity.engine.api.PKIManagement;
 import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
 import pl.edu.icm.unity.saml.idp.SamlIdpProperties;
 import pl.edu.icm.unity.saml.metadata.srv.RemoteMetadataService;
+import xmlbeans.org.oasis.saml2.assertion.NameIDType;
+import xmlbeans.org.oasis.saml2.protocol.AuthnRequestDocument;
+import xmlbeans.org.oasis.saml2.protocol.AuthnRequestType;
 
 public class TestIdpCfgFromMeta extends DBIntegrationTestBase
 {
+	private static final Logger log = Log.getLogger(Log.U_SERVER, TestIdpCfgFromMeta.class);
+	
 	@Autowired
 	private RemoteMetadataService metadataService;
 	
 	@Autowired
+	@Qualifier("insecure")
 	private PKIManagement pkiManagement;
 	
 	@Autowired
 	private UnityMessageSource msg;
-	
+
+	@Before
+	public void reset()
+	{
+		metadataService.reset();
+	}
+
 	@Test
 	public void testConfigureIdpFromMetadata() throws Exception
 	{
@@ -76,7 +95,7 @@ public class TestIdpCfgFromMeta extends DBIntegrationTestBase
 		p.setProperty(P+SPMETA_PREFIX+"1." + METADATA_SIGNATURE, "require");
 		X509Certificate cert = CertificateUtils.loadCertificate(new ByteArrayInputStream(CERT.getBytes()), 
 				Encoding.PEM);
-		pkiManagement.addCertificate("issuerCert2", cert);
+		pkiManagement.addVolatileCertificate("issuerCert2", cert);
 		p.setProperty(P+SPMETA_PREFIX+"1." + METADATA_ISSUER_CERT, "issuerCert2");
 
 		p.setProperty(P+ALLOWED_SP_PREFIX+"1." + ALLOWED_SP_ENTITY, "https://support.hes-so.ch/shibboleth");
@@ -95,44 +114,42 @@ public class TestIdpCfgFromMeta extends DBIntegrationTestBase
 					metadataService, SamlIdpProperties.SPMETA_PREFIX);
 		
 		Awaitility.await()
-			.atMost(Duration.TEN_SECONDS)
+			.atMost(Duration.ONE_MINUTE)
 			.untilAsserted(() -> assertRemoteMetadataLoaded(manager));
 	}
 	
 	private void assertRemoteMetadataLoaded(RemoteMetaManager manager) throws Exception
 	{
-		SamlIdpProperties ret = (SamlIdpProperties) manager.getVirtualConfiguration();
-		String pfx = getPrefixOf("https://support.hes-so.ch/shibboleth", ret);
-		assertEquals("URL", ret.getValue(pfx + ALLOWED_SP_RETURN_URL));
-		assertEquals("Name", ret.getValue(pfx + ALLOWED_SP_NAME));
-		assertEquals("MAIN", ret.getValue(pfx + ALLOWED_SP_CERTIFICATE));
-		assertEquals("http://example.com", ret.getValue(pfx + ALLOWED_SP_LOGO));
-		assertEquals("true", ret.getValue(pfx + ALLOWED_SP_ENCRYPT));
+		try
+		{
+			SamlIdpProperties ret = (SamlIdpProperties) manager.getVirtualConfiguration();
+			String pfx = getPrefixOf("https://support.hes-so.ch/shibboleth", ret);
+			assertEquals("URL", ret.getValue(pfx + ALLOWED_SP_RETURN_URL));
+			assertEquals("Name", ret.getValue(pfx + ALLOWED_SP_NAME));
+			assertEquals("MAIN", ret.getValue(pfx + ALLOWED_SP_CERTIFICATE));
+			assertEquals("http://example.com", ret.getValue(pfx + ALLOWED_SP_LOGO));
+			assertEquals("true", ret.getValue(pfx + ALLOWED_SP_ENCRYPT));
 
 		
-		pfx = getPrefixOf("https://attribute-viewer.aai.switch.ch/interfederation-test/shibboleth", ret);
-		assertEquals("https://aai-viewer.switch.ch/interfederation-test/Shibboleth.sso/SAML2/POST", 
+			pfx = getPrefixOf("https://attribute-viewer.aai.switch.ch/interfederation-test/shibboleth", ret);
+			assertEquals("https://aai-viewer.switch.ch/interfederation-test/Shibboleth.sso/SAML2/POST", 
 				ret.getValue(pfx + ALLOWED_SP_RETURN_URL));
-		String certName = ret.getValue(pfx + ALLOWED_SP_CERTIFICATES + "1");
-		assertNotNull(pkiManagement.getCertificate(certName));
+			String certName = ret.getValue(pfx + ALLOWED_SP_CERTIFICATES + "1");
+			assertNotNull(pkiManagement.getCertificate(certName));
 	
-		assertEquals(LOGO, ret.getValue(pfx + ALLOWED_SP_LOGO));
-		assertEquals("AAI Viewer Interfederation Test", ret.getValue(pfx + ALLOWED_SP_NAME+".en"));
+			assertEquals(LOGO, ret.getValue(pfx + ALLOWED_SP_LOGO));
+			assertEquals("AAI Viewer Interfederation Test", ret.getValue(pfx + ALLOWED_SP_NAME+".en"));
+		} catch (Throwable e)
+		{
+			log.info("Condition not met, {}", e);
+			throw e;
+		}
 	}
 
 	@Test
 	public void testConfigureSLOFromSPsMetadata() throws Exception
 	{
-		Properties p = new Properties();
-		p.setProperty(P+CREDENTIAL, "MAIN");
-		p.setProperty(P+PUBLISH_METADATA, "false");
-		p.setProperty(P+ISSUER_URI, "me");
-		p.setProperty(P+GROUP, "group");
-		p.setProperty(P+DEFAULT_GROUP,"group");
-		
-		p.setProperty(P+SPMETA_PREFIX+"1." + METADATA_URL, "file:src/test/resources/DFN-AAI-metadata-part.xml");
-		p.setProperty(P+SPMETA_PREFIX+"1." + METADATA_SIGNATURE, "ignore");
-		SamlIdpProperties configuration = new SamlIdpProperties(p, pkiManagement);
+		SamlIdpProperties configuration = getDFNMetadataBasedConfig();
 		
 		RemoteMetaManager manager = new RemoteMetaManager(configuration, 
 				pkiManagement, 
@@ -143,7 +160,7 @@ public class TestIdpCfgFromMeta extends DBIntegrationTestBase
 			.atMost(Duration.TEN_SECONDS)
 			.untilAsserted(() -> assertSLOCfgLoaded(manager));
 	}
-	
+
 	private void assertSLOCfgLoaded(RemoteMetaManager manager)
 	{
 		SamlIdpProperties ret = (SamlIdpProperties) manager.getVirtualConfiguration();
@@ -166,6 +183,69 @@ public class TestIdpCfgFromMeta extends DBIntegrationTestBase
 				fail("Hidden service is available");
 		}
 	}
+	
+	@Test
+	public void shouldConfigureMultipleTrustedAssertionConsumers() throws Exception
+	{
+		SamlIdpProperties configuration = getDFNMetadataBasedConfig();
+		
+		RemoteMetaManager manager = new RemoteMetaManager(configuration, 
+				pkiManagement, 
+				new MetaToIDPConfigConverter(pkiManagement, msg), 
+				metadataService, SamlIdpProperties.SPMETA_PREFIX);
+		
+		Awaitility.await()
+			.atMost(Duration.TEN_SECONDS)
+			.untilAsserted(() -> assertEndpointsCfgLoaded(manager));
+	}
+	
+	private void assertEndpointsCfgLoaded(RemoteMetaManager manager)
+	{
+		assertEndpointCfgLoaded(manager, 8, "https:POST8");
+		assertEndpointCfgLoaded(manager, 7, "https:POST7");
+		assertEndpointCfgLoaded(manager, 1, "https://shibboleth.metapress.com/Shibboleth.sso/SAML2/POST");
+
+		SamlIdpProperties idpCfg = (SamlIdpProperties) manager.getVirtualConfiguration();
+		AuthnRequestType reqDef = AuthnRequestType.Factory.newInstance();
+		reqDef.setIssuer(NameIDType.Factory.newInstance());
+		reqDef.getIssuer().setStringValue("http://shibboleth.metapress.com/shibboleth-sp");
+		assertThat(idpCfg.getReturnAddressForRequester(reqDef), is("https:POST7"));
+	}
+	
+	private void assertEndpointCfgLoaded(RemoteMetaManager manager, Integer index, String expected)
+	{
+		SamlIdpProperties idpCfg = (SamlIdpProperties) manager.getVirtualConfiguration();
+		AuthnRequestDocument reqDoc = AuthnRequestDocument.Factory.newInstance();
+		AuthnRequestType req = reqDoc.addNewAuthnRequest();
+		req.setAssertionConsumerServiceIndex(index);
+		req.setIssuer(NameIDType.Factory.newInstance());
+		req.getIssuer().setStringValue("http://shibboleth.metapress.com/shibboleth-sp");
+		assertThat(idpCfg.getReturnAddressForRequester(req), is(expected));
+		try
+		{
+			idpCfg.getAuthnTrustChecker().checkTrust(reqDoc, req);
+		} catch (SAMLValidationException e)
+		{
+			fail("Endpoint is not accepted: " + expected);
+		}
+	}
+	
+	private SamlIdpProperties getDFNMetadataBasedConfig() throws ConfigurationException, IOException
+	{
+		Properties p = new Properties();
+		p.setProperty(P+CREDENTIAL, "MAIN");
+		p.setProperty(P+PUBLISH_METADATA, "false");
+		p.setProperty(P+ISSUER_URI, "me");
+		p.setProperty(P+GROUP, "group");
+		p.setProperty(P+DEFAULT_GROUP,"group");
+		
+		p.setProperty(P+SPMETA_PREFIX+"1." + METADATA_URL, "file:src/test/resources/DFN-AAI-metadata-part.xml");
+		p.setProperty(P+SPMETA_PREFIX+"1." + METADATA_SIGNATURE, "ignore");
+		return new SamlIdpProperties(p, pkiManagement);
+	}
+	
+	
+	
 	
 	private String getPrefixOf(String entity, SamlIdpProperties cfg)
 	{

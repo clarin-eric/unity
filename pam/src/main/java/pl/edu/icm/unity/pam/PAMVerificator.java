@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017 ICM Uniwersytet Warszawski All rights reserved.
+ * Copyright (c) 2017 Bixbit - Krzysztof Benedyczak All rights reserved.
  * See LICENCE.txt file for licensing information.
  */
 package pl.edu.icm.unity.pam;
@@ -31,7 +31,7 @@ import pl.edu.icm.unity.engine.api.authn.remote.SandboxAuthnResultCallback;
 import pl.edu.icm.unity.engine.api.utils.PrototypeComponent;
 import pl.edu.icm.unity.exceptions.InternalException;
 import pl.edu.icm.unity.stdext.credential.NoCredentialResetImpl;
-import pl.edu.icm.unity.stdext.credential.PasswordExchange;
+import pl.edu.icm.unity.stdext.credential.pass.PasswordExchange;
 
 @PrototypeComponent
 public class PAMVerificator extends AbstractRemoteVerificator implements PasswordExchange
@@ -124,6 +124,12 @@ public class PAMVerificator extends AbstractRemoteVerificator implements Passwor
 	public CredentialReset getCredentialResetBackend()
 	{
 		return new NoCredentialResetImpl();
+	}
+	
+	@Override
+	public VerificatorType getType()
+	{
+		return VerificatorType.Remote;
 	}
 	
 	@Component

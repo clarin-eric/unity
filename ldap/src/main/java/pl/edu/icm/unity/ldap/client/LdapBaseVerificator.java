@@ -24,9 +24,9 @@ import pl.edu.icm.unity.engine.api.authn.remote.RemoteAuthnResultProcessor;
 import pl.edu.icm.unity.engine.api.authn.remote.RemotelyAuthenticatedInput;
 import pl.edu.icm.unity.engine.api.authn.remote.SandboxAuthnResultCallback;
 import pl.edu.icm.unity.exceptions.InternalException;
-import pl.edu.icm.unity.stdext.credential.CertificateExchange;
 import pl.edu.icm.unity.stdext.credential.NoCredentialResetImpl;
-import pl.edu.icm.unity.stdext.credential.PasswordExchange;
+import pl.edu.icm.unity.stdext.credential.cert.CertificateExchange;
+import pl.edu.icm.unity.stdext.credential.pass.PasswordExchange;
 
 /**
  * Supports {@link PasswordExchange} and verifies the password and username against a configured LDAP 
@@ -86,7 +86,8 @@ public abstract class LdapBaseVerificator extends AbstractRemoteVerificator impl
 	}
 
 	@Override
-	public AuthenticationResult checkPassword(String username, String password, SandboxAuthnResultCallback callback)
+	public AuthenticationResult checkPassword(String username, String password, 
+			SandboxAuthnResultCallback callback) throws AuthenticationException
 	{
 		RemoteAuthnState state = startAuthnResponseProcessing(callback, 
 				Log.U_SERVER_TRANSLATION, Log.U_SERVER_LDAP);
@@ -98,13 +99,13 @@ public abstract class LdapBaseVerificator extends AbstractRemoteVerificator impl
 		} catch (Exception e)
 		{
 			finishAuthnResponseProcessing(state, e);
-			return new AuthenticationResult(Status.deny, null, null);
+			throw e;
 		}
 	}
 	
 
 	private RemotelyAuthenticatedInput getRemotelyAuthenticatedInput(
-			String username, String password) throws AuthenticationException, LdapAuthenticationException
+			String username, String password) throws AuthenticationException
 	{
 		RemotelyAuthenticatedInput input = null;
 		try 
@@ -163,5 +164,11 @@ public abstract class LdapBaseVerificator extends AbstractRemoteVerificator impl
 			throw new AuthenticationException("Problem when authenticating against the LDAP server", e);
 		}
 		return input;
+	}
+	
+	@Override
+	public VerificatorType getType()
+	{
+		return VerificatorType.Remote;
 	}
 }

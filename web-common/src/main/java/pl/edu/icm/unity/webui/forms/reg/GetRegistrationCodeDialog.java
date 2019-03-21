@@ -4,32 +4,36 @@
  */
 package pl.edu.icm.unity.webui.forms.reg;
 
-import com.vaadin.v7.data.Validator.InvalidValueException;
+import com.vaadin.data.Binder;
 import com.vaadin.ui.Component;
 import com.vaadin.ui.FormLayout;
 import com.vaadin.ui.Label;
-import com.vaadin.v7.ui.TextField;
-import com.vaadin.v7.ui.VerticalLayout;
+import com.vaadin.ui.TextField;
+import com.vaadin.ui.VerticalLayout;
 
 import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
 import pl.edu.icm.unity.webui.common.AbstractDialog;
-import pl.edu.icm.unity.webui.common.RequiredTextField;
-import pl.edu.icm.unity.webui.common.Styles;
 
 /**
  * Asks user for a registration code.
  *
  * @author Krzysztof Benedyczak
  */
-class GetRegistrationCodeDialog extends AbstractDialog
+public class GetRegistrationCodeDialog extends AbstractDialog
 {
-	private TextField code;
+	private TextField codeTextField;
 	private GetRegistrationCodeDialog.Callback callback;
+	private Binder<CodeBean> binder;
+	private String information;
+	private String codeCaption;
 
-	public GetRegistrationCodeDialog(UnityMessageSource msg, GetRegistrationCodeDialog.Callback callback)
+	public GetRegistrationCodeDialog(UnityMessageSource msg, GetRegistrationCodeDialog.Callback callback,
+			String title, String information, String codeCaption)
 	{
-		super(msg, msg.getMessage("GetRegistrationCodeDialog.title"));
+		super(msg, title);
 		this.callback = callback;
+		this.information = information;
+		this.codeCaption = codeCaption;
 		setSize(65, 40);
 	}
 	
@@ -37,13 +41,19 @@ class GetRegistrationCodeDialog extends AbstractDialog
 	protected Component getContents() throws Exception
 	{
 		VerticalLayout main = new VerticalLayout();
-		main.setSpacing(true);
-		main.addComponent(new Label(msg.getMessage("GetRegistrationCodeDialog.information")));
+		main.setMargin(false);
+		main.addComponent(new Label(information));
 		FormLayout sub = new FormLayout();
-		code = new RequiredTextField(msg.getMessage("GetRegistrationCodeDialog.code"), msg);
-		code.setValidationVisible(false);
-		code.setColumns(Styles.WIDE_TEXT_FIELD);
-		sub.addComponent(code);
+		
+		codeTextField = new TextField(codeCaption);
+		codeTextField.setWidth("70%");
+		binder = new Binder<>(CodeBean.class);
+		binder.forField(codeTextField)
+			.asRequired(msg.getMessage("fieldRequired"))
+			.bind("code");
+		binder.setBean(new CodeBean());
+		
+		sub.addComponent(codeTextField);
 		main.addComponent(sub);
 		return main;
 	}
@@ -51,15 +61,12 @@ class GetRegistrationCodeDialog extends AbstractDialog
 	@Override
 	protected void onConfirm()
 	{
-		code.setValidationVisible(true);
-		try
+		if (!binder.isValid())
 		{
-			code.validate();
-		} catch (InvalidValueException e)
-		{
+			binder.validate();			
 			return;
 		}
-		callback.onCodeGiven(code.getValue());
+		callback.onCodeGiven(binder.getBean().getCode());
 		close();
 	}
 	
@@ -74,5 +81,18 @@ class GetRegistrationCodeDialog extends AbstractDialog
 	{
 		public void onCodeGiven(String code);
 		public void onCancel();
+	}
+	
+	public static class CodeBean
+	{
+		String code;
+		public void setCode(String code)
+		{
+			this.code = code;
+		}
+		public String getCode()
+		{
+			return code;
+		}
 	}
 }

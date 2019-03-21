@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013 ICM Uniwersytet Warszawski All rights reserved.
+ * Copyright (c) 2017 Bixbit - Krzysztof Benedyczak All rights reserved.
  * See LICENCE.txt file for licensing information.
  */
 package pl.edu.icm.unity.engine.scripts;
@@ -25,7 +25,6 @@ import pl.edu.icm.unity.engine.api.AttributeTypeManagement;
 import pl.edu.icm.unity.engine.api.AttributesManagement;
 import pl.edu.icm.unity.engine.api.AuthenticatorManagement;
 import pl.edu.icm.unity.engine.api.BulkProcessingManagement;
-import pl.edu.icm.unity.engine.api.ConfirmationConfigurationManagement;
 import pl.edu.icm.unity.engine.api.CredentialManagement;
 import pl.edu.icm.unity.engine.api.CredentialRequirementManagement;
 import pl.edu.icm.unity.engine.api.EndpointManagement;
@@ -49,6 +48,7 @@ import pl.edu.icm.unity.engine.api.identity.IdentityTypeSupport;
 import pl.edu.icm.unity.engine.api.initializers.ScriptConfiguration;
 import pl.edu.icm.unity.engine.api.initializers.ScriptType;
 import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
+import pl.edu.icm.unity.engine.api.utils.GroupDelegationConfigGenerator;
 
 /**
  * Executes GROOVY scripts given by user in
@@ -96,9 +96,6 @@ public class MainGroovyExecutor
 	private AuthenticatorManagement authenticatorManagement;
 	@Autowired
 	@Qualifier("insecure")
-	private ConfirmationConfigurationManagement confirmationConfigurationManagement;
-	@Autowired
-	@Qualifier("insecure")
 	private CredentialManagement credentialManagement;
 	@Autowired
 	@Qualifier("insecure")
@@ -136,6 +133,10 @@ public class MainGroovyExecutor
 	@Autowired
 	@Qualifier("insecure")
 	private TranslationProfileManagement translationProfileManagement;
+	@Autowired
+	@Qualifier("insecure")
+	private GroupDelegationConfigGenerator groupDelegationConfigGenerator;
+	
 	
 	@Autowired
 	private ApplicationContext applCtx;
@@ -188,7 +189,6 @@ public class MainGroovyExecutor
 		binding.setVariable("attributeTypeManagement", attributeTypeManagement);
 		binding.setVariable("authenticatorManagement", authenticatorManagement);
 		binding.setVariable("bulkProcessingManagement", bulkProcessingManagement);
-		binding.setVariable("confirmationConfigurationManagement", confirmationConfigurationManagement);
 		binding.setVariable("credentialManagement", credentialManagement);
 		binding.setVariable("credentialRequirementManagement", credentialRequirementManagement);
 		binding.setVariable("endpointManagement", endpointManagement);
@@ -208,6 +208,7 @@ public class MainGroovyExecutor
 		binding.setVariable("msgSrc", unityMessageSource);
 		binding.setVariable("attributeTypeSupport", attributeTypeSupport);
 		binding.setVariable("identityTypeSupport", identityTypeSupport);
+		binding.setVariable("groupDelegationConfigGenerator", groupDelegationConfigGenerator);
 		boolean coldStart = false;
 		if (event.getTrigger().equals(EventCategory.POST_INIT.toString()) || 
 				event.getTrigger().equals(EventCategory.PRE_INIT.toString()))

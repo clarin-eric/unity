@@ -6,18 +6,27 @@ package pl.edu.icm.unity.webui.common.attributes;
 
 import java.util.List;
 
-import com.vaadin.server.UserError;
+import com.vaadin.data.ValidationResult;
+import com.vaadin.data.ValueContext;
+import com.vaadin.server.Sizeable.Unit;
+import com.vaadin.shared.ui.ContentMode;
+import com.vaadin.ui.AbstractTextField;
 import com.vaadin.ui.Component;
 import com.vaadin.ui.Label;
-import com.vaadin.v7.ui.AbstractTextField;
-import com.vaadin.v7.ui.TextArea;
-import com.vaadin.v7.ui.TextField;
+import com.vaadin.ui.TextArea;
+import com.vaadin.ui.TextField;
 import com.vaadin.ui.VerticalLayout;
 
 import pl.edu.icm.unity.engine.api.attributes.AttributeValueSyntax;
+import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
 import pl.edu.icm.unity.exceptions.IllegalAttributeValueException;
 import pl.edu.icm.unity.stdext.attr.StringAttributeSyntax;
 import pl.edu.icm.unity.webui.common.ComponentsContainer;
+import pl.edu.icm.unity.webui.common.attributes.edit.AttributeEditContext;
+import pl.edu.icm.unity.webui.common.attributes.edit.AttributeValueEditor;
+import pl.edu.icm.unity.webui.common.attributes.ext.AttributeHandlerHelper;
+import pl.edu.icm.unity.webui.common.binding.SingleStringFieldBinder;
+import pl.edu.icm.unity.webui.common.binding.StringBindingValue;
 
 /**
  * Base attribute handler for the web. Renders as label, edit in text field. Extensions has to implement
@@ -27,11 +36,14 @@ import pl.edu.icm.unity.webui.common.ComponentsContainer;
 public abstract class TextOnlyAttributeHandler implements WebAttributeHandler
 {
 	protected AttributeValueSyntax<?> syntax;
+	protected UnityMessageSource msg;
+	
 	public static final int LARGE_STRING = 1000;
 	
-	public TextOnlyAttributeHandler(AttributeValueSyntax<?> syntax)
+	public TextOnlyAttributeHandler(UnityMessageSource msg, AttributeValueSyntax<?> syntax)
 	{
 		this.syntax = syntax;
+		this.msg = msg;
 	}
 
 	@Override
@@ -41,9 +53,9 @@ public abstract class TextOnlyAttributeHandler implements WebAttributeHandler
 	}
 	
 	@Override
-	public Component getRepresentation(String value)
+	public Component getRepresentation(String value, AttributeViewerContext context)
 	{
-		return new Label(value);
+		return AttributeHandlerHelper.getRepresentation(value, context);
 	}
 	
 	@Override
@@ -59,6 +71,8 @@ public abstract class TextOnlyAttributeHandler implements WebAttributeHandler
 		private AttributeValueSyntax<?> syntax;
 		private AbstractTextField field;
 		private boolean required;
+		private AttributeEditContext context;
+		private SingleStringFieldBinder binder;
 		
 		public StringValueEditor(String value, String label, AttributeValueSyntax<?> syntax)
 		{
@@ -68,61 +82,80 @@ public abstract class TextOnlyAttributeHandler implements WebAttributeHandler
 		}
 
 		@Override
-		public ComponentsContainer getEditor(boolean required, boolean adminMode)
+		public ComponentsContainer getEditor(AttributeEditContext context)
 		{
-			this.required = required;
+			binder =  new SingleStringFieldBinder(msg);
+			
+			this.required = context.isRequired();
+			this.context = context;
 			boolean large = false;
 			if (syntax instanceof StringAttributeSyntax)
 			{
 				StringAttributeSyntax sas = (StringAttributeSyntax) syntax;
 				if (sas.getMaxLength() > LARGE_STRING)
 					large = true;
+				this.required = required && sas.getMinLength() > 0;
 			}
 			
 			field = large ? new TextArea() : new TextField();
 			if (large)
-				field.setColumns(40);
-			if (value != null)
-				field.setValue(value.toString());
-			field.setCaption(label);
-			field.setRequired(required);
+				field.setWidth(60, Unit.PERCENTAGE);
+			setLabel(label);
 			
 			StringBuilder sb = new StringBuilder();
 			for (String hint: getHints())
 				sb.append(hint).append("<br>");
-			field.setDescription(sb.toString());
+			field.setDescription(sb.toString(), ContentMode.HTML);
 			if (label != null)
 				field.setId("ValueEditor."+label);
+			
+			if (context.isCustomWidth())
+				field.setWidth(context.getCustomWidth(), context.getCustomWidthUnit());
+			
+			binder.forField(field, required)
+				.withValidator(this::validate)
+				.bind("value");
+			binder.setBean(new StringBindingValue(value == null ? "" : value));
 			
 			return new ComponentsContainer(field);
 		}
 
+		private ValidationResult validate(String value, ValueContext context)
+		{
+			if (value.isEmpty())
+				return ValidationResult.ok(); //fall back to default checking
+			try
+			{
+				syntax.validateStringValue(value);
+				return ValidationResult.ok();
+			} catch (IllegalAttributeValueException e)
+			{
+				return ValidationResult.error(e.getMessage());
+			} catch (Exception e)
+			{
+				return ValidationResult.error(e.getMessage());
+			}
+		}
+
+		
 		@Override
 		public String getCurrentValue() throws IllegalAttributeValueException
 		{
-			if (!required && field.getValue().isEmpty())
-				return null;
-			try
-			{
-				String cur= field.getValue();
-				syntax.validateStringValue(cur);
-				field.setComponentError(null);
-				return cur;
-			} catch (IllegalAttributeValueException e)
-			{
-				field.setComponentError(new UserError(e.getMessage()));
-				throw e;
-			} catch (Exception e)
-			{
-				field.setComponentError(new UserError(e.getMessage()));
-				throw new IllegalAttributeValueException(e.getMessage(), e);
+			if (!binder.isValid())
+			{	
+				binder.validate();
+				throw new IllegalAttributeValueException("");
 			}
+			return binder.getBean().getValue();
 		}
 
 		@Override
 		public void setLabel(String label)
 		{
-			field.setCaption(label);
+			if (context.isShowLabelInline())
+				field.setPlaceholder(label);
+			else
+				field.setCaption(label);
 		}
 	}
 

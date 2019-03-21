@@ -14,9 +14,9 @@ import com.vaadin.ui.Button.ClickListener;
 import com.vaadin.ui.Component;
 import com.vaadin.ui.CustomComponent;
 import com.vaadin.ui.FormLayout;
-import com.vaadin.v7.ui.HorizontalLayout;
+import com.vaadin.ui.HorizontalLayout;
 import com.vaadin.ui.Label;
-import com.vaadin.v7.ui.VerticalLayout;
+import com.vaadin.ui.VerticalLayout;
 
 import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
 import pl.edu.icm.unity.exceptions.EngineException;
@@ -25,6 +25,7 @@ import pl.edu.icm.unity.webui.association.afterlogin.ConnectIdWizardProvider;
 import pl.edu.icm.unity.webui.common.FormValidationException;
 import pl.edu.icm.unity.webui.common.Images;
 import pl.edu.icm.unity.webui.common.NotificationPopup;
+import pl.edu.icm.unity.webui.common.composite.CompositeLayoutAdapter;
 import pl.edu.icm.unity.webui.sandbox.wizard.SandboxWizardDialog;
 
 /**
@@ -52,15 +53,18 @@ public class EntityDetailsWithActions extends CustomComponent
 		this.attrsPanel = attrsPanel;
 		this.msg = msg;
 		VerticalLayout root = new VerticalLayout();
+		root.setMargin(false);
+		root.setSpacing(false);
 		FormLayout mainForm = new FormLayout();
+		CompositeLayoutAdapter layoutAdapter = new CompositeLayoutAdapter(mainForm);
 		if (!disabled.contains(HomeEndpointProperties.Components.userInfo.toString()))
-			detailsPanel.addIntoLayout(mainForm);
+			layoutAdapter.addContainer(detailsPanel.getContents());
 		
 		if (!disabled.contains(HomeEndpointProperties.Components.identitiesManagement.toString()))
-			identitiesPanel.addIntoLayout(mainForm);
+			layoutAdapter.addContainer(identitiesPanel.getContents());
 
 		if (!disabled.contains(HomeEndpointProperties.Components.attributesManagement.toString()))
-			attrsPanel.addIntoLayout(mainForm);
+			layoutAdapter.addContainer(attrsPanel.getContents());
 		
 		root.addComponent(mainForm);
 		root.addComponent(getButtonsBar(disabled, 
@@ -72,7 +76,6 @@ public class EntityDetailsWithActions extends CustomComponent
 			final ConnectIdWizardProvider accountAssociationWizardProvider)
 	{
 		HorizontalLayout buttons = new HorizontalLayout();
-		buttons.setSpacing(true);
 		buttons.setWidth(100, Unit.PERCENTAGE);
 		buttons.setMargin(new MarginInfo(false, false, true, false));
 
@@ -172,7 +175,7 @@ public class EntityDetailsWithActions extends CustomComponent
 		}
 		if (!ok)
 		{
-			NotificationPopup.showError(msg, msg.getMessage("error"), 
+			NotificationPopup.showError(msg.getMessage("error"), 
 					msg.getMessage("EntityDetailsWithActions.errorSaving"));
 			return;
 		}
@@ -180,9 +183,10 @@ public class EntityDetailsWithActions extends CustomComponent
 		try
 		{
 			identitiesPanel.saveChanges();
-			attrsPanel.saveChanges();
 			identitiesPanel.refresh();
-			attrsPanel.refresh();
+			if (attrsPanel.saveChanges())
+				attrsPanel.refresh();
+			
 		} catch (Exception e)
 		{
 			NotificationPopup.showError(msg, 

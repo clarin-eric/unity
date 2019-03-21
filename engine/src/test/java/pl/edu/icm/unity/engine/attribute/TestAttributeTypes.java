@@ -22,10 +22,13 @@ import java.util.List;
 
 import org.junit.Test;
 
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.google.common.collect.Lists;
 
+import pl.edu.icm.unity.Constants;
 import pl.edu.icm.unity.engine.DBIntegrationTestBase;
-import pl.edu.icm.unity.engine.credential.CredentialAttributeTypeProvider;
+import pl.edu.icm.unity.engine.authz.RoleAttributeTypeProvider;
+import pl.edu.icm.unity.exceptions.EngineException;
 import pl.edu.icm.unity.exceptions.IllegalAttributeTypeException;
 import pl.edu.icm.unity.exceptions.IllegalAttributeValueException;
 import pl.edu.icm.unity.stdext.attr.EnumAttributeSyntax;
@@ -46,7 +49,7 @@ public class TestAttributeTypes extends DBIntegrationTestBase
 	{
 		String[] supportedSyntaxes = aTypeMan.getSupportedAttributeValueTypes();
 		Arrays.sort(supportedSyntaxes);
-		assertEquals(9, supportedSyntaxes.length);
+		assertEquals(12, supportedSyntaxes.length);
 		checkArray(supportedSyntaxes, StringAttributeSyntax.ID, EnumAttributeSyntax.ID);
 	}
 	
@@ -134,7 +137,7 @@ public class TestAttributeTypes extends DBIntegrationTestBase
 		Identity id = createUsernameUser("user");
 		EntityParam entity = new EntityParam(id.getEntityId());
 		Attribute at1 = StringAttribute.of("some", "/", "123456");
-		attrsMan.setAttribute(entity, at1, false);
+		attrsMan.createAttribute(entity, at1);
 		
 		catchException(aTypeMan).removeAttributeType("some", false);
 		
@@ -150,7 +153,7 @@ public class TestAttributeTypes extends DBIntegrationTestBase
 		Identity id = createUsernameUser("user");
 		EntityParam entity = new EntityParam(id.getEntityId());
 		Attribute at1 = StringAttribute.of("some", "/", "123456");
-		attrsMan.setAttribute(entity, at1, false);
+		attrsMan.createAttribute(entity, at1);
 		
 		aTypeMan.removeAttributeType("some", true);
 		
@@ -197,7 +200,7 @@ public class TestAttributeTypes extends DBIntegrationTestBase
 		Identity id = createUsernameUser("user");
 		EntityParam entity = new EntityParam(id.getEntityId());
 		Attribute at1 = StringAttribute.of("some", "/", vals);
-		attrsMan.setAttribute(entity, at1, false);
+		attrsMan.createAttribute(entity, at1);
 		
 		at.setMinElements(1);
 		at.setMaxElements(3);
@@ -218,7 +221,7 @@ public class TestAttributeTypes extends DBIntegrationTestBase
 		Identity id = createUsernameUser("user");
 		EntityParam entity = new EntityParam(id.getEntityId());
 		Attribute at1 = StringAttribute.of("some", "/", vals);
-		attrsMan.setAttribute(entity, at1, false);
+		attrsMan.createAttribute(entity, at1);
 		
 		at.setMaxElements(2);
 		catchException(aTypeMan).updateAttributeType(at);
@@ -252,14 +255,14 @@ public class TestAttributeTypes extends DBIntegrationTestBase
 		List<String> vals = new ArrayList<String>();
 		Collections.addAll(vals, "MA__g", "MA_ _ _g");
 		Attribute atOK = StringAttribute.of("some", "/", vals);
-		attrsMan.setAttribute(entity, atOK, false);
+		attrsMan.createAttribute(entity, atOK);
 		
 		//now try to break restrictions:
 		// - unique
 		atOK.setValues("MA__g", "MA__g");
 		try
 		{
-			attrsMan.setAttribute(entity, atOK, true);
+			attrsMan.setAttribute(entity, atOK);
 			fail("Managed to add attribute with duplicated values");
 		} catch (IllegalAttributeValueException e) {/*OK*/}
 
@@ -267,7 +270,7 @@ public class TestAttributeTypes extends DBIntegrationTestBase
 		atOK.setValues("MA__g", "MA___g", "MA_____g");
 		try
 		{
-			attrsMan.setAttribute(entity, atOK, true);
+			attrsMan.setAttribute(entity, atOK);
 			fail("Managed to add attribute with too many values");
 		} catch (IllegalAttributeValueException e) {/*OK*/}
 		
@@ -275,7 +278,7 @@ public class TestAttributeTypes extends DBIntegrationTestBase
 		atOK.setValues("MA_g");
 		try
 		{
-			attrsMan.setAttribute(entity, atOK, true);
+			attrsMan.setAttribute(entity, atOK);
 			fail("Managed to add attribute with too short value");
 		} catch (IllegalAttributeValueException e) {/*OK*/}
 		
@@ -283,7 +286,7 @@ public class TestAttributeTypes extends DBIntegrationTestBase
 		atOK.setValues("MA__________g");
 		try
 		{
-			attrsMan.setAttribute(entity, atOK, true);
+			attrsMan.setAttribute(entity, atOK);
 			fail("Managed to add attribute with too long value");
 		} catch (IllegalAttributeValueException e) {/*OK*/}
 		
@@ -292,7 +295,7 @@ public class TestAttributeTypes extends DBIntegrationTestBase
 		atOK.setValues("M____g");
 		try
 		{
-			attrsMan.setAttribute(entity, atOK, true);
+			attrsMan.setAttribute(entity, atOK);
 			fail("Managed to add attribute with not matching value");
 		} catch (IllegalAttributeValueException e) {/*OK*/}
 		
@@ -393,7 +396,7 @@ public class TestAttributeTypes extends DBIntegrationTestBase
 	{
 		Collection<AttributeType> ats = aTypeMan.getAttributeTypes();
 		AttributeType crAt = getAttributeTypeByName(ats, 
-				CredentialAttributeTypeProvider.CREDENTIAL_REQUIREMENTS);
+				RoleAttributeTypeProvider.AUTHORIZATION_ROLE);
 		assertTrue((crAt.getFlags() | AttributeType.TYPE_IMMUTABLE_FLAG) != 0);
 		
 		crAt.setSelfModificable(true);
@@ -403,11 +406,32 @@ public class TestAttributeTypes extends DBIntegrationTestBase
 		aTypeMan.updateAttributeType(crAt);
 		
 		ats = aTypeMan.getAttributeTypes();
-		crAt = getAttributeTypeByName(ats, CredentialAttributeTypeProvider.CREDENTIAL_REQUIREMENTS);
+		crAt = getAttributeTypeByName(ats, RoleAttributeTypeProvider.AUTHORIZATION_ROLE);
 		assertTrue((crAt.getFlags() | AttributeType.TYPE_IMMUTABLE_FLAG) != 0);
 		assertEquals(new I18nString("Foo"), crAt.getDisplayedName());
 		assertEquals(new I18nString("FooDesc"), crAt.getDescription());
 		assertTrue(crAt.isSelfModificable());
+	}
+	
+	@Test
+	public void cantAddTypeIfSyntaxNotExists() throws EngineException
+	{
+		AttributeType at = createSimpleAT("some");
+		at.setValueSyntax("INCORRECT");
+		catchException(aTypeMan).addAttributeType(at);
+		assertThat(caughtException(), isA(IllegalArgumentException.class));
+	}
+	
+	@Test
+	public void cantAddTypeIfSyntaxConfigIsIncorrect() throws EngineException
+	{
+		AttributeType at = createSimpleAT("some");
+		ObjectNode main = Constants.MAPPER.createObjectNode();
+		main.put("minLength", 1);
+		main.put("maxLength", 2);
+		at.setValueSyntaxConfiguration(main);
+		catchException(aTypeMan).addAttributeType(at);
+		assertThat(caughtException(), isA(IllegalArgumentException.class));
 	}
 }
 

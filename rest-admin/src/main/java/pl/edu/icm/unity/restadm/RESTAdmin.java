@@ -9,10 +9,13 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Date;
+import java.util.Deque;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.TimeoutException;
+import java.util.stream.Collectors;
 
 import javax.ws.rs.Consumes;
 import javax.ws.rs.DELETE;
@@ -23,21 +26,27 @@ import javax.ws.rs.Path;
 import javax.ws.rs.PathParam;
 import javax.ws.rs.Produces;
 import javax.ws.rs.QueryParam;
+import javax.ws.rs.core.Context;
 import javax.ws.rs.core.MediaType;
+import javax.ws.rs.core.UriInfo;
 
 import org.apache.logging.log4j.Logger;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 
 import net.minidev.json.JSONArray;
 import pl.edu.icm.unity.Constants;
 import pl.edu.icm.unity.JsonUtil;
 import pl.edu.icm.unity.base.event.Event;
+import pl.edu.icm.unity.base.msgtemplates.MessageTemplateDefinition;
 import pl.edu.icm.unity.base.token.Token;
 import pl.edu.icm.unity.base.utils.Log;
 import pl.edu.icm.unity.engine.api.AttributeTypeManagement;
@@ -50,20 +59,25 @@ import pl.edu.icm.unity.engine.api.GroupsManagement;
 import pl.edu.icm.unity.engine.api.InvitationManagement;
 import pl.edu.icm.unity.engine.api.RegistrationsManagement;
 import pl.edu.icm.unity.engine.api.UserImportManagement;
-import pl.edu.icm.unity.engine.api.authn.AuthenticationResult;
-import pl.edu.icm.unity.engine.api.confirmation.ConfirmationManager;
+import pl.edu.icm.unity.engine.api.bulk.BulkGroupQueryService;
+import pl.edu.icm.unity.engine.api.bulk.GroupMembershipData;
+import pl.edu.icm.unity.engine.api.confirmation.EmailConfirmationManager;
 import pl.edu.icm.unity.engine.api.event.EventPublisher;
 import pl.edu.icm.unity.engine.api.identity.IdentityTypeDefinition;
 import pl.edu.icm.unity.engine.api.identity.IdentityTypesRegistry;
 import pl.edu.icm.unity.engine.api.token.SecuredTokensManagement;
+import pl.edu.icm.unity.engine.api.userimport.UserImportSerivce.ImportResult;
+import pl.edu.icm.unity.engine.api.userimport.UserImportSpec;
 import pl.edu.icm.unity.engine.api.utils.PrototypeComponent;
 import pl.edu.icm.unity.engine.api.utils.json.Token2JsonFormatter;
 import pl.edu.icm.unity.exceptions.EngineException;
 import pl.edu.icm.unity.exceptions.WrongArgumentException;
 import pl.edu.icm.unity.rest.exception.JSONParsingException;
+import pl.edu.icm.unity.stdext.identity.EmailIdentity;
 import pl.edu.icm.unity.stdext.identity.PersistentIdentity;
 import pl.edu.icm.unity.types.basic.Attribute;
 import pl.edu.icm.unity.types.basic.AttributeExt;
+import pl.edu.icm.unity.types.basic.AttributeStatement;
 import pl.edu.icm.unity.types.basic.AttributeType;
 import pl.edu.icm.unity.types.basic.Entity;
 import pl.edu.icm.unity.types.basic.EntityParam;
@@ -71,6 +85,7 @@ import pl.edu.icm.unity.types.basic.EntityScheduledOperation;
 import pl.edu.icm.unity.types.basic.EntityState;
 import pl.edu.icm.unity.types.basic.Group;
 import pl.edu.icm.unity.types.basic.GroupContents;
+import pl.edu.icm.unity.types.basic.GroupMember;
 import pl.edu.icm.unity.types.basic.GroupMembership;
 import pl.edu.icm.unity.types.basic.Identity;
 import pl.edu.icm.unity.types.basic.IdentityParam;
@@ -79,8 +94,11 @@ import pl.edu.icm.unity.types.endpoint.EndpointConfiguration;
 import pl.edu.icm.unity.types.endpoint.ResolvedEndpoint;
 import pl.edu.icm.unity.types.registration.RegistrationForm;
 import pl.edu.icm.unity.types.registration.RegistrationRequestState;
+import pl.edu.icm.unity.types.registration.invite.EnquiryInvitationParam;
 import pl.edu.icm.unity.types.registration.invite.InvitationParam;
 import pl.edu.icm.unity.types.registration.invite.InvitationWithCode;
+import pl.edu.icm.unity.types.registration.invite.RegistrationInvitationParam;
+import pl.edu.icm.unity.types.registration.invite.InvitationParam.InvitationType;
 import pl.edu.icm.unity.types.translation.TranslationRule;
 
 /**
@@ -101,7 +119,7 @@ public class RESTAdmin
 	private AttributesManagement attributesMan;
 	private ObjectMapper mapper = Constants.MAPPER;
 	private IdentityTypesRegistry identityTypesRegistry;
-	private ConfirmationManager confirmationManager;
+	private EmailConfirmationManager confirmationManager;
 	private EndpointManagement endpointManagement;
 	private RegistrationsManagement registrationManagement;
 	private BulkProcessingManagement bulkProcessingManagement;
@@ -112,11 +130,14 @@ public class RESTAdmin
 	private EventPublisher eventPublisher;
 	private SecuredTokensManagement securedTokenMan;
 	private Token2JsonFormatter jsonFormatter;
+	private UserNotificationTriggerer userNotificationTriggerer;
+
+	private BulkGroupQueryService bulkQueryService;
 	
 	@Autowired
 	public RESTAdmin(EntityManagement identitiesMan, GroupsManagement groupsMan,
 			AttributesManagement attributesMan, IdentityTypesRegistry identityTypesRegistry,
-			ConfirmationManager confirmationManager, EndpointManagement endpointManagement,
+			EmailConfirmationManager confirmationManager, EndpointManagement endpointManagement,
 			RegistrationsManagement registrationManagement, 
 			BulkProcessingManagement bulkProcessingManagement, 
 			UserImportManagement userImportManagement,
@@ -125,7 +146,9 @@ public class RESTAdmin
 			InvitationManagement invitationMan,
 			EventPublisher eventPublisher,
 			SecuredTokensManagement securedTokenMan,
-			Token2JsonFormatter jsonFormatter)
+			Token2JsonFormatter jsonFormatter,
+			UserNotificationTriggerer userNotificationTriggerer,
+			BulkGroupQueryService bulkQueryService)
 	{
 		this.identitiesMan = identitiesMan;
 		this.groupsMan = groupsMan;
@@ -142,6 +165,8 @@ public class RESTAdmin
 		this.eventPublisher = eventPublisher;
 		this.securedTokenMan = securedTokenMan;
 		this.jsonFormatter = jsonFormatter;
+		this.userNotificationTriggerer = userNotificationTriggerer;
+		this.bulkQueryService = bulkQueryService;
 	}
 
 	
@@ -344,9 +369,11 @@ public class RESTAdmin
 			throws EngineException
 	{
 		log.debug("setAttribute: " + attributeParam.getName() + " in " + attributeParam.getGroupPath());
-		attributesMan.setAttribute(entityParam, attributeParam, true);
+		attributesMan.setAttributeSuppressingConfirmation(entityParam, attributeParam);
 	}
 	
+	//TODO - those two endpoints are duplicating functionality. Should be unified into a single one.
+	//remaining after old method of providing used credential
 	@Path("/entity/{entityId}/credential-adm/{credential}")
 	@PUT
 	@Consumes(MediaType.APPLICATION_JSON)
@@ -385,9 +412,7 @@ public class RESTAdmin
 			if (mainA.size() < 1)
 				throw new  JSONParsingException("Request body JSON array must have at least one element");
 			String newSecrets = mainA.get(0).asText();
-			String oldSecrets = mainA.size() > 1 ? mainA.get(1).asText() : null;
-			entityCredMan.setEntityCredential(getEP(entityId, idType), credential, 
-					newSecrets, oldSecrets);
+			entityCredMan.setEntityCredential(getEP(entityId, idType), credential, newSecrets);
 		} else
 		{
 			throw new JSONParsingException("Request body must be a JSON array");
@@ -407,6 +432,28 @@ public class RESTAdmin
 		return mapper.writeValueAsString(contents);
 	}
 
+	@Path("/group-members/{groupPath}")
+	@GET
+	public String getGroupMembersResolved(@PathParam("groupPath") String group) 
+			throws EngineException, JsonProcessingException
+	{
+		log.debug("getGroupMembersResolved query for " + group);
+		if (!group.startsWith("/"))
+			group = "/" + group;
+		GroupMembershipData bulkMembershipData = bulkQueryService.getBulkMembershipData(group);
+		Map<Long, Map<String, AttributeExt>> userAttributes = 
+				bulkQueryService.getGroupUsersAttributes(group, bulkMembershipData);
+		Map<Long, Entity> entitiesData = bulkQueryService.getGroupEntitiesNoContextWithoutTargeted(bulkMembershipData);
+		List<GroupMember> ret = new ArrayList<>(userAttributes.size());
+		for (Long memberId: userAttributes.keySet())
+		{
+			Collection<AttributeExt> attributes = userAttributes.get(memberId).values(); 
+			Entity entity = entitiesData.get(memberId);
+			ret.add(new GroupMember(group, entity, attributes));
+		}
+		return mapper.writeValueAsString(ret);
+	}
+	
 	
 	@Path("/group/{groupPath}")
 	@DELETE
@@ -430,6 +477,45 @@ public class RESTAdmin
 		Group toAdd = new Group(group);
 		groupsMan.addGroup(toAdd);
 	}
+
+	@Path("/group/{groupPath}/statements")
+	@GET
+	public String getGroupStatements(@PathParam("groupPath") String group) 
+			throws EngineException, JsonProcessingException
+	{
+		if (!group.startsWith("/"))
+			group = "/" + group;
+		log.debug("getGroupStatements query for " + group);
+		GroupContents contents = groupsMan.getContents(group, GroupContents.METADATA);
+		return mapper.writeValueAsString(contents.getGroup().getAttributeStatements());
+	}
+
+	@Path("/group/{groupPath}/statements")
+	@PUT
+	@Consumes(MediaType.APPLICATION_JSON)
+	public void updateGroupStatements(@PathParam("groupPath") String group,
+			String statementsJson) throws EngineException, JsonProcessingException
+	{
+		if (!group.startsWith("/"))
+			group = "/" + group;
+		log.debug("updateGroup statements " + group);
+		
+		List<AttributeStatement> statements;
+		try
+		{
+			statements = Constants.MAPPER.readValue(statementsJson, 
+					new TypeReference<List<AttributeStatement>>() {});
+		} catch (IOException e)
+		{
+			throw new WrongArgumentException("Can not parse input as list of attribute statements", e);
+		}
+		
+		Group contents = groupsMan.getContents(group, GroupContents.METADATA).getGroup();
+		contents.setAttributeStatements(statements.toArray(new AttributeStatement[statements.size()]));
+		groupsMan.updateGroup(group, contents);
+	}
+
+	
 	
 	@Path("/group/{groupPath}/entity/{entityId}")
 	@DELETE
@@ -438,6 +524,8 @@ public class RESTAdmin
 			@QueryParam("identityType") String idType) 
 			throws EngineException, JsonProcessingException
 	{
+		if (!group.startsWith("/"))
+			group = "/" + group;
 		log.debug("removeMember " + entityId + " from " + group);
 		groupsMan.removeMember(group, getEP(entityId, idType));
 	}
@@ -449,8 +537,19 @@ public class RESTAdmin
 			@QueryParam("identityType") String idType) 
 			throws EngineException, JsonProcessingException
 	{
+		if (!group.startsWith("/"))
+			group = "/" + group;
 		log.debug("addMember " + entityId + " to " + group);
-		groupsMan.addMemberFromParent(group, getEP(entityId, idType));
+		
+		EntityParam entityParam = getEP(entityId, idType);
+		
+		Set<String> existingGroups = identitiesMan.getGroups(entityParam).keySet();
+		Deque<String> notMember = Group.getMissingGroups(group, existingGroups);
+		while (!notMember.isEmpty())
+		{
+			String notMemberGroup = notMember.pollLast();
+			groupsMan.addMemberFromParent(notMemberGroup, entityParam);
+		}
 	}
 
 	
@@ -514,6 +613,31 @@ public class RESTAdmin
 			throw new WrongArgumentException("Attribute is undefined");
 		
 		confirmationManager.sendVerificationsQuietNoTx(entityParam, attributes, true);
+	}
+	
+	@Path("/userNotification-trigger/entity/{identityValue}/template/{templateId}")
+	@POST
+	public void userNotificationTrigger(
+			@PathParam("identityValue") String identityValue, 
+			@PathParam("templateId") String templateId, 
+			@QueryParam("identityType") String identityType, 
+			@Context UriInfo uriInfo) throws EngineException, JsonProcessingException
+	{
+		String effectiveType = identityType == null ? EmailIdentity.ID : identityType; 
+		log.debug("Triggering UserNotification \'{}\' for identity {} type {}", 
+				templateId,  identityValue,  effectiveType);
+		Entity entity = identitiesMan.getEntity(new EntityParam(new IdentityTaV(effectiveType, identityValue)));
+		
+		Map<String, String> customTemplateParams = Maps.newHashMap();
+		uriInfo.getQueryParameters().forEach((key, value) -> 
+		{
+			if (key.startsWith(MessageTemplateDefinition.CUSTOM_VAR_PREFIX))
+			{
+				String flatValue = value.stream().collect(Collectors.joining());
+				customTemplateParams.put(key, flatValue);
+			}
+		});
+		userNotificationTriggerer.sendNotification(entity, templateId, customTemplateParams);
 	}
 
 	@Path("/confirmation-trigger/identity/{type}/{value}")
@@ -604,13 +728,14 @@ public class RESTAdmin
 	@Path("/registrationForm")
 	@PUT
 	@Consumes(MediaType.APPLICATION_JSON)
-	public void updateForm(@QueryParam("ignoreRequests") Boolean ignoreRequests,
-			String json) throws EngineException, IOException
+	public void updateForm(@QueryParam("ignoreRequestsAndInvitations") Boolean ignoreRequestsAndInvitations,
+			@QueryParam("ignoreInvitations") Boolean ignoreInvitations, String json)
+			throws EngineException, IOException
 	{
-		if (ignoreRequests == null)
-			ignoreRequests = false;
+		if (ignoreRequestsAndInvitations == null)
+			ignoreRequestsAndInvitations = false;
 		RegistrationForm form = new RegistrationForm(JsonUtil.parse(json));
-		registrationManagement.updateForm(form, ignoreRequests);
+		registrationManagement.updateForm(form, ignoreRequestsAndInvitations);
 	}
 	
 	@Path("/registrationRequests")
@@ -670,9 +795,41 @@ public class RESTAdmin
 	@Consumes(MediaType.APPLICATION_JSON)
 	@Produces(MediaType.TEXT_PLAIN)
 	public String addInvitation(String jsonInvitation) throws EngineException, IOException
-	{
-		InvitationParam invitationParam = JsonUtil.parse(jsonInvitation, InvitationParam.class);
+	{	
+		InvitationParam invitationParam = getInvitationFromJson(jsonInvitation);
 		return invitationMan.addInvitation(invitationParam);
+	}
+	
+	@Path("/invitation/{code}")
+	@PUT
+	@Consumes(MediaType.APPLICATION_JSON)
+	public void updateInvitation(@PathParam("code") String code, String jsonInvitation) throws EngineException, IOException
+	{
+		InvitationParam invitationParam = getInvitationFromJson(jsonInvitation);
+		invitationMan.updateInvitation(code, invitationParam);
+	}	
+	
+	private InvitationParam getInvitationFromJson(String jsonInvitation) throws WrongArgumentException
+	{
+		ObjectNode invNode = JsonUtil.parse(jsonInvitation);
+		JsonNode itype = invNode.get("type");
+		InvitationType type = null;
+		if (itype == null)
+		{
+			type = InvitationType.REGISTRATION;
+			log.debug("Use default invitation type = " + InvitationType.REGISTRATION.toString());
+		} else
+		{
+			type = InvitationType.valueOf(invNode.get("type").asText());
+		}
+
+		if (type.equals(InvitationType.REGISTRATION))
+		{
+			return new RegistrationInvitationParam(invNode);
+		} else
+		{
+			return new EnquiryInvitationParam(invNode);
+		}
 	}
 	
 	@Path("/bulkProcessing/instant")
@@ -708,9 +865,14 @@ public class RESTAdmin
 	@POST
 	@Produces(MediaType.APPLICATION_JSON)
 	public String importUser(@PathParam("identity") String identity,
-			@QueryParam("type") String identityType) throws EngineException, IOException
+			@QueryParam("type") String identityType,
+			@QueryParam("importer") String importer) throws EngineException, IOException
 	{
-		AuthenticationResult importUser = userImportManagement.importUser(identity, identityType);
+		UserImportSpec param = importer == null ? 
+				UserImportSpec.withAllImporters(identity, identityType) : 
+				new UserImportSpec(importer, identity, identityType);
+		List<ImportResult> importUser = userImportManagement.importUser(
+				Lists.newArrayList(param));
 		return mapper.writeValueAsString(importUser);
 	}
 	

@@ -98,11 +98,17 @@ public class IntegerAttributeSyntax implements AttributeValueSyntax<Long>
 	}
 
 	@Override
-	public boolean isVerifiable()
+	public boolean isEmailVerifiable()
 	{
 		return false;
 	}
-	
+
+	@Override
+	public boolean isUserVerifiable()
+	{
+		return false;
+	}
+
 	@Override
 	public Long convertFromString(String stringRepresentation)
 	{

@@ -1,9 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
 	<modelVersion>4.0.0</modelVersion>
 	<groupId>pl.edu.icm.unity</groupId>
 	<artifactId>unity-server-parent</artifactId>
 	<packaging>pom</packaging>
-	<version>2.4.0-SNAPSHOT</version>
+	<version>2.9.0-SNAPSHOT</version>
 	<name>UNITY aggregation and parent module</name>
 	<organization>
 		<name>Unity</name>
@@ -14,24 +15,24 @@
 		<maven>3.0.5</maven>
 	</prerequisites>
 
-
 	<properties>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 		<scm.base>scm:git:git@github.com:unity-idm/unity.git</scm.base>
-		<jetty.version>9.4.7.v20170914</jetty.version>
-		<slf4j.version>1.7.24</slf4j.version>
-		<log4j.version>2.9.1</log4j.version>
-		<spring.version>4.3.10.RELEASE</spring.version>
-		<vaadin.version>8.1.6</vaadin.version>
+		<jetty.version>9.4.14.v20181114</jetty.version>
+		<slf4j.version>1.7.25</slf4j.version>
+		<log4j.version>2.11.1</log4j.version>
+		<spring.version>5.1.4.RELEASE</spring.version>
+		<vaadin.version>8.6.4</vaadin.version>
 		<groovy-all.version>2.4.8</groovy-all.version>
 		<cxf.version>3.1.10</cxf.version>
 		<apacheds.version>2.0.0-M24</apacheds.version>
-		<bc.version>1.56</bc.version>
-		<selenium.version>3.6.0</selenium.version>
+		<bc.version>1.60</bc.version>
+		<selenium.version>3.14.0</selenium.version>
 
 		<!-- Sonar -->
 		<sonar.java.coveragePlugin>jacoco</sonar.java.coveragePlugin>
-		<sonar.jacoco.reportPaths>${project.basedir}/../target/jacoco-it.exec</sonar.jacoco.reportPaths>
+	    <sonar.jacoco.reportPaths>${project.basedir}/../target/jacoco.exec</sonar.jacoco.reportPaths>
+		<sonar.jacoco.itReportPath>${project.basedir}/../target/jacoco-it.exec</sonar.jacoco.itReportPath>
 		<sonar.language>java</sonar.language>
 		<sonar.sources>src/main/java</sonar.sources>
 	</properties>
@@ -53,7 +54,11 @@
 		<module>std-plugins</module>
 		<module>web-vaadin-widgetset</module>
 		<module>web-common</module>
+		<module>web-elements</module>
+		<module>web-admin-common</module>
 		<module>web-admin</module>
+		<module>web-console</module>
+		<module>web-upman</module>
 		<module>rest</module>
 		<module>rest-admin</module>
 		<module>ws</module>
@@ -65,13 +70,13 @@
 		<module>integration-tests</module>
 		<module>distribution</module>
 		<module>documentation</module>
-	</modules>
+		<module>composite-password</module>
+  </modules>
 
 	<developers>
 		<developer>
 			<name>Krzysztof Benedyczak</name>
-			<organization>ICM Warsaw</organization>
-			<organizationUrl>http://www.icm.edu.pl</organizationUrl>
+			<organization>Bixbit</organization>
 		</developer>
 	</developers>
 	<contributors>
@@ -134,7 +139,7 @@
 				<plugin>
 					<groupId>org.sonarsource.scanner.maven</groupId>
 					<artifactId>sonar-maven-plugin</artifactId>
-					<version>3.0.2</version>
+					<version>3.4.0.905</version>
 				</plugin>
 				<plugin>
 					<groupId>org.apache.maven.plugins</groupId>
@@ -195,7 +200,7 @@
 				<plugin>
 					<groupId>org.jacoco</groupId>
 					<artifactId>jacoco-maven-plugin</artifactId>
-					<version>0.7.6.201602180812</version>
+					<version>0.7.9</version>
 				</plugin>
 				<plugin>
 					<groupId>org.apache.maven.plugins</groupId>
@@ -229,9 +234,21 @@
 				<scope>test</scope>
 			</dependency>
 			<dependency>
+				<groupId>com.tngtech.java</groupId>
+				<artifactId>junit-dataprovider</artifactId>
+				<version>1.13.1</version>
+				<scope>test</scope>
+			</dependency>
+			<dependency>
 				<groupId>eu.codearte.catch-exception</groupId>
 				<artifactId>catch-exception</artifactId>
-				<version>1.4.4</version>
+				<version>1.4.6</version>
+				<scope>test</scope>
+			</dependency>
+			<dependency>
+				<groupId>org.assertj</groupId>
+				<artifactId>assertj-core</artifactId>
+				<version>3.11.1</version>
 				<scope>test</scope>
 			</dependency>
 			<dependency>
@@ -243,13 +260,13 @@
 			<dependency>
 				<groupId>org.mockito</groupId>
 				<artifactId>mockito-core</artifactId>
-				<version>2.11.0</version>
+				<version>2.23.4</version>
 				<scope>test</scope>
 			</dependency>
 			<dependency>
 				<groupId>org.awaitility</groupId>
 				<artifactId>awaitility</artifactId>
-				<version>3.0.0</version>
+				<version>3.1.5</version>
 				<scope>test</scope>
 			</dependency>
 			<dependency>
@@ -275,7 +292,7 @@
 			<dependency>
 				<groupId>org.aspectj</groupId>
 				<artifactId>aspectjweaver</artifactId>
-				<version>1.8.12</version>
+				<version>1.9.2</version>
 			</dependency>
 			<dependency>
 				<groupId>org.eclipse.jetty</groupId>
@@ -330,12 +347,12 @@
 			<dependency>
 				<groupId>com.fasterxml.jackson.core</groupId>
 				<artifactId>jackson-databind</artifactId>
-				<version>2.9.2</version>
+				<version>2.9.8</version>
 			</dependency>
 			<dependency>
 				<groupId>eu.unicore.security</groupId>
 				<artifactId>securityLibrary</artifactId>
-				<version>4.5.0</version>
+				<version>4.5.5</version>
 				<exclusions>
 					<exclusion>
 						<groupId>log4j</groupId>
@@ -364,46 +381,41 @@
 			<dependency>
 				<groupId>eu.unicore.security</groupId>
 				<artifactId>secutils-cxf</artifactId>
-				<version>1.5.1</version>
+				<version>1.5.4</version>
 			</dependency>
 			<dependency>
 				<groupId>org.postgresql</groupId>
 				<artifactId>postgresql</artifactId>
-				<version>9.4.1212.jre7</version>
+				<version>42.2.5.jre7</version>
 			</dependency>
 			<dependency>
     			<groupId>org.mariadb.jdbc</groupId>
     			<artifactId>mariadb-java-client</artifactId>
-    			<version>1.5.8</version>
+    			<version>2.3.0</version>
 			</dependency>
 			<dependency>
 				<groupId>com.h2database</groupId>
 				<artifactId>h2</artifactId>
-				<version>1.4.196</version>
+				<version>1.4.197</version>
 			</dependency>
 			<dependency>
 				<groupId>org.mybatis</groupId>
 				<artifactId>mybatis</artifactId>
-				<version>3.4.5</version>
+				<version>3.4.6</version>
 			</dependency>
 			<dependency>
 				<groupId>org.mybatis</groupId>
 				<artifactId>mybatis-spring</artifactId>
-				<version>1.3.1</version>
+				<version>1.3.2</version>
 			</dependency>
 			<dependency>
 				<groupId>com.vaadin</groupId>
-				<artifactId>vaadin-compatibility-server</artifactId>
+				<artifactId>vaadin-server</artifactId>
 				<version>${vaadin.version}</version>
 			</dependency>
 			<dependency>
 				<groupId>com.vaadin</groupId>
 				<artifactId>vaadin-themes</artifactId>
-				<version>${vaadin.version}</version>
-			</dependency>
-			<dependency>
-				<groupId>com.vaadin</groupId>
-				<artifactId>vaadin-compatibility-client-compiled</artifactId>
 				<version>${vaadin.version}</version>
 			</dependency>
 			<dependency>
@@ -424,7 +436,7 @@
 			<dependency>
 				<groupId>com.vaadin</groupId>
 				<artifactId>vaadin-context-menu</artifactId>
-				<version>2.0.0</version>
+				<version>3.0.0</version>
 			</dependency>
 			<dependency>
 				<groupId>org.vaadin.addons</groupId>
@@ -455,7 +467,7 @@
 			<dependency>
 				<groupId>org.freemarker</groupId>
 				<artifactId>freemarker</artifactId>
-				<version>2.3.23</version>
+				<version>2.3.28</version>
 			</dependency>
 			<dependency>
 				<groupId>org.apache.cxf</groupId>
@@ -480,12 +492,12 @@
 			<dependency>
 				<groupId>com.sun.mail</groupId>
 				<artifactId>javax.mail</artifactId>
-				<version>1.6.0</version>
+				<version>1.6.2</version>
 			</dependency>
 			<dependency>
 				<groupId>net.sf.ehcache</groupId>
 				<artifactId>ehcache</artifactId>
-				<version>2.10.4</version>
+				<version>2.10.6</version>
 			</dependency>
 			<dependency>
 				<groupId>nl.simplecaptcha</groupId>
@@ -495,32 +507,32 @@
 			<dependency>
 				<groupId>com.unboundid</groupId>
 				<artifactId>unboundid-ldapsdk</artifactId>
-				<version>3.2.1</version>
+				<version>4.0.9</version>
 			</dependency>
 			<dependency>
 				<groupId>org.mvel</groupId>
 				<artifactId>mvel2</artifactId>
-				<version>2.3.2.Final</version>
+				<version>2.4.3.Final</version>
 			</dependency>
 			<dependency>
 				<groupId>org.apache.httpcomponents</groupId>
 				<artifactId>httpclient</artifactId>
-				<version>4.5.3</version>
+				<version>4.5.6</version>
 			</dependency>
 			<dependency>
 				<groupId>com.nimbusds</groupId>
 				<artifactId>oauth2-oidc-sdk</artifactId>
-				<version>5.38</version>
+				<version>6.5</version>
 			</dependency>
 			<dependency>
 				<groupId>com.nimbusds</groupId>
 				<artifactId>nimbus-jose-jwt</artifactId>
-				<version>5.1</version>
+				<version>6.5.1</version>
 			</dependency>
 			<dependency>
 				<groupId>com.google.guava</groupId>
 				<artifactId>guava</artifactId>
-				<version>23.2-jre</version>
+				<version>27.0.1-jre</version>
 			</dependency>
 			<dependency>
 				<groupId>org.apache.directory.server</groupId>
@@ -535,12 +547,12 @@
 			<dependency>
 				<groupId>org.quartz-scheduler</groupId>
 				<artifactId>quartz</artifactId>
-				<version>2.2.3</version>
+				<version>2.3.0</version>
 			</dependency>
 			<dependency>
 				<groupId>com.hazelcast</groupId>
 				<artifactId>hazelcast</artifactId>
-				<version>3.8</version>
+				<version>3.9.2</version>
 			</dependency>
 			<dependency>
 				<groupId>org.apache.geronimo.specs</groupId>
@@ -550,17 +562,27 @@
 			<dependency>
 				<groupId>com.esotericsoftware</groupId>
 				<artifactId>kryo</artifactId>
-				<version>4.0.1</version>
+				<version>4.0.2</version>
 			</dependency>
 			<dependency>
 				<groupId>net.java.dev.jna</groupId>
 				<artifactId>jna</artifactId>
-				<version>4.4.0</version>
+				<version>4.5.2</version>
 			</dependency>
 			<dependency>
 				<groupId>org.kohsuke</groupId>
 				<artifactId>libpam4j</artifactId>
-				<version>1.8</version>
+				<version>1.11</version>
+			</dependency>
+			<dependency>
+				<groupId>org.codehaus.groovy</groupId>
+				<artifactId>groovy-all</artifactId>
+				<version>${groovy-all.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>com.nulab-inc</groupId>
+				<artifactId>zxcvbn</artifactId>
+				<version>1.2.5</version>
 			</dependency>
 			
 			<dependency>
@@ -618,13 +640,10 @@
 								<goals>
 									<goal>prepare-agent</goal>
 								</goals>
-							</execution>
-							<execution>
-								<id>post-test</id>
-								<phase>test</phase>
-								<goals>
-									<goal>report</goal>
-								</goals>
+								<configuration>
+					                <append>true</append>
+									<destFile>${sonar.jacoco.reportPaths}</destFile>
+								</configuration>
 							</execution>
 						</executions>
 					</plugin>

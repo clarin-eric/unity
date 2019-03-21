@@ -22,6 +22,7 @@ import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
 import pl.edu.icm.unity.engine.api.notification.NotificationProducer;
 import pl.edu.icm.unity.engine.api.notification.NotificationStatus;
 import pl.edu.icm.unity.engine.api.utils.CacheProvider;
+import pl.edu.icm.unity.engine.msgtemplate.MessageTemplateProcessor;
 import pl.edu.icm.unity.exceptions.EngineException;
 import pl.edu.icm.unity.exceptions.IllegalIdentityValueException;
 import pl.edu.icm.unity.exceptions.WrongArgumentException;
@@ -51,6 +52,7 @@ public class NotificationProducerImpl implements NotificationProducer, InternalF
 	private MessageTemplateDB mtDB;
 	private UnityMessageSource msg;
 	private TxManager txManager;
+	private final MessageTemplateProcessor messageTemplateProcessor = new MessageTemplateProcessor();
 	
 	@Autowired
 	public NotificationProducerImpl(
@@ -94,6 +96,25 @@ public class NotificationProducerImpl implements NotificationProducer, InternalF
 		return channel;
 	}
 	
+	private String getChannelFromTemplate(Map<String, MessageTemplate> allTemplates,
+			String templateId) throws EngineException
+	{
+		MessageTemplate messageTemplate = allTemplates.get(templateId);
+		if (messageTemplate == null)
+			throw new IllegalArgumentException(
+					"There is no message template: " + templateId);
+
+		String channel = messageTemplate.getNotificationChannel();
+
+		if (channel == null | channel.isEmpty())
+		{
+			throw new IllegalArgumentException(
+					"There is no configured notification channel in message template: "
+							+ templateId);
+		}
+		return channel;
+	}
+	
 	private NotificationChannelInstance loadFromDb(String channelName) throws EngineException
 	{
 		NotificationChannel channelDesc = channelDB.get(channelName);
@@ -103,17 +124,16 @@ public class NotificationProducerImpl implements NotificationProducer, InternalF
 
 	@Transactional(autoCommit=false)
 	@Override
-	public Future<NotificationStatus> sendNotification(EntityParam recipient,
-			String channelName, String templateId, Map<String, String> params, String locale, 
-			String preferredAddress)
+	public Future<NotificationStatus> sendNotification(EntityParam recipient, String templateId,
+			Map<String, String> params, String locale, String preferredAddress, boolean onlyToConfirmed)
 			throws EngineException
 	{
 		recipient.validateInitialization();
 
 		Map<String, MessageTemplate> allTemplates = mtDB.getAllAsMap();
-		NotificationChannelInstance channel = loadChannel(channelName);
+		NotificationChannelInstance channel = loadChannel(getChannelFromTemplate(allTemplates, templateId));
 		NotificationFacility facility = facilitiesRegistry.getByName(channel.getFacilityId());
-		String recipientAddress = facility.getAddressForEntity(recipient, preferredAddress);
+		String recipientAddress = facility.getAddressForEntity(recipient, preferredAddress, onlyToConfirmed);
 		txManager.commit();
 		Message templateMsg = getResolvedMessage(allTemplates, templateId, params, locale);
 		return channel.sendNotification(recipientAddress, templateMsg);
@@ -121,8 +141,8 @@ public class NotificationProducerImpl implements NotificationProducer, InternalF
 	
 	@Override
 	@Transactional
-	public void sendNotificationToGroup(String group, String channelName,
-			String templateId, Map<String, String> params, String locale) throws EngineException
+	public void sendNotificationToGroup(String group, String templateId,
+			Map<String, String> params, String locale) throws EngineException
 	{
 		if (templateId == null)
 			return;
@@ -132,7 +152,7 @@ public class NotificationProducerImpl implements NotificationProducer, InternalF
 
 		List<GroupMembership> memberships = dbGroups.getMembers(group);
 
-		NotificationChannelInstance channel = loadChannel(channelName);
+		NotificationChannelInstance channel = loadChannel(getChannelFromTemplate(allTemplates, templateId));
 		NotificationFacility facility = facilitiesRegistry.getByName(channel.getFacilityId());
 
 		for (GroupMembership membership: memberships)
@@ -140,7 +160,7 @@ public class NotificationProducerImpl implements NotificationProducer, InternalF
 			try
 			{
 				String recipientAddress = facility.getAddressForEntity(
-						new EntityParam(membership.getEntityId()), null);
+						new EntityParam(membership.getEntityId()), null, false);
 				channel.sendNotification(recipientAddress, templateMsg);
 			} catch (IllegalIdentityValueException e)
 			{
@@ -152,11 +172,12 @@ public class NotificationProducerImpl implements NotificationProducer, InternalF
 	@Override
 	@Transactional(autoCommit=false)
 	public Future<NotificationStatus> sendNotification(String recipientAddress,
-			String channelName, String templateId, Map<String, String> params, String locale)
+			String templateId, Map<String, String> params, String locale)
 			throws EngineException
 	{
-		NotificationChannelInstance channel = loadChannel(channelName);
+	
 		Map<String, MessageTemplate> allTemplates = mtDB.getAllAsMap();
+		NotificationChannelInstance channel = loadChannel(getChannelFromTemplate(allTemplates, templateId));
 		txManager.commit();
 		Message templateMsg = getResolvedMessage(allTemplates, templateId, params, locale);
 		return channel.sendNotification(recipientAddress, templateMsg);
@@ -171,6 +192,16 @@ public class NotificationProducerImpl implements NotificationProducer, InternalF
 		return facilitiesRegistry.getByName(channel.getFacilityId());
 	}
 	
+	@Override
+	public NotificationFacility getNotificationFacilityForMessageTemplate(String templateId) 
+			throws EngineException
+	{
+		NotificationFacility notificationFacility = getNotificationFacilityForChannel(
+				 mtDB.get(templateId).getNotificationChannel());
+		return notificationFacility;
+	}
+	
+	
 	public Message getResolvedMessage(Map<String, MessageTemplate> allTemplates, 
 			String templateId, Map<String, String> params, String locale) throws EngineException
 	{
@@ -180,6 +211,17 @@ public class NotificationProducerImpl implements NotificationProducer, InternalF
 		Map<String, MessageTemplate> genericTemplates = allTemplates.entrySet().stream()
 			.filter(e -> e.getValue().getConsumer().equals(GenericMessageTemplateDef.NAME))
 			.collect(Collectors.toMap(e -> e.getKey(), e -> e.getValue()));
-		return requested.getMessage(locale, msg.getDefaultLocaleCode(), params, genericTemplates);
+		return messageTemplateProcessor.getMessage(requested, locale, msg.getDefaultLocaleCode(), 
+				params, genericTemplates);
+	}
+
+	@Override
+	@Transactional
+	public String getAddressForEntity(EntityParam recipient, String templateId, boolean onlyConfirmed) throws EngineException
+	{
+		Map<String, MessageTemplate> allTemplates = mtDB.getAllAsMap();
+		NotificationChannelInstance channel = loadChannel(getChannelFromTemplate(allTemplates, templateId));
+		NotificationFacility facility = facilitiesRegistry.getByName(channel.getFacilityId());
+		return facility.getAddressForEntity(recipient, null, onlyConfirmed);
 	}
 }

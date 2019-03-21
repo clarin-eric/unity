@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014 ICM Uniwersytet Warszawski All rights reserved.
+ * Copyright (c) 2017 Bixbit - Krzysztof Benedyczak All rights reserved.
  * See LICENCE.txt file for licensing information.
  */
 
@@ -17,7 +17,7 @@ import pl.edu.icm.unity.engine.api.authn.LoginSession;
 import pl.edu.icm.unity.engine.api.identity.EntityResolver;
 import pl.edu.icm.unity.engine.api.token.SecuredTokensManagement;
 import pl.edu.icm.unity.engine.api.token.TokensManagement;
-import pl.edu.icm.unity.engine.authz.AuthorizationManager;
+import pl.edu.icm.unity.engine.authz.InternalAuthorizationManager;
 import pl.edu.icm.unity.engine.authz.AuthzCapability;
 import pl.edu.icm.unity.exceptions.AuthorizationException;
 import pl.edu.icm.unity.exceptions.EngineException;
@@ -34,11 +34,11 @@ public class SecuredTokensManagementImpl implements SecuredTokensManagement
 {
 
 	private TokensManagement tokenMan;
-	private AuthorizationManager authz;
+	private InternalAuthorizationManager authz;
 	private EntityResolver idResolver;
 
 	@Autowired
-	public SecuredTokensManagementImpl(TokensManagement tokenMan, AuthorizationManager authz,
+	public SecuredTokensManagementImpl(TokensManagement tokenMan, InternalAuthorizationManager authz,
 			EntityResolver idResolver)
 	{
 		super();

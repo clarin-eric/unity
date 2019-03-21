@@ -44,11 +44,12 @@ import pl.edu.icm.unity.stdext.attr.JpegImageAttribute;
 import pl.edu.icm.unity.stdext.attr.JpegImageAttributeSyntax;
 import pl.edu.icm.unity.stdext.attr.StringAttribute;
 import pl.edu.icm.unity.stdext.attr.StringAttributeSyntax;
-import pl.edu.icm.unity.stdext.credential.PasswordToken;
+import pl.edu.icm.unity.stdext.credential.pass.PasswordToken;
 import pl.edu.icm.unity.stdext.identity.UsernameIdentity;
 import pl.edu.icm.unity.store.api.EntityDAO;
 import pl.edu.icm.unity.store.api.tx.TransactionalRunner;
 import pl.edu.icm.unity.types.authn.AuthenticationRealm;
+import pl.edu.icm.unity.types.authn.RememberMePolicy;
 import pl.edu.icm.unity.types.basic.Attribute;
 import pl.edu.icm.unity.types.basic.AttributeExt;
 import pl.edu.icm.unity.types.basic.AttributeStatement;
@@ -128,9 +129,9 @@ public abstract class PerformanceTestBase extends SecuredDBIntegrationTestBase
 	
 	private void setupUserContext(String user, long entityId) throws Exception
 	{
-		InvocationContext virtualAdmin = new InvocationContext(null, getDefaultRealm());
+		InvocationContext virtualAdmin = new InvocationContext(null, getDefaultRealm(), Collections.emptyList());
 		LoginSession ls = sessionMan.getCreateSession(entityId, getDefaultRealm(),
-				user, false, null);
+				user, null, null, null, null);
 		virtualAdmin.setLoginSession(ls);
 		virtualAdmin.setLocale(Locale.ENGLISH);
 		InvocationContext.setCurrent(virtualAdmin);
@@ -139,7 +140,7 @@ public abstract class PerformanceTestBase extends SecuredDBIntegrationTestBase
 	private static AuthenticationRealm getDefaultRealm()
 	{
 		return new AuthenticationRealm("DEFAULT_AUTHN_REALM", 
-				"For tests", 5, 10, -1, 30*60);
+				"For tests", 5, 10, RememberMePolicy.disallow , 1, 30*60);
 	}
 	
 	/**
@@ -427,7 +428,7 @@ public abstract class PerformanceTestBase extends SecuredDBIntegrationTestBase
 			Attribute a = JpegImageAttribute.of(typeName, enInGroup.get(i%NU),
 					Collections.singletonList(im));
 			EntityParam par = new EntityParam(entities.get(i%NU).getId());
-			attrsMan.setAttribute(par, a, true);
+			attrsMan.setAttribute(par, a);
 			op++;
 		}
 
@@ -437,7 +438,7 @@ public abstract class PerformanceTestBase extends SecuredDBIntegrationTestBase
 			Attribute a = StringAttribute.of(typeName, enInGroup.get(i%NU),
 					Collections.singletonList(new String(typeName)));
 			EntityParam par = new EntityParam(entities.get(i%NU).getId());
-			attrsMan.setAttribute(par, a, true);
+			attrsMan.setAttribute(par, a);
 			op++;
 		}
 
@@ -447,7 +448,7 @@ public abstract class PerformanceTestBase extends SecuredDBIntegrationTestBase
 			Attribute a = IntegerAttribute.of(typeName, enInGroup.get(i%NU),
 					Collections.singletonList(new Long(i + 100)));
 			EntityParam par = new EntityParam(entities.get(i%NU).getId());
-			attrsMan.setAttribute(par, a, true);
+			attrsMan.setAttribute(par, a);
 			op++;
 		}
 
@@ -457,7 +458,7 @@ public abstract class PerformanceTestBase extends SecuredDBIntegrationTestBase
 			Attribute a = FloatingPointAttribute.of(typeName, enInGroup.get(i%NU),
 					Collections.singletonList(new Double(i + 100)));
 			EntityParam par = new EntityParam(entities.get(i%NU).getId());
-			attrsMan.setAttribute(par, a, true);
+			attrsMan.setAttribute(par, a);
 			op++;
 		}
 		return op;

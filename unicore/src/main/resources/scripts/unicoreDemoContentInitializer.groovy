@@ -8,7 +8,7 @@
 import java.util.Map;
 
 import pl.edu.icm.unity.stdext.attr.StringAttribute;
-import pl.edu.icm.unity.stdext.credential.PasswordToken;
+import pl.edu.icm.unity.stdext.credential.pass.PasswordToken;
 import pl.edu.icm.unity.stdext.identity.X500Identity;
 import pl.edu.icm.unity.types.basic.Attribute;
 import pl.edu.icm.unity.types.basic.AttributeType;
@@ -21,7 +21,7 @@ import pl.edu.icm.unity.types.basic.IdentityTaV;
 import groovy.transform.Field
 
 
-@Field final String CN_ATTR = "cn"
+@Field final String CN_ATTR = "name"
 
 
 if (!isColdStart)
@@ -54,7 +54,7 @@ try
 void addDemoServer(String dn, String cn)
 {
 	IdentityParam unicoreClient = new IdentityParam(X500Identity.ID, dn);
-	Identity unicoreClientA = entityManagement.addEntity(unicoreClient, "Certificate",
+	Identity unicoreClientA = entityManagement.addEntity(unicoreClient, "sys:all",
 			EntityState.valid, false);
 	log.warn("DEMO UNICORE client with DN {} was created using the demo (insecure, publicly known) certificate identity", dn);
 	EntityParam demoServer = new EntityParam(unicoreClientA.getEntityId());
@@ -62,5 +62,5 @@ void addDemoServer(String dn, String cn)
 	groupsManagement.addMemberFromParent("/unicore/servers", demoServer);
 	
 	Attribute cnA = StringAttribute.of(CN_ATTR, "/", cn);
-	attributesManagement.setAttribute(demoServer, cnA, false);
+	attributesManagement.createAttribute(demoServer, cnA);
 }

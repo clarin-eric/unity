@@ -20,14 +20,20 @@ import pl.edu.icm.unity.engine.api.notification.NotificationProducer;
 import pl.edu.icm.unity.engine.api.notification.NotificationStatus;
 import pl.edu.icm.unity.engine.notifications.EmailFacility;
 import pl.edu.icm.unity.exceptions.IllegalIdentityValueException;
-import pl.edu.icm.unity.stdext.attr.StringAttribute;
+import pl.edu.icm.unity.stdext.attr.VerifiableEmailAttribute;
 import pl.edu.icm.unity.stdext.attr.VerifiableEmailAttributeSyntax;
-import pl.edu.icm.unity.stdext.credential.PasswordResetTemplateDef;
+import pl.edu.icm.unity.stdext.credential.CredentialResetTemplateDefBase;
+import pl.edu.icm.unity.stdext.credential.pass.EmailPasswordResetTemplateDef;
 import pl.edu.icm.unity.stdext.identity.UsernameIdentity;
+import pl.edu.icm.unity.stdext.utils.ContactEmailMetadataProvider;
+import pl.edu.icm.unity.types.I18nMessage;
+import pl.edu.icm.unity.types.I18nString;
 import pl.edu.icm.unity.types.basic.Attribute;
 import pl.edu.icm.unity.types.basic.AttributeType;
 import pl.edu.icm.unity.types.basic.EntityParam;
 import pl.edu.icm.unity.types.basic.IdentityTaV;
+import pl.edu.icm.unity.types.basic.MessageTemplate;
+import pl.edu.icm.unity.types.basic.MessageType;
 import pl.edu.icm.unity.types.basic.NotificationChannel;
 
 /**
@@ -53,28 +59,39 @@ public class TestNotifications extends DBIntegrationTestBase
 				"mail.smtp.timeoutSocket=15000\n" +
 				"mail.smtp.connectiontimeout=15000\n" +
 				"mailx.smtp.trustAll=true";
-		String destinationAddress = "...";
+		String destinationAddress = "test@test.com";
 		
 		notMan.addNotificationChannel(new NotificationChannel("ch1", "", emailCfg, EmailFacility.NAME));
 		EntityParam admin = new EntityParam(new IdentityTaV(UsernameIdentity.ID, "admin"));
 		
-		aTypeMan.addAttributeType(new AttributeType("email", VerifiableEmailAttributeSyntax.ID));
+		AttributeType attributeType = new AttributeType("email", VerifiableEmailAttributeSyntax.ID);
+		Map<String, String> meta = new HashMap<>();
+		meta.put(ContactEmailMetadataProvider.NAME, "");
+		attributeType.setMetadata(meta);
+		attributeType.setMinElements(1);
+		
+		aTypeMan.addAttributeType(attributeType);
+
+		messageTemplateMan.addTemplate(new MessageTemplate(EmailPasswordResetTemplateDef.NAME,
+				"", new I18nMessage(new I18nString("x"), new I18nString("x")), EmailPasswordResetTemplateDef.NAME,
+				MessageType.PLAIN, "ch1"));
 
 		Map<String, String> params = new HashMap<String, String>();
-		params.put(PasswordResetTemplateDef.VAR_CODE, "AAAA");
-		params.put(PasswordResetTemplateDef.VAR_USER, "some user");
+		params.put(CredentialResetTemplateDefBase.VAR_CODE, "AAAA");
+		params.put(CredentialResetTemplateDefBase.VAR_USER, "some user");
 		
 		try
 		{
-			notProducer.sendNotification(admin, "ch1", PasswordResetTemplateDef.NAME, params, null, null);
+			notProducer.sendNotification(admin, EmailPasswordResetTemplateDef.NAME, params, null, null, false);
 			fail("Managed to send email for an entity without email attribute");
 		} catch(IllegalIdentityValueException e){}
 
-		Attribute emailA = StringAttribute.of("email", 
+		Attribute emailA = VerifiableEmailAttribute.of("email", 
 				"/", destinationAddress);
-		attrsMan.setAttribute(admin, emailA, false);
-		Future<NotificationStatus> statusFuture = notProducer.sendNotification(admin, "ch1", 
-				PasswordResetTemplateDef.NAME, params, null, null);
+		attrsMan.createAttribute(admin, emailA);
+		
+		Future<NotificationStatus> statusFuture = notProducer.sendNotification(admin, 
+				EmailPasswordResetTemplateDef.NAME, params, null, null, false);
 		NotificationStatus status = statusFuture.get();
 		if (!status.isSuccessful())
 			status.getProblem().printStackTrace();
@@ -85,9 +102,13 @@ public class TestNotifications extends DBIntegrationTestBase
 	@Test
 	public void testManagement() throws Exception
 	{
+		
+		for (String channel : notMan.getNotificationChannels().keySet())
+			notMan.removeNotificationChannel(channel);
+		
 		String emailCfg = "";
 		String emailCfg2 = "a=b";
-		assertEquals(2, notMan.getNotificationFacilities().size());
+		assertEquals(3, notMan.getNotificationFacilities().size());
 		assertTrue(notMan.getNotificationFacilities().contains(EmailFacility.NAME));
 		assertEquals(0, notMan.getNotificationChannels().size());
 		notMan.addNotificationChannel(new NotificationChannel("ch1", "", emailCfg, EmailFacility.NAME));

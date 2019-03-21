@@ -12,7 +12,7 @@ import pl.edu.icm.unity.stdext.attr.JpegImageAttributeSyntax
 import pl.edu.icm.unity.stdext.attr.StringAttribute
 import pl.edu.icm.unity.stdext.attr.StringAttributeSyntax
 import pl.edu.icm.unity.stdext.attr.VerifiableEmailAttribute
-import pl.edu.icm.unity.stdext.credential.PasswordToken
+import pl.edu.icm.unity.stdext.credential.pass.PasswordToken
 import pl.edu.icm.unity.stdext.identity.UsernameIdentity
 import pl.edu.icm.unity.stdext.identity.X500Identity
 import pl.edu.icm.unity.types.basic.Attribute
@@ -85,18 +85,14 @@ void createExampleGroups()
 
 void createExampleAttributeTypes()
 {
-	AttributeType postalcode = new AttributeType("postalcode", StringAttributeSyntax.ID, msgSrc);
-	postalcode.setMinElements(0);
-	postalcode.setMaxElements(Integer.MAX_VALUE);
-	StringAttributeSyntax pcsyntax = new StringAttributeSyntax();
-	pcsyntax.setRegexp("[0-9][0-9]-[0-9][0-9][0-9]");
-	pcsyntax.setMaxLength(6);
-	postalcode.setValueSyntaxConfiguration(pcsyntax.getSerializedConfiguration());
-	attributeTypeManagement.addAttributeType(postalcode);
 	
 	AttributeType height = new AttributeType("height", FloatingPointAttributeSyntax.ID, msgSrc);
 	height.setMinElements(1);
 	attributeTypeManagement.addAttributeType(height);
+	
+	AttributeType weight = new AttributeType("weight", FloatingPointAttributeSyntax.ID, msgSrc);
+	weight.setMinElements(1);
+	attributeTypeManagement.addAttributeType(weight);
 }
 
 
@@ -113,16 +109,16 @@ void createExampleUser()
 	groupsManagement.addMemberFromParent("/A", entityP);
 
 	Attribute a = EnumAttribute.of("sys:AuthorizationRole", "/", "Regular User");
-	attributesManagement.setAttribute(entityP, a, false);
+	attributesManagement.createAttribute(entityP, a);
 
-	VerifiableEmail emailVal = new VerifiableEmail("some@email.com", new ConfirmationInfo(true));
+	VerifiableEmail emailVal = new VerifiableEmail("some@example.com", new ConfirmationInfo(true));
 	emailVal.getConfirmationInfo().setConfirmationDate(System.currentTimeMillis());
 	emailVal.getConfirmationInfo().setConfirmed(true);
 	Attribute emailA = VerifiableEmailAttribute.of(EMAIL_ATTR, "/", emailVal);
-	attributesManagement.setAttribute(entityP, emailA, false);
+	attributesManagement.createAttribute(entityP, emailA);
 
-	Attribute cnA = StringAttribute.of(NAME_ATTR, "/", "Hiper user");
-	attributesManagement.setAttribute(entityP, cnA, false);
+	Attribute cnA = StringAttribute.of(NAME_ATTR, "/", "Demo user");
+	attributesManagement.createAttribute(entityP, cnA);
 
 	PasswordToken pToken = new PasswordToken("the!test12");
 	entityCredentialManagement.setEntityCredential(entityP, EngineInitialization.DEFAULT_CREDENTIAL,

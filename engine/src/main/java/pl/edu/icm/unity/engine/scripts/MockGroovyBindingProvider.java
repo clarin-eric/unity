@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013 ICM Uniwersytet Warszawski All rights reserved.
+ * Copyright (c) 2017 Bixbit - Krzysztof Benedyczak All rights reserved.
  * See LICENCE.txt file for licensing information.
  */
 package pl.edu.icm.unity.engine.scripts;
@@ -17,7 +17,6 @@ import pl.edu.icm.unity.engine.api.AttributeTypeManagement;
 import pl.edu.icm.unity.engine.api.AttributesManagement;
 import pl.edu.icm.unity.engine.api.AuthenticatorManagement;
 import pl.edu.icm.unity.engine.api.BulkProcessingManagement;
-import pl.edu.icm.unity.engine.api.ConfirmationConfigurationManagement;
 import pl.edu.icm.unity.engine.api.CredentialManagement;
 import pl.edu.icm.unity.engine.api.CredentialRequirementManagement;
 import pl.edu.icm.unity.engine.api.EndpointManagement;
@@ -38,6 +37,7 @@ import pl.edu.icm.unity.engine.api.attributes.AttributeTypeSupport;
 import pl.edu.icm.unity.engine.api.config.UnityServerConfiguration;
 import pl.edu.icm.unity.engine.api.identity.IdentityTypeSupport;
 import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
+import pl.edu.icm.unity.engine.api.utils.GroupDelegationConfigGenerator;
 
 /**
  * Provides a mock Groovy context. The context has the same members as in 
@@ -76,9 +76,6 @@ public class MockGroovyBindingProvider
 				withSettings().verboseLogging());
 		AuthenticatorManagement authenticatorManagement = mock(AuthenticatorManagement.class, 
 				withSettings().verboseLogging());
-		ConfirmationConfigurationManagement confirmationConfigurationManagement = 
-				mock(ConfirmationConfigurationManagement.class, 
-				withSettings().verboseLogging());
 		CredentialManagement credentialManagement = mock(CredentialManagement.class, 
 				withSettings().verboseLogging());
 		CredentialRequirementManagement credentialRequirementManagement = 
@@ -106,7 +103,9 @@ public class MockGroovyBindingProvider
 				withSettings().verboseLogging());
 		TranslationProfileManagement translationProfileManagement = mock(TranslationProfileManagement.class, 
 				withSettings().verboseLogging());
-				
+		GroupDelegationConfigGenerator groupDelegationConfigGenerator = mock(GroupDelegationConfigGenerator.class, 
+				withSettings().verboseLogging());;
+		
 		Binding binding = new Binding();
 		binding.setVariable("config", config);
 		binding.setVariable("attributeClassManagement", attributeClassManagement);
@@ -114,7 +113,6 @@ public class MockGroovyBindingProvider
 		binding.setVariable("attributeTypeManagement", attributeTypeManagement);
 		binding.setVariable("authenticatorManagement", authenticatorManagement);
 		binding.setVariable("bulkProcessingManagement", bulkProcessingManagement);
-		binding.setVariable("confirmationConfigurationManagement", confirmationConfigurationManagement);
 		binding.setVariable("credentialManagement", credentialManagement);
 		binding.setVariable("credentialRequirementManagement", credentialRequirementManagement);
 		binding.setVariable("endpointManagement", endpointManagement);
@@ -134,6 +132,7 @@ public class MockGroovyBindingProvider
 		binding.setVariable("msgSrc", unityMessageSource);
 		binding.setVariable("attributeTypeSupport", attributeTypeSupport);
 		binding.setVariable("identityTypeSupport", identityTypeSupport);
+		binding.setVariable("groupDelegationConfigGenerator", groupDelegationConfigGenerator);
 		binding.setVariable("isColdStart", true);
 		binding.setVariable("event", event.getTrigger());
 		binding.setVariable("context", event.getContents());

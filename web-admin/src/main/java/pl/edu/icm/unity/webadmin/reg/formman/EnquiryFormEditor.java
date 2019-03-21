@@ -10,12 +10,17 @@ import org.apache.logging.log4j.Logger;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import com.google.common.collect.Lists;
+import com.vaadin.data.Binder;
 import com.vaadin.ui.Alignment;
-import com.vaadin.v7.ui.CheckBox;
+import com.vaadin.ui.CheckBox;
+import com.vaadin.ui.Component;
 import com.vaadin.ui.FormLayout;
+import com.vaadin.ui.Label;
 import com.vaadin.ui.TabSheet;
-import com.vaadin.v7.ui.VerticalLayout;
+import com.vaadin.ui.VerticalLayout;
 
+import io.imunity.webadmin.tprofile.ActionParameterComponentProvider;
+import io.imunity.webadmin.tprofile.RegistrationTranslationProfileEditor;
 import pl.edu.icm.unity.base.utils.Log;
 import pl.edu.icm.unity.engine.api.AttributeTypeManagement;
 import pl.edu.icm.unity.engine.api.CredentialManagement;
@@ -24,24 +29,22 @@ import pl.edu.icm.unity.engine.api.MessageTemplateManagement;
 import pl.edu.icm.unity.engine.api.NotificationsManagement;
 import pl.edu.icm.unity.engine.api.identity.IdentityTypeSupport;
 import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
+import pl.edu.icm.unity.engine.api.translation.form.RegistrationActionsRegistry;
 import pl.edu.icm.unity.engine.api.utils.PrototypeComponent;
-import pl.edu.icm.unity.engine.translation.form.RegistrationActionsRegistry;
 import pl.edu.icm.unity.exceptions.EngineException;
-import pl.edu.icm.unity.types.registration.BaseForm;
 import pl.edu.icm.unity.types.registration.EnquiryForm;
 import pl.edu.icm.unity.types.registration.EnquiryForm.EnquiryType;
 import pl.edu.icm.unity.types.registration.EnquiryFormBuilder;
 import pl.edu.icm.unity.types.registration.EnquiryFormNotifications;
+import pl.edu.icm.unity.types.registration.layout.FormLayoutSettings;
 import pl.edu.icm.unity.types.translation.ProfileType;
 import pl.edu.icm.unity.types.translation.TranslationProfile;
-import pl.edu.icm.unity.webadmin.reg.formman.layout.FormLayoutEditor;
-import pl.edu.icm.unity.webadmin.reg.formman.layout.FormLayoutEditor.FormProvider;
-import pl.edu.icm.unity.webadmin.tprofile.ActionParameterComponentProvider;
-import pl.edu.icm.unity.webadmin.tprofile.RegistrationTranslationProfileEditor;
 import pl.edu.icm.unity.webui.common.CompactFormLayout;
 import pl.edu.icm.unity.webui.common.EnumComboBox;
 import pl.edu.icm.unity.webui.common.FormValidationException;
 import pl.edu.icm.unity.webui.common.GroupsSelectionList;
+import pl.edu.icm.unity.webui.common.Styles;
+import pl.edu.icm.unity.webui.common.mvel.MVELExpressionField;
 
 /**
  * Allows to edit an {@link EnquiryForm}. Can be configured to edit an existing form (name is fixed)
@@ -53,22 +56,29 @@ import pl.edu.icm.unity.webui.common.GroupsSelectionList;
 public class EnquiryFormEditor extends BaseFormEditor
 {
 	private static final Logger log = Log.getLogger(Log.U_SERVER_WEB, EnquiryFormEditor.class);
+	
 	private UnityMessageSource msg;
 	private GroupsManagement groupsMan;
 	private NotificationsManagement notificationsMan;
 	private MessageTemplateManagement msgTempMan;
 	
 	private TabSheet tabs;
-	private CheckBox ignoreRequests;
+	private CheckBox ignoreRequestsAndInvitation;
 	
 	private EnumComboBox<EnquiryType> enquiryType;
 	private GroupsSelectionList targetGroups;
+	private MVELExpressionField targetCondition;
 	private EnquiryFormNotificationsEditor notificationsEditor;
+	private RegistrationFormLayoutSettingsEditor layoutSettingsEditor;
+	private CheckBox byInvitationOnly;
 	
 	private RegistrationActionsRegistry actionsRegistry;
 	private ActionParameterComponentProvider actionComponentProvider;
 	private RegistrationTranslationProfileEditor profileEditor;
-	private FormLayoutEditor layoutEditor;
+	private EnquiryFormLayoutEditorTab layoutEditor;
+	//binder is only for targetCondition validation
+	private Binder<EnquiryForm> binder;
+	
 	
 	@Autowired
 	public EnquiryFormEditor(UnityMessageSource msg, GroupsManagement groupsMan,
@@ -93,6 +103,7 @@ public class EnquiryFormEditor extends BaseFormEditor
 			throws EngineException
 	{
 		this.copyMode = copyMode;
+		this.binder = new Binder<>(EnquiryForm.class);
 		initUI();
 		return this;
 	}
@@ -105,12 +116,15 @@ public class EnquiryFormEditor extends BaseFormEditor
 		tabs = new TabSheet();
 		initMainTab();
 		initCollectedTab();
+		initDisplayedTab();
 		initLayoutTab();
+		initWrapUpTab();
 		initAssignedTab();
-		ignoreRequests = new CheckBox(msg.getMessage("RegistrationFormEditDialog.ignoreRequests"));
-		addComponent(ignoreRequests);
-		setComponentAlignment(ignoreRequests, Alignment.TOP_RIGHT);
-		ignoreRequests.setVisible(false);
+		ignoreRequestsAndInvitation = new CheckBox(
+				msg.getMessage("RegistrationFormEditDialog.ignoreRequestsAndInvitations"));
+		addComponent(ignoreRequestsAndInvitation);
+		setComponentAlignment(ignoreRequestsAndInvitation, Alignment.TOP_RIGHT);
+
 		addComponent(tabs);
 		setComponentAlignment(tabs, Alignment.TOP_LEFT);
 		setExpandRatio(tabs, 1);
@@ -123,8 +137,28 @@ public class EnquiryFormEditor extends BaseFormEditor
 		builder.withTranslationProfile(profileEditor.getProfile());
 		EnquiryFormNotifications notCfg = notificationsEditor.getValue();
 		builder.withNotificationsConfiguration(notCfg);
+		FormLayoutSettings settings = layoutSettingsEditor.getSettings();
+		builder.withFormLayoutSettings(settings);
+		
 		builder.withLayout(layoutEditor.getLayout());
-		return builder.build();
+		builder.withByInvitationOnly(byInvitationOnly.getValue());
+		
+		EnquiryForm form = builder.build();
+		try
+		{
+			form.validateLayout();
+		} catch (Exception e)
+		{
+			throw new FormValidationException(e);
+		}
+		
+		if (!binder.isValid())
+		{
+			throw new FormValidationException();
+		}
+		
+		
+		return form;
 	}
 	
 	private EnquiryFormBuilder getFormBuilderBasic() throws FormValidationException
@@ -132,8 +166,9 @@ public class EnquiryFormEditor extends BaseFormEditor
 		EnquiryFormBuilder builder = new EnquiryFormBuilder();
 		super.buildCommon(builder);
 		
-		builder.withType(enquiryType.getSelectedValue());
+		builder.withType(enquiryType.getValue());
 		builder.withTargetGroups(targetGroups.getSelectedGroups().toArray(new String[0]));
+		builder.withTargetCondition(targetCondition.getValue());
 		return builder;
 	}
 	
@@ -141,17 +176,22 @@ public class EnquiryFormEditor extends BaseFormEditor
 	{
 		super.setValue(toEdit);
 		notificationsEditor.setValue(toEdit.getNotificationsConfiguration());
-		enquiryType.setEnumValue(toEdit.getType());
+		enquiryType.setValue(toEdit.getType());
 		targetGroups.setSelectedGroups(Lists.newArrayList(toEdit.getTargetGroups()));
+		binder.setBean(toEdit);
 		
 		TranslationProfile profile = new TranslationProfile(
 				toEdit.getTranslationProfile().getName(), "",
 				ProfileType.REGISTRATION,
 				toEdit.getTranslationProfile().getRules());
 		profileEditor.setValue(profile);
-		layoutEditor.setInitialForm(toEdit);
+		layoutSettingsEditor.setSettings(toEdit.getLayoutSettings());
+		layoutEditor.setLayout(toEdit.getLayout());
 		if (!copyMode)
-			ignoreRequests.setVisible(true);
+		{
+			ignoreRequestsAndInvitation.setVisible(true);
+		}
+		byInvitationOnly.setValue(toEdit.isByInvitationOnly());	
 	}
 	
 	private void initMainTab() throws EngineException
@@ -159,6 +199,7 @@ public class EnquiryFormEditor extends BaseFormEditor
 		FormLayout main = new CompactFormLayout();
 		VerticalLayout wrapper = new VerticalLayout(main);
 		wrapper.setMargin(true);
+		wrapper.setSpacing(false);
 		tabs.addTab(wrapper, msg.getMessage("RegistrationFormViewer.mainTab"));
 		
 		initNameAndDescFields(msg.getMessage("EnquiryFormEditor.defaultName"));
@@ -166,16 +207,37 @@ public class EnquiryFormEditor extends BaseFormEditor
 
 		notificationsEditor = new EnquiryFormNotificationsEditor(msg, groupsMan, 
 				notificationsMan, msgTempMan);
-		enquiryType = new EnumComboBox<EnquiryForm.EnquiryType>(msg.getMessage("EnquiryFormViewer.type"), 
+		enquiryType = new EnumComboBox<>(msg.getMessage("EnquiryFormViewer.type"), 
 				msg, "EnquiryType.", EnquiryType.class, 
 				EnquiryType.REQUESTED_OPTIONAL);
+		enquiryType.setWidth(20, Unit.EM);
+		enquiryType.addValueChangeListener(e -> {
+
+			boolean enable = !e.getValue().equals(EnquiryType.STICKY);
+			setCredentialsTabVisible(enable);
+			setIdentitiesTabVisible(enable);
+			if (!enable)
+			{
+				resetCredentialTab();
+				resetIdentitiesTab();
+			}
+
+		});
+		
 		
 		targetGroups = new GroupsSelectionList(msg.getMessage("EnquiryFormViewer.targetGroups"), 
 				notificationsEditor.getGroups());
 		targetGroups.setInput("/", true);
-		targetGroups.setRequired(true);
+		targetGroups.setRequiredIndicatorVisible(true);
 		
-		main.addComponents(enquiryType, targetGroups);
+		targetCondition = new MVELExpressionField(msg, msg.getMessage("EnquiryFormEditor.targetCondition"),
+				msg.getMessage("EnquiryFormEditor.targetConditionDesc"));
+		
+		targetCondition.configureBinding(binder, "targetCondition", false);
+		
+		byInvitationOnly = new CheckBox(msg.getMessage("RegistrationFormEditor.byInvitationOnly"));
+		
+		main.addComponents(enquiryType, byInvitationOnly, targetGroups, targetCondition);
 		
 		notificationsEditor.addToLayout(main);
 	}
@@ -183,30 +245,57 @@ public class EnquiryFormEditor extends BaseFormEditor
 	private void initCollectedTab()
 	{
 		FormLayout main = new CompactFormLayout();
-		VerticalLayout wrapper = new VerticalLayout(main);
-		wrapper.setMargin(true);
+		collectComments = new CheckBox(msg.getMessage("RegistrationFormEditor.collectComments"));
+		main.addComponents(collectComments);
+		
+		TabSheet tabOfLists = createCollectedParamsTabs(notificationsEditor.getGroups(), true);
+		
+		VerticalLayout wrapper = new VerticalLayout(main, tabOfLists);
 		tabs.addTab(wrapper, msg.getMessage("RegistrationFormViewer.collectedTab"));
-		
+	}
+	
+	private void initDisplayedTab()
+	{
+		FormLayout main = new CompactFormLayout();
 		initCommonDisplayedFields();
+		main.addComponents(displayedName, formInformation, pageTitle);
 		
-		TabSheet tabOfLists = createCollectedParamsTabs(notificationsEditor.getGroups(), true, 0);
-		main.addComponents(displayedName, formInformation, collectComments, tabOfLists);
+		layoutSettingsEditor = new RegistrationFormLayoutSettingsEditor(msg);
+		
+		VerticalLayout wrapper = new VerticalLayout(main, layoutSettingsEditor);
+		wrapper.setMargin(true);
+		wrapper.setSpacing(false);
+		tabs.addTab(wrapper, msg.getMessage("RegistrationFormViewer.displayTab"));
 	}
 	
 	private void initLayoutTab()
 	{
 		VerticalLayout wrapper = new VerticalLayout();
-		layoutEditor = new FormLayoutEditor(msg, new FormProviderImpl());
+		layoutEditor = new EnquiryFormLayoutEditorTab(msg, this::getEnquiryForm);
 		wrapper.setMargin(true);
+		wrapper.setSpacing(false);
 		wrapper.addComponent(layoutEditor);
 		tabs.addSelectedTabChangeListener(event -> layoutEditor.updateFromForm());
 		tabs.addTab(wrapper, msg.getMessage("RegistrationFormViewer.layoutTab"));
+	}
+	
+	private void initWrapUpTab() throws EngineException
+	{
+		VerticalLayout main = new VerticalLayout();
+		Label hint = new Label(msg.getMessage("RegistrationFormEditor.onlyForStandaloneEnquiry"));
+		hint.addStyleName(Styles.emphasized.toString());
+		hint.setWidth(100, Unit.PERCENTAGE);
+		main.addComponent(hint);
+		Component wrapUpComponent = getWrapUpComponent(t -> t.isSuitableForEnquiry());
+		main.addComponent(wrapUpComponent);
+		tabs.addTab(main, msg.getMessage("RegistrationFormEditor.wrapUpTab"));
 	}
 	
 	private void initAssignedTab() throws EngineException
 	{
 		VerticalLayout wrapper = new VerticalLayout();
 		wrapper.setMargin(true);
+		wrapper.setSpacing(false);
 		tabs.addTab(wrapper, msg.getMessage("RegistrationFormViewer.assignedTab"));
 		
 		profileEditor = new RegistrationTranslationProfileEditor(msg, actionsRegistry, actionComponentProvider);
@@ -214,25 +303,21 @@ public class EnquiryFormEditor extends BaseFormEditor
 				new ArrayList<>()));
 		wrapper.addComponent(profileEditor);
 	}
-
-	public boolean isIgnoreRequests()
-	{
-		return ignoreRequests.getValue();
-	}
 	
-	private class FormProviderImpl implements FormProvider
+	private EnquiryForm getEnquiryForm()
 	{
-		@Override
-		public BaseForm getForm()
+		try
 		{
-			try
-			{
-				return getFormBuilderBasic().build();
-			} catch (Exception e)
-			{
-				log.debug("Ignoring layout update, form is invalid", e);
-				return null;
-			}
+			return getFormBuilderBasic().build();
+		} catch (Exception e)
+		{
+			log.debug("Ignoring layout update, form is invalid", e);
+			return null;
 		}
+	}
+
+	public boolean isIgnoreRequestsAndInvitations()
+	{
+		return ignoreRequestsAndInvitation.getValue();
 	}
 }

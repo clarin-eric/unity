@@ -5,9 +5,7 @@
 package pl.edu.icm.unity.saml.idp.ws;
 
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Map;
-import java.util.Set;
 
 import javax.servlet.Servlet;
 
@@ -15,6 +13,7 @@ import org.eclipse.jetty.servlet.ServletContextHandler;
 import org.eclipse.jetty.servlet.ServletHolder;
 import org.springframework.beans.factory.ObjectFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
 
@@ -77,7 +76,7 @@ public class SamlSoapEndpoint extends CXFEndpoint
 	@Autowired
 	public SamlSoapEndpoint(UnityMessageSource msg, NetworkServer server,
 			IdPEngine idpEngine,
-			PreferencesManagement preferencesMan, PKIManagement pkiManagement,
+			PreferencesManagement preferencesMan, @Qualifier("insecure") PKIManagement pkiManagement,
 			ExecutorsService executorsService, SessionManagement sessionMan,
 			SAMLLogoutProcessorFactory logoutProcessorFactory, 
 			AuthenticationProcessor authnProcessor,
@@ -198,13 +197,11 @@ public class SamlSoapEndpoint extends CXFEndpoint
 		
 		private static EndpointTypeDescription initDescription()
 		{
-			Set<String> supportedAuthn = new HashSet<>();
-			supportedAuthn.add(WebServiceAuthentication.NAME);
 			Map<String,String> paths = new HashMap<>();
 			paths.put(SERVLET_PATH, "SAML 2 identity provider web endpoint");
 			paths.put(METADATA_SERVLET_PATH, "Metadata of the SAML 2 identity provider web endpoint");
 			return new EndpointTypeDescription(NAME, 
-					"SAML 2 identity provider web endpoint", supportedAuthn, paths);
+					"SAML 2 identity provider web endpoint", WebServiceAuthentication.NAME, paths);
 		}
 
 		@Override

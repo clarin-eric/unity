@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014 ICM Uniwersytet Warszawski All rights reserved.
+ * Copyright (c) 2017 Bixbit - Krzysztof Benedyczak All rights reserved.
  * See LICENCE.txt file for licensing information.
  */
 package pl.edu.icm.unity.stdext.attr;
@@ -103,7 +103,13 @@ public class DateTimeAttributeSyntax implements AttributeValueSyntax<LocalDateTi
 	}
 
 	@Override
-	public boolean isVerifiable()
+	public boolean isEmailVerifiable()
+	{
+		return false;
+	}
+
+	@Override
+	public boolean isUserVerifiable()
 	{
 		return false;
 	}

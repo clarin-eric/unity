@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013 ICM Uniwersytet Warszawski All rights reserved.
+ * Copyright (c) 2017 Bixbit - Krzysztof Benedyczak All rights reserved.
  * See LICENCE.txt file for licensing information.
  */
 package pl.edu.icm.unity.engine;
@@ -20,7 +20,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import pl.edu.icm.unity.base.token.Token;
 import pl.edu.icm.unity.engine.api.token.SecuredTokensManagement;
 import pl.edu.icm.unity.engine.api.token.TokensManagement;
-import pl.edu.icm.unity.engine.authz.AuthorizationManagerImpl;
+import pl.edu.icm.unity.engine.authz.InternalAuthorizationManagerImpl;
 import pl.edu.icm.unity.engine.authz.RoleAttributeTypeProvider;
 import pl.edu.icm.unity.engine.server.EngineInitialization;
 import pl.edu.icm.unity.exceptions.AuthorizationException;
@@ -55,14 +55,12 @@ public class TestSecuredTokens extends DBIntegrationTestBase
 		Identity id2 = idsMan.addEntity(toAdd,
 				EngineInitialization.DEFAULT_CREDENTIAL_REQUIREMENT,
 				EntityState.valid, false);
-		attrsMan.setAttribute(new EntityParam(id),
+		attrsMan.createAttribute(new EntityParam(id),
 				EnumAttribute.of(RoleAttributeTypeProvider.AUTHORIZATION_ROLE, "/",
-						AuthorizationManagerImpl.USER_ROLE),
-				false);
-		attrsMan.setAttribute(new EntityParam(id2),
+						InternalAuthorizationManagerImpl.USER_ROLE));
+		attrsMan.createAttribute(new EntityParam(id2),
 				EnumAttribute.of(RoleAttributeTypeProvider.AUTHORIZATION_ROLE, "/",
-						AuthorizationManagerImpl.USER_ROLE),
-				false);
+						InternalAuthorizationManagerImpl.USER_ROLE));
 
 	}
 
@@ -95,7 +93,7 @@ public class TestSecuredTokens extends DBIntegrationTestBase
 		addRegularUsers();
 		addTokens();
 
-		setupUserContext("u1", false);
+		setupUserContext("u1", null);
 		Collection<Token> u1Tokens = securedTokensMan.getAllTokens("t");
 
 		assertThat(u1Tokens.size(), is(2));
@@ -108,7 +106,7 @@ public class TestSecuredTokens extends DBIntegrationTestBase
 		addTokens();
 		EntityParam ep1 = new EntityParam(new IdentityParam(UsernameIdentity.ID, "u1"));
 
-		setupUserContext("u2", false);
+		setupUserContext("u2", null);
 		catchException(securedTokensMan).getOwnedTokens("t", ep1);
 
 		assertThat(caughtException(), isA(AuthorizationException.class));
@@ -121,7 +119,7 @@ public class TestSecuredTokens extends DBIntegrationTestBase
 		addTokens();
 		EntityParam ep1 = new EntityParam(new IdentityParam(UsernameIdentity.ID, "u1"));
 
-		setupUserContext("u1", false);
+		setupUserContext("u1", null);
 		Collection<Token> u1Tokens = securedTokensMan.getOwnedTokens("t", ep1);
 
 		assertThat(u1Tokens.size(), is(2));
@@ -133,7 +131,7 @@ public class TestSecuredTokens extends DBIntegrationTestBase
 		addRegularUsers();
 		addTokens();
 
-		setupUserContext("u1", false);
+		setupUserContext("u1", null);
 		Collection<Token> u1Tokens = securedTokensMan.getAllTokens(null);
 
 		assertThat(u1Tokens.stream().filter(t -> t.getType().equals("t"))
@@ -150,7 +148,7 @@ public class TestSecuredTokens extends DBIntegrationTestBase
 		addTokens();
 		EntityParam ep1 = new EntityParam(new IdentityParam(UsernameIdentity.ID, "u1"));
 
-		setupUserContext("u2", false);
+		setupUserContext("u2", null);
 		catchException(securedTokensMan).getOwnedTokens(null, ep1);
 
 		assertThat(caughtException(), isA(AuthorizationException.class));
@@ -165,7 +163,7 @@ public class TestSecuredTokens extends DBIntegrationTestBase
 		Date exp = new Date(System.currentTimeMillis() + 500000);
 		tokensMan.addToken("t", "1234", ep1, c, new Date(), exp);
 
-		setupUserContext("u1", false);
+		setupUserContext("u1", null);
 		securedTokensMan.removeToken("t", "1234");
 
 		setupAdmin();
@@ -182,7 +180,7 @@ public class TestSecuredTokens extends DBIntegrationTestBase
 		Date exp = new Date(System.currentTimeMillis() + 500000);
 		tokensMan.addToken("t", "1234", ep1, c, new Date(), exp);
 
-		setupUserContext("u2", false);
+		setupUserContext("u2", null);
 
 		catchException(securedTokensMan).removeToken("t", "1234");
 		assertThat(caughtException(), isA(AuthorizationException.class));

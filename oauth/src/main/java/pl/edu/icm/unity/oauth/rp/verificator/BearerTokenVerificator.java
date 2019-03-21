@@ -10,6 +10,7 @@ import java.io.StringWriter;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Properties;
 
 import org.apache.logging.log4j.Logger;
@@ -33,10 +34,10 @@ import pl.edu.icm.unity.engine.api.authn.remote.RemoteIdentity;
 import pl.edu.icm.unity.engine.api.authn.remote.RemotelyAuthenticatedInput;
 import pl.edu.icm.unity.engine.api.authn.remote.SandboxAuthnResultCallback;
 import pl.edu.icm.unity.engine.api.token.TokensManagement;
-import pl.edu.icm.unity.engine.api.utils.CacheProvider;
 import pl.edu.icm.unity.engine.api.utils.PrototypeComponent;
 import pl.edu.icm.unity.exceptions.EngineException;
 import pl.edu.icm.unity.exceptions.InternalException;
+import pl.edu.icm.unity.oauth.client.AttributeFetchResult;
 import pl.edu.icm.unity.oauth.client.UserProfileFetcher;
 import pl.edu.icm.unity.oauth.client.profile.OpenIdProfileFetcher;
 import pl.edu.icm.unity.oauth.client.profile.PlainProfileFetcher;
@@ -63,17 +64,15 @@ public class BearerTokenVerificator extends AbstractRemoteVerificator implements
 	private PKIManagement pkiMan;
 	private TokensManagement tokensMan;
 	private String translationProfile;
-	private CacheProvider cacheProvider;
 	private ResultsCache cache;
 	
 	@Autowired
 	public BearerTokenVerificator(PKIManagement pkiMan, TokensManagement tokensMan, 
-			CacheProvider cacheProvider, RemoteAuthnResultProcessor processor)
+			RemoteAuthnResultProcessor processor)
 	{
 		super(NAME, DESC, AccessTokenExchange.ID, processor);
 		this.pkiMan = pkiMan;
 		this.tokensMan = tokensMan;
-		this.cacheProvider = cacheProvider;
 	}
 
 	@Override
@@ -103,7 +102,7 @@ public class BearerTokenVerificator extends AbstractRemoteVerificator implements
 			int ttl = -1;
 			if (verificatorProperties.isSet(OAuthRPProperties.CACHE_TIME))
 				ttl = verificatorProperties.getIntValue(OAuthRPProperties.CACHE_TIME);
-			cache = new ResultsCache(cacheProvider.getManager(), ttl);
+			cache = new ResultsCache(ttl);
 		} catch(ConfigurationException e)
 		{
 			throw new InternalException("Invalid configuration of the OAuth RP verificator", e);
@@ -165,7 +164,7 @@ public class BearerTokenVerificator extends AbstractRemoteVerificator implements
 				return new AuthenticationResult(Status.deny, null, null);
 			}
 			
-			Map<String, String> attrs;
+			AttributeFetchResult attrs;
 			attrs = getUserProfileInformation(token);
 			cache.cache(token.getValue(), status, attrs);
 			RemotelyAuthenticatedInput input = assembleBaseResult(status, attrs, getName());
@@ -195,41 +194,43 @@ public class BearerTokenVerificator extends AbstractRemoteVerificator implements
 		return true;
 	}
 	
-	private Map<String, String> getUserProfileInformation(BearerAccessToken accessToken) throws AuthenticationException
+	private AttributeFetchResult getUserProfileInformation(BearerAccessToken accessToken) throws AuthenticationException
 	{
-		boolean openIdMode = verificatorProperties.getBooleanValue(OAuthRPProperties.OPENID_MODE);
+		boolean openIdMode = verificatorProperties.isSetOpenIdMode();
 		String profileEndpoint = verificatorProperties.getValue(OAuthRPProperties.PROFILE_ENDPOINT);
-		Map<String, String> attrs = new HashMap<>();
+		AttributeFetchResult ret = new AttributeFetchResult();
 		if (profileEndpoint == null)
 		{
 			log.debug("The profile endpoint is not defined, skipping the profile fetching");
-			return attrs;
+			return ret;
 		}
 		UserProfileFetcher profileFetcher = openIdMode ? new OpenIdProfileFetcher() : 
 			new PlainProfileFetcher();
 		
 		try
 		{
-			attrs.putAll(profileFetcher.fetchProfile(accessToken, profileEndpoint, verificatorProperties, 
-					attrs));
+			ret = profileFetcher.fetchProfile(accessToken, profileEndpoint, verificatorProperties, 
+					new HashMap<>());
 		} catch (Exception e)
 		{
 			throw new AuthenticationException("Can not fetch user's profile information", e);
 		}
-		return attrs;
+		return ret;
 	}
 	
 	private RemotelyAuthenticatedInput assembleBaseResult(TokenStatus tokenStatus, 
-			Map<String, String> attrs, String idpName)
+			AttributeFetchResult attrs, String idpName)
 	{
 		RemotelyAuthenticatedInput ret = new RemotelyAuthenticatedInput(idpName);
-		for (Map.Entry<String, String> a: attrs.entrySet())
+		
+		Map<String, List<String>> attributes = attrs.getAttributes();
+		for (Entry<String, List<String>> a: attributes.entrySet())
 		{
-			ret.addAttribute(new RemoteAttribute(a.getKey(), a.getValue()));
+			ret.addAttribute(new RemoteAttribute(a.getKey(), a.getValue().toArray()));
 		}
 		
-		if (attrs.containsKey("sub"))
-			ret.addIdentity(new RemoteIdentity(attrs.get("sub"), IdentifierIdentity.ID));
+		if (attributes.containsKey("sub"))
+			ret.addIdentity(new RemoteIdentity(attributes.get("sub").get(0), IdentifierIdentity.ID));
 		if (tokenStatus.getSubject() != null)
 		{
 			ret.addIdentity(new RemoteIdentity(tokenStatus.getSubject(), IdentifierIdentity.ID));
@@ -237,14 +238,21 @@ public class BearerTokenVerificator extends AbstractRemoteVerificator implements
 		if (tokenStatus.getScope() != null)
 			ret.addAttribute(new RemoteAttribute("scope", 
 					tokenStatus.getScope().toStringList().toArray()));
-		if (attrs.containsKey("sub") && tokenStatus.getSubject() != null && 
-				!tokenStatus.getSubject().equals(attrs.get("sub")))
+		if (attributes.containsKey("sub") && tokenStatus.getSubject() != null && 
+				!tokenStatus.getSubject().equals(attributes.get("sub").get(0)))
 			log.warn("Received subject from the profile endpoint differs from the subject "
 					+ "established during access token verification. "
 					+ "Will use subject from verification: " + tokenStatus.getSubject() + 
-					" ignored: " + attrs.get("sub"));
+					" ignored: " + attributes.get("sub").get(0));
 			
+		ret.setRawAttributes(attrs.getRawAttributes());
 		return ret;
+	}
+	
+	@Override
+	public VerificatorType getType()
+	{
+		return VerificatorType.Remote;
 	}
 	
 	@Component

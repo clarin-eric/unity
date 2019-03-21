@@ -6,6 +6,7 @@ package pl.edu.icm.unity.saml.idp.ws;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 
 import org.apache.cxf.interceptor.Fault;
 import org.apache.logging.log4j.Logger;
@@ -89,7 +90,8 @@ public class SAMLAuthnImpl implements SAMLAuthnInterface
 			IdentityParam selectedIdentity = getIdentity(userInfo, samlProcessor, spPreferences);
 			log.debug("Authentication of " + selectedIdentity);
 			Collection<Attribute> attributes = samlProcessor.getAttributes(userInfo, spPreferences);
-			respDoc = samlProcessor.processAuthnRequest(selectedIdentity, attributes);
+			respDoc = samlProcessor.processAuthnRequest(selectedIdentity, attributes, 
+					context.getResponseDestination());
 		} catch (Exception e)
 		{
 			log.debug("Throwing SAML fault, caused by processing exception", e);
@@ -105,13 +107,13 @@ public class SAMLAuthnImpl implements SAMLAuthnInterface
 			throws EngineException
 	{
 		String profile = samlProperties.getValue(CommonIdPProperties.TRANSLATION_PROFILE);
-		boolean skipImport = samlProperties.getBooleanValue(CommonIdPProperties.SKIP_USERIMPORT);
 		LoginSession ae = InvocationContext.getCurrent().getLoginSession();
-		return idpEngine.obtainUserInformation(new EntityParam(ae.getEntityId()), 
+		return idpEngine.obtainUserInformationWithEnrichingImport(new EntityParam(ae.getEntityId()), 
 				processor.getChosenGroup(), profile, 
-				processor.getIdentityTarget(), "SAML2", SAMLConstants.BINDING_SOAP,
+				processor.getIdentityTarget(), Optional.empty(),
+				"SAML2", SAMLConstants.BINDING_SOAP,
 				processor.isIdentityCreationAllowed(),
-				!skipImport);
+				samlProperties);
 	}
 
 	

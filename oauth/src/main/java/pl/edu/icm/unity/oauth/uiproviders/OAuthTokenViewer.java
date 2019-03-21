@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013 ICM Uniwersytet Warszawski All rights reserved.
+ * Copyright (c) 2017 Bixbit - Krzysztof Benedyczak All rights reserved.
  * See LICENCE.txt file for licensing information.
  */
 package pl.edu.icm.unity.oauth.uiproviders;
@@ -13,7 +13,7 @@ import com.nimbusds.openid.connect.sdk.claims.UserInfo;
 import com.vaadin.ui.FormLayout;
 import com.vaadin.ui.Label;
 import com.vaadin.ui.TextArea;
-import com.vaadin.v7.ui.VerticalLayout;
+import com.vaadin.ui.VerticalLayout;
 
 import pl.edu.icm.unity.Constants;
 import pl.edu.icm.unity.base.token.Token;
@@ -78,6 +78,8 @@ public class OAuthTokenViewer extends VerticalLayout
 		main.setSizeFull();
 		addComponent(main);
 		setSizeFull();
+		setMargin(false);
+		setSpacing(false);
 	}
 
 	private void setIdToken(String value)

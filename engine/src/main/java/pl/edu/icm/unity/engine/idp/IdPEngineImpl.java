@@ -5,15 +5,16 @@
 package pl.edu.icm.unity.engine.idp;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
 
 import pl.edu.icm.unity.engine.api.AttributesManagement;
 import pl.edu.icm.unity.engine.api.EntityManagement;
 import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
+import pl.edu.icm.unity.engine.api.translation.out.OutputTranslationActionsRegistry;
 import pl.edu.icm.unity.engine.api.userimport.UserImportSerivce;
 import pl.edu.icm.unity.engine.attribute.AttributeValueConverter;
-import pl.edu.icm.unity.engine.translation.out.OutputTranslationActionsRegistry;
 import pl.edu.icm.unity.engine.translation.out.OutputTranslationEngine;
 import pl.edu.icm.unity.engine.translation.out.OutputTranslationProfileRepository;
 
@@ -30,6 +31,7 @@ public class IdPEngineImpl extends IdPEngineImplBase
 {
 	@Autowired
 	public IdPEngineImpl(AttributesManagement attributesMan, 
+			@Qualifier("insecure") AttributesManagement insecureAttributesMan,
 			EntityManagement identitiesMan,
 			OutputTranslationProfileRepository outputProfileRepo,
 			OutputTranslationEngine translationEngine,
@@ -38,7 +40,9 @@ public class IdPEngineImpl extends IdPEngineImplBase
 			AttributeValueConverter attrValueConverter,
 			UnityMessageSource msg)
 	{
-		super(attributesMan, identitiesMan, outputProfileRepo, translationEngine, 
-				userImportService, actionsRegistry, attrValueConverter, msg);
+		super(attributesMan, insecureAttributesMan, identitiesMan, userImportService, 
+				new OutputProfileExecutor(outputProfileRepo, 
+						translationEngine, actionsRegistry, 
+						attrValueConverter, msg));
 	}
 }

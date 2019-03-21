@@ -4,8 +4,10 @@
  */
 package pl.edu.icm.unity.engine.msgtemplate;
 
+import java.io.File;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -15,11 +17,17 @@ import org.springframework.stereotype.Component;
 import pl.edu.icm.unity.base.msgtemplates.GenericMessageTemplateDef;
 import pl.edu.icm.unity.base.msgtemplates.MessageTemplateDefinition;
 import pl.edu.icm.unity.engine.api.MessageTemplateManagement;
-import pl.edu.icm.unity.engine.authz.AuthorizationManager;
+import pl.edu.icm.unity.engine.api.NotificationsManagement;
+import pl.edu.icm.unity.engine.api.config.UnityServerConfiguration;
+import pl.edu.icm.unity.engine.api.msgtemplate.MessageTemplateConsumersRegistry;
+import pl.edu.icm.unity.engine.api.msgtemplate.MessageTemplateValidator;
+import pl.edu.icm.unity.engine.api.msgtemplate.MessageTemplateValidator.IllegalVariablesException;
+import pl.edu.icm.unity.engine.api.msgtemplate.MessageTemplateValidator.MandatoryVariablesException;
+import pl.edu.icm.unity.engine.authz.InternalAuthorizationManager;
 import pl.edu.icm.unity.engine.authz.AuthzCapability;
 import pl.edu.icm.unity.engine.events.InvocationEventProducer;
-import pl.edu.icm.unity.engine.msgtemplate.MessageTemplateValidator.IllegalVariablesException;
-import pl.edu.icm.unity.engine.msgtemplate.MessageTemplateValidator.MandatoryVariablesException;
+import pl.edu.icm.unity.engine.notifications.InternalFacilitiesManagement;
+import pl.edu.icm.unity.engine.notifications.NotificationFacility;
 import pl.edu.icm.unity.exceptions.EngineException;
 import pl.edu.icm.unity.exceptions.WrongArgumentException;
 import pl.edu.icm.unity.store.api.generic.MessageTemplateDB;
@@ -36,18 +44,27 @@ import pl.edu.icm.unity.types.basic.MessageTemplate;
 @InvocationEventProducer
 public class MessageTemplateManagementImpl implements MessageTemplateManagement
 {
-	private AuthorizationManager authz;
+	private InternalAuthorizationManager authz;
 	private MessageTemplateDB mtDB;
 	private MessageTemplateConsumersRegistry registry;
-	
-	
+	private InternalFacilitiesManagement facilityMan;
+	private MessageTemplateProcessor messageTemplateProcessor = new MessageTemplateProcessor();
+	private MessageTemplateLoader loader;
+	private File configFile;
+
 	@Autowired
-	public MessageTemplateManagementImpl(AuthorizationManager authz,
-			MessageTemplateDB mtDB, MessageTemplateConsumersRegistry registry)
+	public MessageTemplateManagementImpl(InternalAuthorizationManager authz, MessageTemplateDB mtDB,
+			MessageTemplateConsumersRegistry registry,
+			InternalFacilitiesManagement facilityMan,
+			NotificationsManagement notificationMan,
+			UnityServerConfiguration config)
 	{
 		this.authz = authz;
 		this.mtDB = mtDB;
 		this.registry = registry;
+		this.facilityMan = facilityMan;
+		this.loader = new MessageTemplateLoader(this, notificationMan, true);
+		configFile = config.getFileValue(UnityServerConfiguration.TEMPLATES_CONF, false);
 	}
 	
 	@Transactional
@@ -120,7 +137,7 @@ public class MessageTemplateManagementImpl implements MessageTemplateManagement
 		Map<String, MessageTemplate> genericTemplates = allAsMap.entrySet().stream()
 				.filter(e -> e.getValue().getConsumer().equals(GenericMessageTemplateDef.NAME))
 				.collect(Collectors.toMap(e -> e.getKey(), e -> e.getValue()));
-		return requested.preprocessMessage(genericTemplates);
+		return messageTemplateProcessor.preprocessMessage(requested, genericTemplates);
 	}
 	
 	@Transactional
@@ -140,6 +157,14 @@ public class MessageTemplateManagementImpl implements MessageTemplateManagement
 		return ret;
 	}
 	
+	@Transactional
+	@Override
+	public void reloadFromConfiguration(Set<String> toReload)
+	{
+		authz.checkAuthorizationRT("/", AuthzCapability.maintenance);
+		loader.initializeMsgTemplates(configFile, s -> toReload.contains(s));
+	}
+	
 	private void validateMessageTemplate(MessageTemplate toValidate)
 			throws EngineException
 	{
@@ -153,6 +178,35 @@ public class MessageTemplateManagementImpl implements MessageTemplateManagement
 		} catch (MandatoryVariablesException e)
 		{
 			throw new WrongArgumentException("The following variables must be used: " + e.getMandatory());
+		}
+
+		if (toValidate.getConsumer().equals(GenericMessageTemplateDef.NAME))
+			return; 
+		
+
+		String channel = toValidate.getNotificationChannel();
+		if (channel == null || channel.isEmpty())
+		{
+			throw new WrongArgumentException(
+					"Notification channel must be set in message template");
+		}
+
+		NotificationFacility facility;
+		try
+		{
+			facility = facilityMan.getNotificationFacilityForChannel(channel);
+		} catch (Exception e)
+		{
+			throw new WrongArgumentException(
+					"Cannot get facility for channel: " + channel, e);
+		}
+
+		if (!con.getCompatibleFacilities().contains(facility.getName()))
+		{
+			throw new WrongArgumentException("Notification channel "
+					+ toValidate.getNotificationChannel()
+					+ " is not compatible with used message consumer "
+					+ toValidate.getConsumer());
 		}
 	}
 }

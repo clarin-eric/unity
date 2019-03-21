@@ -18,6 +18,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 import org.junit.Test;
@@ -37,14 +38,14 @@ import pl.edu.icm.unity.engine.api.translation.TranslationActionInstance;
 import pl.edu.icm.unity.engine.api.translation.in.AttributeEffectMode;
 import pl.edu.icm.unity.engine.api.translation.in.GroupEffectMode;
 import pl.edu.icm.unity.engine.api.translation.in.IdentityEffectMode;
+import pl.edu.icm.unity.engine.api.translation.in.InputTranslationActionsRegistry;
 import pl.edu.icm.unity.engine.api.translation.in.InputTranslationEngine;
 import pl.edu.icm.unity.engine.api.translation.in.MappedAttribute;
 import pl.edu.icm.unity.engine.api.translation.in.MappedGroup;
 import pl.edu.icm.unity.engine.api.translation.in.MappedIdentity;
 import pl.edu.icm.unity.engine.api.translation.in.MappingResult;
-import pl.edu.icm.unity.engine.authz.AuthorizationManagerImpl;
+import pl.edu.icm.unity.engine.authz.InternalAuthorizationManagerImpl;
 import pl.edu.icm.unity.engine.server.EngineInitialization;
-import pl.edu.icm.unity.engine.translation.in.InputTranslationActionsRegistry;
 import pl.edu.icm.unity.engine.translation.in.InputTranslationProfile;
 import pl.edu.icm.unity.engine.translation.in.InputTranslationProfileRepository;
 import pl.edu.icm.unity.engine.translation.in.action.BlindStopperInputAction;
@@ -252,7 +253,7 @@ public class TestInputTranslationProfiles extends DBIntegrationTestBase
 		Attribute attr = StringAttribute.of("o", "/", "v1");
 		attr.setRemoteIdp("test");
 		attr.setTranslationProfile("p1");
-		attrsMan.setAttribute(ep, attr, false);
+		attrsMan.createAttribute(ep, attr);
 		
 		List<TranslationRule> rules = new ArrayList<>();
 		TranslationAction action1 = new TranslationAction(MapIdentityActionFactory.NAME, new String[] {
@@ -536,7 +537,7 @@ public class TestInputTranslationProfiles extends DBIntegrationTestBase
 				new IdentityParam(UsernameIdentity.ID, "added"), "dummy"));
 		
 		setupPasswordAuthn();
-		Identity baseUser = createUsernameUserWithRole(AuthorizationManagerImpl.USER_ROLE);
+		Identity baseUser = createUsernameUserWithRole(InternalAuthorizationManagerImpl.USER_ROLE);
 		EntityParam baseUserP = new EntityParam(baseUser);
 
 		tx.runInTransactionThrowing(() -> {
@@ -595,7 +596,7 @@ public class TestInputTranslationProfiles extends DBIntegrationTestBase
 		RemotelyAuthenticatedInput input = new RemotelyAuthenticatedInput("test");
 		
 		RemotelyAuthenticatedContext processed  = tx.runInTransactionRetThrowing(() -> {
-			return remoteProcessor.processRemoteInput(input, "p1", false);
+			return remoteProcessor.processRemoteInput(input, "p1", false, Optional.empty());
 		});
 		
 		assertNotNull(processed.getLocalMappedPrincipal());

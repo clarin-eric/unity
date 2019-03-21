@@ -61,13 +61,13 @@ public class TestEmailFacility extends DBIntegrationTestBase
 	{
 		Attribute attribute = VerifiableEmailAttribute.of(InitializerCommon.EMAIL_ATTR, 
 				"/", emails);
-		attrsMan.setAttribute(entity, attribute, true);
+		attrsMan.setAttribute(entity, attribute);
 	}
 
 	private void check(EntityParam entity, String expected) throws Exception
 	{
 		tx.runInTransactionThrowing(() -> {
-			assertEquals(expected, emailFacility.getAddressForEntity(entity, null));
+			assertEquals(expected, emailFacility.getAddressForEntity(entity, null, false));
 		}); 
 	}
 	
@@ -89,15 +89,15 @@ public class TestEmailFacility extends DBIntegrationTestBase
 
 		Attribute attribute = StringAttribute.of(InitializerCommon.EMAIL_ATTR, 
 				"/", "email1@ex.com");
-		attrsMan.setAttribute(entityP, attribute, true);
+		attrsMan.setAttribute(entityP, attribute);
 		
 		tx.runInTransactionThrowing(() -> {
 			assertEquals("email2@ex.com", emailFacility.getAddressForEntity(
-					entityP, "email2@ex.com"));
+					entityP, "email2@ex.com", false));
 			assertEquals("email1@ex.com", emailFacility.getAddressForEntity(
-					entityP, "email1@ex.com"));
+					entityP, "email1@ex.com", false));
 			assertEquals("email2@ex.com", emailFacility.getAddressForEntity(
-					entityP, "emailNNN@ex.com"));
+					entityP, "emailNNN@ex.com", false));
 		});
 	}
 	
@@ -119,7 +119,7 @@ public class TestEmailFacility extends DBIntegrationTestBase
 
 		Attribute attribute = StringAttribute.of(InitializerCommon.EMAIL_ATTR, 
 				"/", "email1@ex.com");
-		attrsMan.setAttribute(entityP, attribute, true);
+		attrsMan.setAttribute(entityP, attribute);
 		
 		check(entityP, "email1@ex.com");
 	}

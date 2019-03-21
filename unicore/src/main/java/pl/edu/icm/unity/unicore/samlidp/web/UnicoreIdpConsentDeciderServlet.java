@@ -15,20 +15,22 @@ import javax.servlet.http.HttpServletResponse;
 import org.apache.logging.log4j.Logger;
 import org.springframework.beans.factory.ObjectFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 import eu.unicore.samly2.SAMLConstants;
 import pl.edu.icm.unity.base.utils.Log;
+import pl.edu.icm.unity.engine.api.EnquiryManagement;
 import pl.edu.icm.unity.engine.api.PreferencesManagement;
 import pl.edu.icm.unity.engine.api.attributes.AttributeTypeSupport;
 import pl.edu.icm.unity.engine.api.authn.AuthenticationException;
 import pl.edu.icm.unity.engine.api.idp.IdPEngine;
 import pl.edu.icm.unity.engine.api.session.SessionManagement;
 import pl.edu.icm.unity.engine.api.translation.out.TranslationResult;
+import pl.edu.icm.unity.engine.api.utils.FreemarkerAppHandler;
 import pl.edu.icm.unity.engine.api.utils.PrototypeComponent;
 import pl.edu.icm.unity.exceptions.EngineException;
 import pl.edu.icm.unity.saml.SamlProperties.Binding;
-import pl.edu.icm.unity.saml.idp.FreemarkerHandler;
 import pl.edu.icm.unity.saml.idp.ctx.SAMLAuthnContext;
 import pl.edu.icm.unity.saml.idp.preferences.SamlPreferences.SPSettings;
 import pl.edu.icm.unity.saml.idp.web.filter.IdpConsentDeciderServlet;
@@ -57,11 +59,12 @@ public class UnicoreIdpConsentDeciderServlet extends IdpConsentDeciderServlet
 	public UnicoreIdpConsentDeciderServlet(AttributeTypeSupport aTypeSupport, 
 			PreferencesManagement preferencesMan, 
 			IdPEngine idpEngine,
-			FreemarkerHandler freemarker,
-			SessionManagement sessionMan)
+			FreemarkerAppHandler freemarker,
+			SessionManagement sessionMan,
+			@Qualifier("insecure") EnquiryManagement enquiryManagement)
 	{
 		super(aTypeSupport, preferencesMan, idpEngine, 
-				freemarker, sessionMan);
+				freemarker, sessionMan, enquiryManagement);
 	}
 	
 	
@@ -104,6 +107,7 @@ public class UnicoreIdpConsentDeciderServlet extends IdpConsentDeciderServlet
 			log.debug("Authentication of " + selectedIdentity);
 			Collection<Attribute> attributes = samlProcessor.getAttributes(userInfo, spPreferences);
 			respDoc = samlProcessor.processAuthnRequest(selectedIdentity, attributes, 
+					samlCtx.getResponseDestination(),
 					etdSettings.toDelegationRestrictions());
 		} catch (Exception e)
 		{
@@ -124,10 +128,10 @@ public class UnicoreIdpConsentDeciderServlet extends IdpConsentDeciderServlet
 		private ObjectFactory<UnicoreIdpConsentDeciderServlet> factory;
 		
 		@Override
-		public IdpConsentDeciderServlet getInstance(String uiServletPath)
+		public IdpConsentDeciderServlet getInstance(String uiServletPath, String authenticationUIServletPath)
 		{
 			UnicoreIdpConsentDeciderServlet ret = factory.getObject();
-			ret.init(uiServletPath);
+			ret.init(uiServletPath, authenticationUIServletPath);
 			return ret;
 		}
 	}

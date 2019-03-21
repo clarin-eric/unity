@@ -4,27 +4,15 @@
  */
 package pl.edu.icm.unity.oauth.as;
 
-import java.security.PrivateKey;
-import java.security.interfaces.ECPrivateKey;
-import java.security.interfaces.RSAPrivateKey;
 import java.util.Collection;
 import java.util.Date;
 import java.util.HashSet;
 import java.util.Set;
 
-import org.bouncycastle.util.Arrays;
-
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.google.common.collect.Lists;
-import com.google.common.collect.Sets;
 import com.nimbusds.jose.JOSEException;
-import com.nimbusds.jose.JWSAlgorithm;
-import com.nimbusds.jose.JWSHeader;
-import com.nimbusds.jose.JWSSigner;
-import com.nimbusds.jose.crypto.ECDSASigner;
-import com.nimbusds.jose.crypto.RSASSASigner;
 import com.nimbusds.jwt.JWT;
-import com.nimbusds.jwt.SignedJWT;
 import com.nimbusds.oauth2.sdk.AuthorizationCode;
 import com.nimbusds.oauth2.sdk.AuthorizationSuccessResponse;
 import com.nimbusds.oauth2.sdk.ParseException;
@@ -98,6 +86,7 @@ public class OAuthProcessor
 					throws EngineException, JsonProcessingException, ParseException, JOSEException
 	{
 		OAuthToken internalToken = new OAuthToken();
+		OAuthASProperties config = ctx.getConfig();
 		internalToken.setEffectiveScope(ctx.getEffectiveRequestedScopesList());
 		internalToken.setRequestedScope(ctx.getRequestedScopes().stream().toArray(String[]::new));
 		internalToken.setClientId(ctx.getClientEntityId());
@@ -105,10 +94,15 @@ public class OAuthProcessor
 		internalToken.setClientName(ctx.getClientName());
 		internalToken.setClientUsername(ctx.getClientUsername());
 		internalToken.setSubject(identity.getValue());
-		internalToken.setMaxExtendedValidity(ctx.getConfig().getMaxExtendedAccessTokenValidity());
-		internalToken.setTokenValidity(ctx.getConfig().getAccessTokenValidity()); 
+		internalToken.setMaxExtendedValidity(config.getMaxExtendedAccessTokenValidity());
+		internalToken.setTokenValidity(config.getAccessTokenValidity()); 
 		internalToken.setAudience(ctx.getClientUsername());
-		internalToken.setIssuerUri(ctx.getConfig().getIssuerName());
+		internalToken.setIssuerUri(config.getIssuerName());
+		internalToken.setCodeChallenge(ctx.getRequest().getCodeChallenge() == null ? 
+				null : ctx.getRequest().getCodeChallenge().getValue());
+		internalToken.setCodeChallengeMethod(ctx.getRequest().getCodeChallengeMethod() == null ? 
+				null : ctx.getRequest().getCodeChallengeMethod().getValue());
+		internalToken.setClientType(ctx.getClientType());
 	
 		Date now = new Date();
 		
@@ -122,7 +116,7 @@ public class OAuthProcessor
 		if (ctx.isOpenIdMode())
 		{
 			IDTokenClaimsSet idToken = prepareIdInfoClaimSet(identity.getValue(), internalToken.getAudience(), ctx, userInfo, now);
-			idTokenSigned = signIdToken(idToken, ctx);
+			idTokenSigned = config.getTokenSigner().sign(idToken);	
 			internalToken.setOpenidToken(idTokenSigned.serialize());
 			//we record OpenID token in internal state always in open id mode. However it may happen
 			//that it is not requested immediately now:
@@ -137,7 +131,7 @@ public class OAuthProcessor
 			internalToken.setAuthzCode(authzCode.getValue());
 			oauthResponse = new AuthorizationSuccessResponse(ctx.getReturnURI(), authzCode, null,
 					ctx.getRequest().getState(), ctx.getRequest().impliedResponseMode());
-			Date expiration = new Date(now.getTime() + ctx.getConfig().getCodeTokenValidity() * 1000);
+			Date expiration = new Date(now.getTime() + config.getCodeTokenValidity() * 1000);
 			tokensMan.addToken(INTERNAL_CODE_TOKEN, authzCode.getValue(), 
 					new EntityParam(identity), internalToken.getSerialized(), now, expiration);
 		} else if (GrantFlow.implicit == ctx.getFlow())
@@ -153,7 +147,7 @@ public class OAuthProcessor
 
 			AccessToken accessToken = createAccessToken(ctx);
 			internalToken.setAccessToken(accessToken.getValue());
-			Date expiration = new Date(now.getTime() + ctx.getConfig().getAccessTokenValidity() * 1000);
+			Date expiration = new Date(now.getTime() + config.getAccessTokenValidity() * 1000);
 			oauthResponse = new AuthenticationSuccessResponse(
 						ctx.getReturnURI(), null, idTokenSigned, 
 						accessToken, ctx.getRequest().getState(), null, 
@@ -165,7 +159,7 @@ public class OAuthProcessor
 			//in hybrid mode authz code is returned always
 			AuthorizationCode authzCode = new AuthorizationCode();
 			internalToken.setAuthzCode(authzCode.getValue());
-			Date codeExpiration = new Date(now.getTime() + ctx.getConfig().getCodeTokenValidity() * 1000);
+			Date codeExpiration = new Date(now.getTime() + config.getCodeTokenValidity() * 1000);
 			tokensMan.addToken(INTERNAL_CODE_TOKEN, authzCode.getValue(), 
 					new EntityParam(identity), internalToken.getSerialized(), 
 					now, codeExpiration);
@@ -176,7 +170,7 @@ public class OAuthProcessor
 			{
 				accessToken = createAccessToken(ctx);
 				internalToken.setAccessToken(accessToken.getValue());
-				Date accessExpiration = new Date(now.getTime() + ctx.getConfig().getAccessTokenValidity() * 1000);
+				Date accessExpiration = new Date(now.getTime() + config.getAccessTokenValidity() * 1000);
 				tokensMan.addToken(INTERNAL_ACCESS_TOKEN, accessToken.getValue(), 
 						new EntityParam(identity), internalToken.getSerialized(), 
 						now, accessExpiration);
@@ -270,28 +264,6 @@ public class OAuthProcessor
 		return userInfo;
 	}
 	
-	private JWT signIdToken(IDTokenClaimsSet idTokenClaims, OAuthAuthzContext ctx) 
-			throws JOSEException, ParseException
-	{
-		PrivateKey pk = ctx.getConfig().getCredential().getKey();
-		SignedJWT ret;
-		JWSSigner signer;
-		
-		if (pk instanceof RSAPrivateKey)
-		{
-			ret = new SignedJWT(new JWSHeader(JWSAlgorithm.RS256), idTokenClaims.toJWTClaimsSet());
-			signer = new RSASSASigner(pk);
-		} else 
-		{
-			ret = new SignedJWT(new JWSHeader(JWSAlgorithm.ES256), 
-					idTokenClaims.toJWTClaimsSet());
-			signer = new ECDSASigner((ECPrivateKey)pk);
-		}
-
-		ret.sign(signer);
-		return ret;
-	}
-
 	/**
 	 * 
 	 * @param ctx
@@ -300,16 +272,8 @@ public class OAuthProcessor
 	 */
 	public static AccessToken createAccessToken(OAuthAuthzContext ctx)
 	{
-		Set<String> effectiveScopes = Sets.newHashSet(ctx.getEffectiveRequestedScopesList());
-		if (!ctx.getRequestedScopes().equals(effectiveScopes))
-		{
-			return new BearerAccessToken(0, 
-					new Scope(ctx.getEffectiveRequestedScopesList()));
-			
-		} else
-		{
-			return new BearerAccessToken();
-		}
+		int tokenValidity = ctx.getConfig().getAccessTokenValidity();
+		return new BearerAccessToken(tokenValidity, new Scope(ctx.getEffectiveRequestedScopesList()));
 	}
 	
 	/**
@@ -320,13 +284,7 @@ public class OAuthProcessor
 	 */
 	public static AccessToken createAccessToken(OAuthToken token)
 	{
-		if (!Arrays.areEqual(token.getEffectiveScope(), token.getRequestedScope()))
-		{
-			return new BearerAccessToken(0, new Scope(token.getEffectiveScope()));
-			
-		} else
-		{
-			return new BearerAccessToken();
-		}
+		int tokenValidity = token.getTokenValidity();
+		return new BearerAccessToken(tokenValidity, new Scope(token.getEffectiveScope()));
 	}
 }

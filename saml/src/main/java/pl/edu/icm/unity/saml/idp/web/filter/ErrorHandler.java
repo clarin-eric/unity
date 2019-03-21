@@ -5,10 +5,7 @@
 package pl.edu.icm.unity.saml.idp.web.filter;
 
 import java.io.IOException;
-import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
-import java.util.HashMap;
-import java.util.Map;
 
 import javax.servlet.http.HttpServletResponse;
 
@@ -18,8 +15,8 @@ import org.apache.xml.security.utils.Base64;
 import eu.unicore.samly2.exceptions.SAMLServerException;
 import pl.edu.icm.unity.base.utils.Log;
 import pl.edu.icm.unity.engine.api.attributes.AttributeTypeSupport;
+import pl.edu.icm.unity.engine.api.utils.FreemarkerAppHandler;
 import pl.edu.icm.unity.saml.SAMLProcessingException;
-import pl.edu.icm.unity.saml.idp.FreemarkerHandler;
 import pl.edu.icm.unity.saml.idp.ctx.SAMLAuthnContext;
 import pl.edu.icm.unity.saml.idp.processor.AuthnResponseProcessor;
 import pl.edu.icm.unity.saml.web.ResponseHandlerBase;
@@ -37,7 +34,7 @@ public class ErrorHandler extends ResponseHandlerBase
 	private Logger log = Log.getLogger(Log.U_SERVER_SAML, ErrorHandler.class);
 	private AttributeTypeSupport aTypeSupport;
 
-	public ErrorHandler(AttributeTypeSupport aTypeSupport, FreemarkerHandler freemarker)
+	public ErrorHandler(AttributeTypeSupport aTypeSupport, FreemarkerAppHandler freemarker)
 	{
 		super(freemarker);
 		this.aTypeSupport = aTypeSupport;
@@ -73,10 +70,8 @@ public class ErrorHandler extends ResponseHandlerBase
 			SAMLServerException error, 
 			HttpServletResponse response) throws SAMLProcessingException, IOException, EopException
 	{
-		String serviceUrl = samlCtx.getRequestDocument().getAuthnRequest().getAssertionConsumerServiceURL();
-		if (serviceUrl == null)
-			serviceUrl = samlCtx.getSamlConfiguration().getReturnAddressForRequester(
-					samlCtx.getRequest().getIssuer());
+		String serviceUrl = samlCtx.getSamlConfiguration().getReturnAddressForRequester(
+					samlCtx.getRequest());
 		if (serviceUrl == null)
 			throw new SAMLProcessingException("No return URL in the SAML request. " +
 					"Can't return the SAML error response.", error);
@@ -95,19 +90,5 @@ public class ErrorHandler extends ResponseHandlerBase
 		log.debug("SAML error is going to be shown to the user redirected to Unity IdP by the " +
 				"SAML requester", reason);
 		super.showError(reason, response);
-	}
-
-	public void showHoldOnPage(String request, String relayState, String method, HttpServletResponse response) 
-			throws IOException, EopException
-	{
-		response.setContentType("application/xhtml+xml; charset=utf-8");
-		PrintWriter w = response.getWriter();
-		Map<String, String> data = new HashMap<String, String>();
-		data.put("originalRequest", request);
-		if (relayState != null)
-			data.put("RelayState", relayState);
-		data.put("method", method);
-		freemarker.process("holdonError.ftl", data, w);
-		throw new EopException();
 	}
 }

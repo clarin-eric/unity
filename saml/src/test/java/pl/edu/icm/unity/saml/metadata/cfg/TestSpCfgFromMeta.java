@@ -40,8 +40,10 @@ import java.util.Properties;
 
 import org.awaitility.Awaitility;
 import org.awaitility.Duration;
+import org.junit.Before;
 import org.junit.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 
 import eu.emi.security.authn.x509.impl.CertificateUtils;
 import eu.emi.security.authn.x509.impl.CertificateUtils.Encoding;
@@ -58,10 +60,17 @@ public class TestSpCfgFromMeta extends DBIntegrationTestBase
 	private RemoteMetadataService metadataService;
 	
 	@Autowired
-	private PKIManagement pkiManagement;
+	@Qualifier("insecure")
+	private  PKIManagement pkiManagement;
 	
 	@Autowired
 	private UnityMessageSource msg;
+	
+	@Before
+	public void reset()
+	{
+		metadataService.reset();
+	}
 	
 	@Test
 	public void testConfigureSPFromMetadata() throws Exception
@@ -76,7 +85,7 @@ public class TestSpCfgFromMeta extends DBIntegrationTestBase
 		p.setProperty(P+IDPMETA_PREFIX+"1." + IDPMETA_REGISTRATION_FORM, "metaRegForm");
 		p.setProperty(P+IDPMETA_PREFIX+"1." + METADATA_SIGNATURE, "require");
 		X509Certificate cert = CertificateUtils.loadCertificate(new ByteArrayInputStream(CERT.getBytes()), Encoding.PEM);
-		pkiManagement.addCertificate("issuerCert", cert);
+		pkiManagement.addVolatileCertificate("issuerCert", cert);
 		p.setProperty(P+IDPMETA_PREFIX+"1." + METADATA_ISSUER_CERT, "issuerCert");
 
 		p.setProperty(P+IDP_PREFIX+"1." + IDP_ADDRESS, "https://aai.unifr.ch/idp/profile/SAML2/Redirect/SSO");
@@ -136,6 +145,45 @@ public class TestSpCfgFromMeta extends DBIntegrationTestBase
 		assertEquals("false", ret.getValue(pfx + IDP_SIGN_REQUEST));
 		assertEquals("metaTrP", ret.getValue(pfx + TRANSLATION_PROFILE));
 	}
+
+	@Test
+	public void shouldConfigure2TrustedFederations() throws Exception
+	{
+		Properties p = new Properties();
+		p.setProperty(P+CREDENTIAL, "MAIN");
+		p.setProperty(P+REQUESTER_ID, "me");
+		p.setProperty(P+PUBLISH_METADATA, "false");
+
+		p.setProperty(P+IDPMETA_PREFIX+"1." + METADATA_URL, "file:src/test/resources/metadata.switchaai.xml");
+		p.setProperty(P+IDPMETA_PREFIX+"1." + IDPMETA_TRANSLATION_PROFILE, "metaTrP");
+		p.setProperty(P+IDPMETA_PREFIX+"1." + IDPMETA_REGISTRATION_FORM, "metaRegForm");
+
+		p.setProperty(P+IDPMETA_PREFIX+"2." + METADATA_URL, "file:src/test/resources/metadata.switchaai-one.xml");
+		p.setProperty(P+IDPMETA_PREFIX+"2." + IDPMETA_TRANSLATION_PROFILE, "metaTrP");
+		p.setProperty(P+IDPMETA_PREFIX+"2." + IDPMETA_REGISTRATION_FORM, "metaRegForm");
+
+		SAMLSPProperties configuration = new SAMLSPProperties(p, pkiManagement);
+		RemoteMetaManager manager = new RemoteMetaManager(configuration, 
+				pkiManagement, 
+				new MetaToSPConfigConverter(pkiManagement, msg), 
+				metadataService, SAMLSPProperties.IDPMETA_PREFIX);
+		
+		Awaitility.await()
+			.atMost(Duration.FIVE_SECONDS)
+			.untilAsserted(() -> {
+				SAMLSPProperties ret = (SAMLSPProperties) manager.getVirtualConfiguration();
+				
+				String pfx = ret.getPrefixOfIdP("https://aai-login.fh-htwchur.ch/idp/shibboleth");
+				assertThat(pfx, is(notNullValue()));
+				assertEquals("HTW Chur - Hochschule für Technik und Wirtschaft", ret.getValue(pfx + IDP_NAME+".de"));
+				
+				String pfx2 = ret.getPrefixOfIdP("https://fake.idp.eu");
+				assertThat(pfx2, is(notNullValue()));
+				assertEquals("Universität Freiburg", ret.getValue(pfx2 + IDP_NAME+".de"));
+				
+			});
+	}
+
 	
 	private void assertRemoteMetadataLoaded(RemoteMetaManager manager) throws EngineException
 	{

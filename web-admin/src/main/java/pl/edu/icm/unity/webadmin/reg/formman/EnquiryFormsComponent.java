@@ -4,39 +4,41 @@
  */
 package pl.edu.icm.unity.webadmin.reg.formman;
 
-import java.util.ArrayList;
-import java.util.Collection;
 import java.util.List;
+import java.util.Set;
 
 import org.springframework.beans.factory.ObjectFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 
-import com.vaadin.v7.data.Property.ValueChangeEvent;
-import com.vaadin.v7.data.Property.ValueChangeListener;
-import com.vaadin.server.Resource;
+import com.google.common.collect.Sets;
+import com.vaadin.data.ValueProvider;
+import com.vaadin.server.ExternalResource;
 import com.vaadin.shared.ui.Orientation;
-import com.vaadin.ui.Label;
-import com.vaadin.v7.ui.VerticalLayout;
+import com.vaadin.ui.Grid;
+import com.vaadin.ui.Grid.SelectionMode;
+import com.vaadin.ui.Link;
+import com.vaadin.ui.VerticalLayout;
 
 import pl.edu.icm.unity.engine.api.EnquiryManagement;
 import pl.edu.icm.unity.engine.api.endpoint.SharedEndpointManagement;
 import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
+import pl.edu.icm.unity.engine.api.registration.PublicRegistrationURLSupport;
+import pl.edu.icm.unity.engine.api.utils.MessageUtils;
 import pl.edu.icm.unity.engine.api.utils.PrototypeComponent;
 import pl.edu.icm.unity.types.registration.EnquiryForm;
-import pl.edu.icm.unity.webadmin.reg.formman.EnquiryFormEditDialog.Callback;
-import pl.edu.icm.unity.webadmin.utils.MessageUtils;
+import pl.edu.icm.unity.webui.ActivationListener;
 import pl.edu.icm.unity.webui.WebSession;
 import pl.edu.icm.unity.webui.bus.EventsBus;
 import pl.edu.icm.unity.webui.common.ComponentWithToolbar;
-import pl.edu.icm.unity.webui.common.CompositeSplitPanel;
 import pl.edu.icm.unity.webui.common.ConfirmDialog;
 import pl.edu.icm.unity.webui.common.ConfirmWithOptionDialog;
 import pl.edu.icm.unity.webui.common.ErrorComponent;
-import pl.edu.icm.unity.webui.common.GenericElementsTable;
-import pl.edu.icm.unity.webui.common.GenericElementsTable.GenericItem;
+import pl.edu.icm.unity.webui.common.GridContextMenuSupport;
+import pl.edu.icm.unity.webui.common.GridSelectionSupport;
 import pl.edu.icm.unity.webui.common.Images;
 import pl.edu.icm.unity.webui.common.NotificationPopup;
 import pl.edu.icm.unity.webui.common.SingleActionHandler;
+import pl.edu.icm.unity.webui.common.SmallGrid;
 import pl.edu.icm.unity.webui.common.Styles;
 import pl.edu.icm.unity.webui.common.Toolbar;
 import pl.edu.icm.unity.webui.forms.enquiry.EnquiryFormChangedEvent;
@@ -47,13 +49,13 @@ import pl.edu.icm.unity.webui.forms.reg.RegistrationFormChangedEvent;
  * @author K. Benedyczak
  */
 @PrototypeComponent
-public class EnquiryFormsComponent extends VerticalLayout
+public class EnquiryFormsComponent extends VerticalLayout implements ActivationListener
 {
 	private UnityMessageSource msg;
 	private EnquiryManagement enquiriesManagement;
 	private EventsBus bus;
 	
-	private GenericElementsTable<EnquiryForm> table;
+	private Grid<EnquiryForm> table;
 	private com.vaadin.ui.Component main;
 	private ObjectFactory<EnquiryFormEditor> enquiryFormEditorFactory;
 	
@@ -61,8 +63,7 @@ public class EnquiryFormsComponent extends VerticalLayout
 	@Autowired
 	public EnquiryFormsComponent(UnityMessageSource msg, EnquiryManagement enquiryManagement,
 			SharedEndpointManagement sharedEndpointMan,
-			ObjectFactory<EnquiryFormEditor> enquiryFormEditorFactory,
-			EnquiryFormViewer viewer)
+			ObjectFactory<EnquiryFormEditor> enquiryFormEditorFactory)
 	{
 		this.msg = msg;
 		this.enquiriesManagement = enquiryManagement;
@@ -70,49 +71,55 @@ public class EnquiryFormsComponent extends VerticalLayout
 		this.bus = WebSession.getCurrent().getEventBus();
 		
 		addStyleName(Styles.visibleScroll.toString());
+		setMargin(false);
+		setSpacing(false);
 		setCaption(msg.getMessage("EnquiryFormsComponent.caption"));
-		table = new GenericElementsTable<EnquiryForm>(msg.getMessage("RegistrationFormsComponent.formsTable"), 
-				new GenericElementsTable.NameProvider<EnquiryForm>()
-				{
-					@Override
-					public Label toRepresentation(EnquiryForm element)
-					{
-						return new Label(element.getName());
-					}
-				});
+		
+		table = new SmallGrid<>();
 		table.setSizeFull();
-		table.setMultiSelect(true);
-		viewer.setInput(null);
-		table.addValueChangeListener(new ValueChangeListener()
-		{
-			@Override
-			public void valueChange(ValueChangeEvent event)
+		table.setSelectionMode(SelectionMode.MULTI);
+		table.addColumn(EnquiryForm::getName, ValueProvider.identity())
+			.setCaption(msg.getMessage("RegistrationFormsComponent.formsTable"))
+			.setId("name");
+		table.addComponentColumn(form -> 
 			{
-				Collection<EnquiryForm> items = getItems(table.getValue());
-				if (items.size() > 1 || items.isEmpty())
-				{
-					viewer.setInput(null);
-					return;
-				}
-				EnquiryForm item = items.iterator().next();	
-				viewer.setInput(item);
+				Link link = new Link();
+				String linkURL = PublicRegistrationURLSupport.getWellknownEnquiryLink(
+						form.getName(), sharedEndpointMan); 
+				link.setCaption(linkURL);
+				link.setTargetName("_blank");
+				link.setResource(new ExternalResource(linkURL));
+				return link;
+			})
+			.setCaption(msg.getMessage("RegistrationFormsComponent.link"))
+			.setId("link");
+		
+		GridContextMenuSupport<EnquiryForm> contextMenu = new GridContextMenuSupport<>(table);
+		contextMenu.addActionHandler(getRefreshAction());
+		contextMenu.addActionHandler(getAddAction());
+		contextMenu.addActionHandler(getEditAction());
+		contextMenu.addActionHandler(getCopyAction());
+		contextMenu.addActionHandler(getDeleteAction());
+		contextMenu.addActionHandler(getResendAction());
+		GridSelectionSupport.installClickListener(table);
+		table.addItemClickListener(event -> {
+			if (event.getMouseEventDetails().isDoubleClick()) 
+			{
+				EnquiryForm form = event.getItem();
+				SingleActionHandler<EnquiryForm> editAction = getEditAction();
+				editAction.handle(Sets.newHashSet(form));
 			}
 		});
-		table.addActionHandler(new RefreshActionHandler());
-		table.addActionHandler(new AddActionHandler());
-		table.addActionHandler(new EditActionHandler());
-		table.addActionHandler(new CopyActionHandler());
-		table.addActionHandler(new DeleteActionHandler());
-		table.addActionHandler(new ResendActionHandler());
-				
-		Toolbar toolbar = new Toolbar(table, Orientation.HORIZONTAL);
-		toolbar.addActionHandlers(table.getActionHandlers());
+		
+		
+		Toolbar<EnquiryForm> toolbar = new Toolbar<>(Orientation.HORIZONTAL);
+		table.addSelectionListener(toolbar.getSelectionListener());
+		toolbar.addActionHandlers(contextMenu.getActionHandlers());
+		
 		ComponentWithToolbar tableWithToolbar = new ComponentWithToolbar(table, toolbar);
 		tableWithToolbar.setSizeFull();
 		
-		CompositeSplitPanel hl = new CompositeSplitPanel(false, true, tableWithToolbar, viewer, 25);
-
-		main = hl;
+		main = tableWithToolbar;
 		refresh();
 	}
 	
@@ -121,7 +128,7 @@ public class EnquiryFormsComponent extends VerticalLayout
 		try
 		{
 			List<EnquiryForm> forms = enquiriesManagement.getEnquires();
-			table.setInput(forms);
+			table.setItems(forms);
 			removeAllComponents();
 			addComponent(main);
 		} catch (Exception e)
@@ -134,11 +141,11 @@ public class EnquiryFormsComponent extends VerticalLayout
 		
 	}
 	
-	private boolean updateForm(EnquiryForm updatedForm, boolean ignoreRequests)
+	private boolean updateForm(EnquiryForm updatedForm, boolean ignoreRequestsAndInvitations)
 	{
 		try
 		{
-			enquiriesManagement.updateEnquiry(updatedForm, ignoreRequests);
+			enquiriesManagement.updateEnquiry(updatedForm, ignoreRequestsAndInvitations);
 			bus.fireEvent(new EnquiryFormChangedEvent(updatedForm));
 			refresh();
 			return true;
@@ -190,182 +197,133 @@ public class EnquiryFormsComponent extends VerticalLayout
 		}
 	}
 	
-	private Collection<EnquiryForm> getItems(Object target)
+	private SingleActionHandler<EnquiryForm> getRefreshAction()
 	{
-		Collection<?> c = (Collection<?>) target;
-		Collection<EnquiryForm> items = new ArrayList<>();
-		for (Object o: c)
-		{
-			GenericItem<?> i = (GenericItem<?>) o;
-			items.add((EnquiryForm) i.getElement());	
-		}	
-		return items;
+		return SingleActionHandler.builder4Refresh(msg, EnquiryForm.class)
+				.withHandler(selection -> refresh())
+				.build();
 	}
 	
-	private class RefreshActionHandler extends SingleActionHandler
+	private SingleActionHandler<EnquiryForm> getAddAction()
 	{
-		public RefreshActionHandler()
+		return SingleActionHandler.builder4Add(msg, EnquiryForm.class)
+				.withHandler(this::showAddDialog)
+				.build();
+	}
+	
+	private void showAddDialog(Set<EnquiryForm> form)
+	{
+		EnquiryFormEditor editor;
+		try
 		{
-			super(msg.getMessage("RegistrationFormsComponent.refreshAction"), Images.refresh.getResource());
-			setNeedsTarget(false);
+			editor = enquiryFormEditorFactory.getObject().init(false);
+		} catch (Exception e)
+		{
+			NotificationPopup.showError(msg, msg.getMessage("RegistrationFormsComponent.errorInFormEdit"),
+					e);
+			return;
 		}
+		EnquiryFormEditDialog dialog = new EnquiryFormEditDialog(msg,
+				msg.getMessage("RegistrationFormsComponent.addAction"),
+				(eform, foo) -> addForm(eform), editor);
+		dialog.show();
+	}
 
-		@Override
-		public void handleAction(Object sender, final Object target)
+	private SingleActionHandler<EnquiryForm> getResendAction()
+	{
+		return SingleActionHandler.builder(EnquiryForm.class)
+				.withCaption(msg.getMessage("RegistrationFormsComponent.resendAction"))
+				.withIcon(Images.messageSend.getResource())
+				.withHandler(this::showResendDialog)
+				.build();
+	}
+	
+	public void showResendDialog(Set<EnquiryForm> forms)
+	{
+		EnquiryForm form = forms.iterator().next();
+		ConfirmDialog dialog = new ConfirmDialog(msg, 
+				msg.getMessage("RegistrationFormsComponent.resendConfirmation"), 
+				() -> resend(form.getName()));
+		dialog.show();
+	}
+	
+	private SingleActionHandler<EnquiryForm> getCopyAction()
+	{
+		return SingleActionHandler.builder4Copy(msg, EnquiryForm.class)
+				.withHandler(this::showCopyDialog)
+				.build();
+	}
+	
+	private SingleActionHandler<EnquiryForm> getEditAction()
+	{
+		return SingleActionHandler.builder4Edit(msg, EnquiryForm.class)
+				.withHandler(this::showEditDialog)
+				.build();
+	}
+	
+	private void showCopyDialog(Set<EnquiryForm> target)
+	{
+		showCopyEditDialog(target, true, msg.getMessage("RegistrationFormsComponent.copyAction"));
+	}
+	
+	private void showEditDialog(Set<EnquiryForm> target)
+	{
+		showCopyEditDialog(target, false, msg.getMessage("RegistrationFormsComponent.editAction"));
+	}
+	
+	private void showCopyEditDialog(Set<EnquiryForm> target, boolean isCopyMode, String caption)
+	{
+		EnquiryForm form =  target.iterator().next();
+		EnquiryFormEditor editor;
+		try
+		{		
+			editor = enquiryFormEditorFactory.getObject().init(isCopyMode);
+			editor.setForm(form);
+		} catch (Exception e)
 		{
+			NotificationPopup.showError(msg, msg.getMessage(
+					"RegistrationFormsComponent.errorInFormEdit"), e);
+			return;
+		}
+		EnquiryFormEditDialog dialog = new EnquiryFormEditDialog(msg, 
+				caption,(eform, ignoreRequestsAndInvitations) ->  isCopyMode ? addForm(eform)
+						: updateForm(eform, ignoreRequestsAndInvitations)
+				, editor);
+		dialog.show();		
+	}
+	
+	private SingleActionHandler<EnquiryForm> getDeleteAction()
+	{
+		return SingleActionHandler.builder4Delete(msg, EnquiryForm.class)
+				.withHandler(this::handleDelete)
+				.build();
+	}
+	
+	private void handleDelete(Set<EnquiryForm> items)
+	{
+		String confirmText = MessageUtils.createConfirmFromNames(msg, items);
+
+		new ConfirmWithOptionDialog(msg, msg.getMessage("RegistrationFormsComponent.confirmDelete", 
+				confirmText),
+				msg.getMessage("RegistrationFormsComponent.dropRequests"),
+				new ConfirmWithOptionDialog.Callback()
+		{
+			@Override
+			public void onConfirm(boolean dropRequests)
+			{
+						for (EnquiryForm item : items)
+						{
+							removeForm(item.getName(),
+									dropRequests);
+						}
+			}
+		}).show();
+	}
+	
+	@Override
+	public void stateChanged(boolean enabled)
+	{
+		if (enabled)
 			refresh();
-		}
-	}
-
-	private class AddActionHandler extends SingleActionHandler
-	{
-		public AddActionHandler()
-		{
-			super(msg.getMessage("RegistrationFormsComponent.addAction"), Images.add.getResource());
-			setNeedsTarget(false);
-		}
-
-		@Override
-		public void handleAction(Object sender, final Object target)
-		{
-			EnquiryFormEditor editor;
-			try
-			{
-				editor = enquiryFormEditorFactory.getObject().init(false);
-			} catch (Exception e)
-			{
-				NotificationPopup.showError(msg, 
-						msg.getMessage("RegistrationFormsComponent.errorInFormEdit"), e);
-				return;
-			}
-			EnquiryFormEditDialog dialog = new EnquiryFormEditDialog(msg, 
-					msg.getMessage("RegistrationFormsComponent.addAction"), new Callback()
-					{
-						@Override
-						public boolean newForm(EnquiryForm form, boolean foo)
-						{
-							return addForm(form);
-						}
-					}, editor);
-			dialog.show();
-		}
-	}
-
-	private class ResendActionHandler extends SingleActionHandler
-	{
-		public ResendActionHandler()
-		{
-			super(msg.getMessage("RegistrationFormsComponent.resendAction"), Images.messageSend.getResource());
-			setNeedsTarget(true);
-		}
-
-		@Override
-		public void handleAction(Object sender, final Object target)
-		{
-			@SuppressWarnings("unchecked")
-			GenericItem<EnquiryForm> item = (GenericItem<EnquiryForm>) target;
-			EnquiryForm form = item.getElement();
-			ConfirmDialog dialog = new ConfirmDialog(msg, 
-					msg.getMessage("RegistrationFormsComponent.resendConfirmation"), 
-					() -> resend(form.getName()));
-			dialog.show();
-		}
-	}
-
-	private class EditActionHandler extends CopyEditBaseActionHandler
-	{
-		public EditActionHandler()
-		{
-			super(msg.getMessage("RegistrationFormsComponent.editAction"), 
-					Images.edit.getResource(), false);
-		}
-	}
-	
-	private class CopyActionHandler extends CopyEditBaseActionHandler
-	{
-		public CopyActionHandler()
-		{
-			super(msg.getMessage("RegistrationFormsComponent.copyAction"), 
-					Images.copy.getResource(), true);
-		}
-	}
-
-	
-	private abstract class CopyEditBaseActionHandler extends SingleActionHandler
-	{
-		private boolean copyMode;
-		private String caption;
-
-		public CopyEditBaseActionHandler(String caption, Resource icon, boolean copyMode)
-		{
-			super(caption, icon);
-			this.caption = caption;
-			this.copyMode = copyMode;
-		}
-
-		@Override
-		protected void handleAction(Object sender, final Object target)
-		{
-			@SuppressWarnings("unchecked")
-			GenericItem<EnquiryForm> item = (GenericItem<EnquiryForm>) target;
-			EnquiryForm form =  item.getElement();
-			EnquiryFormEditor editor;
-			try
-			{		
-				editor = enquiryFormEditorFactory.getObject().init(copyMode);
-				editor.setForm(form);
-			} catch (Exception e)
-			{
-				NotificationPopup.showError(msg, msg.getMessage(
-						"RegistrationFormsComponent.errorInFormEdit"), e);
-				return;
-			}
-			EnquiryFormEditDialog dialog = new EnquiryFormEditDialog(msg, 
-					caption, new Callback()
-					{
-						@Override
-						public boolean newForm(EnquiryForm form, boolean ignoreRequests)
-						{
-							return copyMode ? addForm(form) :
-								updateForm(form, ignoreRequests);
-						}
-					}, editor);
-			dialog.show();		
-		}
-	}
-	
-	
-	
-	private class DeleteActionHandler extends SingleActionHandler
-	{
-		public DeleteActionHandler()
-		{
-			super(msg.getMessage("RegistrationFormsComponent.deleteAction"), 
-					Images.delete.getResource());
-			setMultiTarget(true);
-		}
-		
-		@Override
-		public void handleAction(Object sender, Object target)
-		{
-			final Collection<EnquiryForm> items = getItems(target);
-			String confirmText = MessageUtils.createConfirmFromNames(msg, items);
-
-			new ConfirmWithOptionDialog(msg, msg.getMessage("RegistrationFormsComponent.confirmDelete", 
-					confirmText),
-					msg.getMessage("RegistrationFormsComponent.dropRequests"),
-					new ConfirmWithOptionDialog.Callback()
-			{
-				@Override
-				public void onConfirm(boolean dropRequests)
-				{
-							for (EnquiryForm item : items)
-							{
-								removeForm(item.getName(),
-										dropRequests);
-							}
-				}
-			}).show();
-		}
 	}
 }

@@ -7,11 +7,9 @@ package pl.edu.icm.unity.webadmin;
 import com.vaadin.server.Page;
 import com.vaadin.ui.Alignment;
 import com.vaadin.ui.Button;
-import com.vaadin.ui.Button.ClickEvent;
-import com.vaadin.ui.HorizontalLayout;
 
 import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
-import pl.edu.icm.unity.webui.authn.WebAuthenticationProcessor;
+import pl.edu.icm.unity.webui.authn.StandardWebAuthenticationProcessor;
 import pl.edu.icm.unity.webui.common.Images;
 import pl.edu.icm.unity.webui.common.Styles;
 import pl.edu.icm.unity.webui.common.TopHeader;
@@ -23,19 +21,19 @@ import pl.edu.icm.unity.webui.common.TopHeader;
  */
 public class AdminTopHeader extends TopHeader
 {
-	private boolean adminView = true;
+	private boolean adminView = false;
 	private Button switchView;
 	private ViewSwitchCallback callback;
 	
-	public AdminTopHeader(String title, WebAuthenticationProcessor authnProcessor, UnityMessageSource msg, 
+	public AdminTopHeader(String title, StandardWebAuthenticationProcessor authnProcessor, UnityMessageSource msg, 
 			ViewSwitchCallback callback)
 	{
 		super(title, authnProcessor, msg);
 		this.callback = callback;
+		addButtons();
 	}
 
-	@Override
-	protected void addButtons(HorizontalLayout loggedPanel)
+	private void addButtons()
 	{
 		Button supportB = createSupportButton();
 		loggedPanel.addComponent(supportB);
@@ -54,16 +52,10 @@ public class AdminTopHeader extends TopHeader
 	{
 		Button support = new Button();
 		support.addStyleName(Styles.vButtonLink.toString());
-		support.addClickListener(new Button.ClickListener()
-		{
-			@Override
-			public void buttonClick(ClickEvent event)
-			{
-				Page.getCurrent().open("http://unity-idm.eu/site/support", "_blank", false);
-			}
-		});
+		support.addClickListener(e -> Page.getCurrent().open("http://unity-idm.eu/site/support", "_blank", false));
 		support.setDescription(msg.getMessage("AdminTopHeader.toSupport"));
-		support.setIcon(Images.support32.getResource());
+		support.setIcon(Images.support.getResource());
+		support.addStyleName(Styles.largeIcon.toString());
 		return support;
 	}
 	
@@ -71,15 +63,12 @@ public class AdminTopHeader extends TopHeader
 	{
 		switchView = new Button();
 		switchView.addStyleName(Styles.vButtonLink.toString());
-		switchView.addClickListener(new Button.ClickListener()
-		{
-			@Override
-			public void buttonClick(ClickEvent event)
-			{
-				switchView();
-				callback.showView(adminView);
-			}
+		switchView.addStyleName(Styles.largeIcon.toString());
+		switchView.addClickListener(e -> {
+			switchView();
+			callback.showView(adminView);
 		});
+
 		switchView();
 		return switchView;
 	}
@@ -88,12 +77,12 @@ public class AdminTopHeader extends TopHeader
 	{
 		if (adminView)
 		{
-			switchView.setIcon(Images.toAdmin32.getResource());
+			switchView.setIcon(Images.toAdmin.getResource());
 			switchView.setDescription(msg.getMessage("AdminTopHeader.toAdmin"));
 			adminView = false;
 		} else
 		{
-			switchView.setIcon(Images.toProfile32.getResource());
+			switchView.setIcon(Images.toProfile.getResource());
 			switchView.setDescription(msg.getMessage("AdminTopHeader.toProfile"));
 			adminView = true;
 		}

@@ -40,15 +40,16 @@ import pl.edu.icm.unity.stdext.identity.UsernameIdentity;
 import pl.edu.icm.unity.types.basic.Attribute;
 import pl.edu.icm.unity.types.basic.AttributeType;
 import pl.edu.icm.unity.types.basic.IdentityParam;
+import pl.edu.icm.unity.types.registration.GroupSelection;
 import pl.edu.icm.unity.types.registration.IdentityRegistrationParam;
 import pl.edu.icm.unity.types.registration.ParameterRetrievalSettings;
 import pl.edu.icm.unity.types.registration.RegistrationForm;
 import pl.edu.icm.unity.types.registration.RegistrationFormBuilder;
-import pl.edu.icm.unity.types.registration.Selection;
 import pl.edu.icm.unity.types.registration.invite.InvitationParam;
 import pl.edu.icm.unity.types.registration.invite.InvitationWithCode;
 import pl.edu.icm.unity.types.registration.invite.PrefilledEntry;
 import pl.edu.icm.unity.types.registration.invite.PrefilledEntryMode;
+import pl.edu.icm.unity.types.registration.invite.RegistrationInvitationParam;
 
 /**
  * Invitations management test
@@ -175,14 +176,14 @@ public class TestInvitations extends RESTAdminTestBase
 	
 	private InvitationParam createInvitation()
 	{
-		InvitationParam ret = new InvitationParam("exForm", 
+		InvitationParam ret = new RegistrationInvitationParam("exForm", 
 				Instant.now().plusSeconds(200).truncatedTo(ChronoUnit.SECONDS), 
-				"someAddr@example.com", "channelId");
+				"someAddr@example.com");
 		Attribute attrP = StringAttribute.of("cn", "/", "value");
 		ret.getAttributes().put(0, new PrefilledEntry<>(attrP, PrefilledEntryMode.READ_ONLY));
 		ret.getIdentities().put(0, new PrefilledEntry<>(new IdentityParam(UsernameIdentity.ID, 
 				"user-id"), PrefilledEntryMode.READ_ONLY));
-		ret.getGroupSelections().put(0, new PrefilledEntry<>(new Selection(true), 
+		ret.getGroupSelections().put(0, new PrefilledEntry<>(new GroupSelection("/"), 
 				PrefilledEntryMode.READ_ONLY));
 		return ret;
 	}

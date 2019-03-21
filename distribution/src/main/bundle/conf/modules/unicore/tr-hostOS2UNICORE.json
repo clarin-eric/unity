@@ -9,7 +9,7 @@
           },
           "action" : {
             "name" : "mapIdentity",
-            "parameters" : [ "x500Name", "'UID=' + id + ',DC=unity,DC=unixUser'", "Certificate", "CREATE_OR_MATCH" ]
+            "parameters" : [ "x500Name", "'UID=' + id + ',DC=unity,DC=unixUser'", "Certificate requirement", "CREATE_OR_MATCH" ]
           }
         }, {
           "condition" : {
@@ -33,7 +33,7 @@
           },
           "action" : {
             "name" : "mapAttribute",
-            "parameters" : [ "cn", "/", "attr['name']", "CREATE_OR_UPDATE" ]
+            "parameters" : [ "name", "/", "attr['name']", "CREATE_OR_UPDATE" ]
           }
         } ]
 }

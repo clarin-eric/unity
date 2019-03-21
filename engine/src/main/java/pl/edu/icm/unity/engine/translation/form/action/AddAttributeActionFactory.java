@@ -5,7 +5,6 @@
 package pl.edu.icm.unity.engine.translation.form.action;
 
 import java.io.Serializable;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -17,7 +16,6 @@ import org.springframework.stereotype.Component;
 
 import pl.edu.icm.unity.base.utils.Log;
 import pl.edu.icm.unity.engine.api.attributes.AttributeTypeSupport;
-import pl.edu.icm.unity.engine.api.attributes.AttributeValueSyntax;
 import pl.edu.icm.unity.engine.api.translation.form.RegistrationTranslationAction;
 import pl.edu.icm.unity.engine.api.translation.form.TranslatedRegistrationRequest;
 import pl.edu.icm.unity.engine.attribute.AttributeValueConverter;
@@ -48,15 +46,15 @@ public class AddAttributeActionFactory extends AbstractRegistrationTranslationAc
 				new ActionParameterDefinition(
 						"attributeName",
 						"RegTranslationAction.addAttribute.paramDesc.attributeName",
-						Type.UNITY_ATTRIBUTE),
+						Type.UNITY_ATTRIBUTE, true),
 				new ActionParameterDefinition(
 						"group",
 						"RegTranslationAction.addAttribute.paramDesc.group",
-						Type.UNITY_GROUP),
+						Type.UNITY_GROUP, true),
 				new ActionParameterDefinition(
 						"expression",
 						"RegTranslationAction.addAttribute.paramDesc.expression",
-						Type.EXPRESSION)
+						Type.EXPRESSION, true)
 		});
 		this.attrsSupport = attrsSupport;
 		this.attrValueConverter = attrValueConverter;
@@ -119,23 +117,8 @@ public class AddAttributeActionFactory extends AbstractRegistrationTranslationAc
 			state.addAttribute(attribute);
 		}
 
-		public static List<Object> convertValues(Object value, AttributeValueSyntax<?> syntax) 
-				throws IllegalAttributeValueException
-		{
-			List<?> aValues = value instanceof List ? (List<?>)value : Collections.singletonList(value);
-			List<Object> ret = new ArrayList<Object>(aValues.size());
-			for (Object o: aValues)
-			{
-				Object converted = syntax.convertFromString(o.toString());
-				ret.add(converted);
-			}
-			return ret;
-		}
-		
 		private void setParameters(String[] parameters)
 		{
-			if (parameters.length != 3)
-				throw new IllegalArgumentException("Action requires exactly 3 parameters");
 			unityAttribute = parameters[0];
 			group = parameters[1];
 			expressionCompiled = MVEL.compileExpression(parameters[2]);

@@ -10,9 +10,12 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import javax.servlet.http.HttpSession;
 
+import org.apache.logging.log4j.Logger;
+
 import eu.unicore.samly2.exceptions.SAMLServerException;
+import pl.edu.icm.unity.base.utils.Log;
+import pl.edu.icm.unity.engine.api.utils.FreemarkerAppHandler;
 import pl.edu.icm.unity.saml.SamlProperties.Binding;
-import pl.edu.icm.unity.saml.idp.FreemarkerHandler;
 import pl.edu.icm.unity.saml.idp.processor.AuthnResponseProcessor;
 import pl.edu.icm.unity.saml.web.ResponseHandlerBase;
 import pl.edu.icm.unity.webui.idpcommon.EopException;
@@ -24,7 +27,9 @@ import xmlbeans.org.oasis.saml2.protocol.ResponseDocument;
  */
 public class SSOResponseHandler extends ResponseHandlerBase
 {
-	public SSOResponseHandler(FreemarkerHandler freemarker)
+	private static final Logger log = Log.getLogger(Log.U_SERVER_SAML, SSOResponseHandler.class);
+	
+	public SSOResponseHandler(FreemarkerAppHandler freemarker)
 	{
 		super(freemarker);
 	}
@@ -52,6 +57,8 @@ public class SSOResponseHandler extends ResponseHandlerBase
 		SAMLServerException convertedException = samlProcessor.convert2SAMLError(e, null, true);
 		ResponseDocument respDoc = samlProcessor.getErrorResponse(convertedException);
 
+		log.debug("Sending SAML error to " + serviceUrl + 
+				" in effect of exception handling", e);
 		try
 		{
 			super.sendResponse(binding, respDoc, serviceUrl, relayState, response,

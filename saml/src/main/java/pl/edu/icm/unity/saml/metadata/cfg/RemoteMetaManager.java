@@ -6,7 +6,11 @@ package pl.edu.icm.unity.saml.metadata.cfg;
 
 import java.security.cert.X509Certificate;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 
@@ -18,7 +22,9 @@ import pl.edu.icm.unity.exceptions.EngineException;
 import pl.edu.icm.unity.saml.SamlProperties;
 import pl.edu.icm.unity.saml.metadata.cfg.MetadataVerificator.MetadataValidationException;
 import pl.edu.icm.unity.saml.metadata.srv.RemoteMetadataService;
+import pl.edu.icm.unity.saml.sp.SAMLSPProperties;
 import pl.edu.icm.unity.saml.sp.SAMLSPProperties.MetadataSignatureValidation;
+import pl.edu.icm.unity.saml.sp.web.IdPVisalSettings;
 import xmlbeans.org.oasis.saml2.metadata.EntitiesDescriptorDocument;
 
 /**
@@ -36,6 +42,7 @@ public class RemoteMetaManager
 	private String metaPrefix;
 	private RemoteMetadataService metadataService;
 	private Set<String> registeredConsumers = new HashSet<>();
+	private Map<String, Properties> configurationsFromMetadata = new HashMap<>();
 	
 	public RemoteMetaManager(SamlProperties configuration, 
 			PKIManagement pkiManagement,
@@ -57,6 +64,14 @@ public class RemoteMetaManager
 		return virtualConfiguration.clone();
 	}
 
+	public synchronized IdPVisalSettings getVisualSettings(String configKey, Locale locale)
+	{
+		String logoUrl = virtualConfiguration.getLocalizedValue(configKey + SAMLSPProperties.IDP_LOGO, locale);
+		String name = ((SAMLSPProperties)virtualConfiguration).getLocalizedName(configKey, locale);
+		List<String> tags = virtualConfiguration.getListOfValues(configKey + SAMLSPProperties.IDP_NAME + ".");
+		return new IdPVisalSettings(logoUrl, tags, name);
+	}
+	
 	public synchronized void setBaseConfiguration(SamlProperties configuration)
 	{
 		Properties oldP = this.configuration.getProperties();
@@ -66,6 +81,7 @@ public class RemoteMetaManager
 		if (reload)
 		{
 			unregisterAll();
+			virtualConfiguration = configuration.clone();
 			registerMetadataConsumers();
 		}
 	}
@@ -80,10 +96,10 @@ public class RemoteMetaManager
 			long refreshInterval = configuration.getIntValue(key + SamlProperties.METADATA_REFRESH) * 1000L;
 			String customTruststore = configuration.getValue(key + SamlProperties.METADATA_HTTPS_TRUSTSTORE);
 			MetadataConsumer consumer = new MetadataConsumer(url, key);
-			String consumerId = metadataService.registerConsumer(url, 
-					refreshInterval, customTruststore, 
-					consumer::updateMetadata);
+			String consumerId = metadataService.preregisterConsumer(url);
 			registeredConsumers.add(consumerId);
+			metadataService.registerConsumer(consumerId, refreshInterval, customTruststore, 
+					consumer::updateMetadata);
 		}
 	}
 
@@ -91,13 +107,22 @@ public class RemoteMetaManager
 	{
 		log.trace("Unregistering all remote metadata consumers");
 		registeredConsumers.forEach(id -> metadataService.unregisterConsumer(id));
+		registeredConsumers.clear();
 	}
 	
-	private synchronized void setVirtualConfiguration(Properties virtualConfigurationProperties)
+	private synchronized void assembleProperties(String propertiesKey, Properties newProperties, String consumerId)
 	{
-		this.virtualConfiguration.setProperties(virtualConfigurationProperties);
+		if (!registeredConsumers.contains(consumerId)) 
+			//not likely but can happen in case of race condition between 
+			//deregistration of a consumer happening at the same time as async refresh
+			return;
+		Properties virtualConfigProps = configuration.getSourceProperties();
+		configurationsFromMetadata.put(propertiesKey, newProperties);
+		for (Properties properties: configurationsFromMetadata.values())
+			virtualConfigProps.putAll(properties);
+		this.virtualConfiguration.setProperties(virtualConfigProps);
 	}
-	
+
 	private void reloadSingle(EntitiesDescriptorDocument metadata, String key, String url,
 			Properties virtualProps, SamlProperties configuration)
 	{
@@ -108,7 +133,7 @@ public class RemoteMetaManager
 		try
 		{
 			X509Certificate issuerCertificate = issuerCertificateName != null ? 
-					pkiManagement.getCertificate(issuerCertificateName) : null;
+					pkiManagement.getCertificate(issuerCertificateName).value: null;
 			verificator.validate(metadata, new Date(),
 					sigCheckingMode, issuerCertificate);
 		} catch (MetadataValidationException e)
@@ -137,11 +162,11 @@ public class RemoteMetaManager
 			this.propertiesKey = propertiesKey;
 		}
 		
-		private void updateMetadata(EntitiesDescriptorDocument metadata)
+		private void updateMetadata(EntitiesDescriptorDocument metadata, String consumerId)
 		{
 			Properties virtualConfigProps = configuration.getSourceProperties();
 			reloadSingle(metadata, propertiesKey, url, virtualConfigProps, configuration);
-			setVirtualConfiguration(virtualConfigProps);
+			assembleProperties(propertiesKey, virtualConfigProps, consumerId);
 		}
 	}
 }

@@ -27,12 +27,13 @@ public interface NotificationProducer
 	 * @param locale can be null. In such case the server's default locale will be used
 	 * @param preferredAddress can be null. If not null then this address will be used if can be found among all 
 	 * valid addresses of entity. 
+	 * @param sendOnlyToConfirmed send notification only to confirmed recipient address
 	 * @return
 	 * @throws EngineException
 	 */
-	Future<NotificationStatus> sendNotification(EntityParam recipient, String channelName, 
-			String templateId, Map<String, String> params, String locale, String preferredAddress) 
-					throws EngineException;
+	Future<NotificationStatus> sendNotification(EntityParam recipient, String templateId,
+			Map<String, String> params, String locale, String preferredAddress, boolean sendOnlyToConfirmed)
+			throws EngineException;
 
 	/**
 	 * Sends a message which is resolved from a given template with parameters.
@@ -44,8 +45,8 @@ public interface NotificationProducer
 	 * @return
 	 * @throws EngineException
 	 */
-	Future<NotificationStatus> sendNotification(String recipientAddress, String channelName, 
-			String templateId, Map<String, String> params, String locale) throws EngineException;
+	Future<NotificationStatus> sendNotification(String recipientAddress, String templateId,
+			Map<String, String> params, String locale) throws EngineException;
 	
 	/**
 	 * Sends a message which is resolved from a given template with parameters.
@@ -59,6 +60,17 @@ public interface NotificationProducer
 	 * @return
 	 * @throws EngineException
 	 */
-	void sendNotificationToGroup(String group, String channelName, 
-			String templateId, Map<String, String> params, String locale) throws EngineException;
+	void sendNotificationToGroup(String group, String templateId, Map<String, String> params,
+			String locale) throws EngineException;
+	
+	
+	/**
+	 * Get address for entity. Address is relevant for channel configured in message template. 
+	 * @param recipient 
+	 * @param templateId message template of message
+	 * @param onlyConfirmed get only confirmed address
+	 * @return
+	 * @throws EngineException 
+	 */
+	String getAddressForEntity(EntityParam recipient, String templateId, boolean onlyConfirmed) throws EngineException;
 }

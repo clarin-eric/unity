@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TimeZone;
 
@@ -21,12 +22,14 @@ import javax.servlet.http.HttpSession;
 import org.apache.logging.log4j.Logger;
 import org.springframework.beans.factory.ObjectFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
 
 import eu.unicore.samly2.SAMLConstants;
 import eu.unicore.samly2.exceptions.SAMLRequesterException;
 import pl.edu.icm.unity.base.utils.Log;
+import pl.edu.icm.unity.engine.api.EnquiryManagement;
 import pl.edu.icm.unity.engine.api.PreferencesManagement;
 import pl.edu.icm.unity.engine.api.attributes.AttributeTypeSupport;
 import pl.edu.icm.unity.engine.api.authn.AuthenticationException;
@@ -36,13 +39,13 @@ import pl.edu.icm.unity.engine.api.idp.CommonIdPProperties;
 import pl.edu.icm.unity.engine.api.idp.IdPEngine;
 import pl.edu.icm.unity.engine.api.session.SessionManagement;
 import pl.edu.icm.unity.engine.api.translation.out.TranslationResult;
+import pl.edu.icm.unity.engine.api.utils.FreemarkerAppHandler;
 import pl.edu.icm.unity.engine.api.utils.PrototypeComponent;
 import pl.edu.icm.unity.engine.api.utils.RoutingServlet;
 import pl.edu.icm.unity.exceptions.EngineException;
 import pl.edu.icm.unity.saml.SAMLEndpointDefinition;
 import pl.edu.icm.unity.saml.SAMLSessionParticipant;
 import pl.edu.icm.unity.saml.SamlProperties.Binding;
-import pl.edu.icm.unity.saml.idp.FreemarkerHandler;
 import pl.edu.icm.unity.saml.idp.SamlIdpProperties;
 import pl.edu.icm.unity.saml.idp.ctx.SAMLAuthnContext;
 import pl.edu.icm.unity.saml.idp.preferences.SamlPreferences;
@@ -51,6 +54,7 @@ import pl.edu.icm.unity.saml.idp.processor.AuthnResponseProcessor;
 import pl.edu.icm.unity.types.basic.Attribute;
 import pl.edu.icm.unity.types.basic.EntityParam;
 import pl.edu.icm.unity.types.basic.IdentityParam;
+import pl.edu.icm.unity.webui.VaadinRequestMatcher;
 import pl.edu.icm.unity.webui.idpcommon.EopException;
 import xmlbeans.org.oasis.saml2.assertion.NameIDType;
 import xmlbeans.org.oasis.saml2.protocol.ResponseDocument;
@@ -73,26 +77,48 @@ public class IdpConsentDeciderServlet extends HttpServlet
 	protected SSOResponseHandler ssoResponseHandler;
 	protected SessionManagement sessionMan;
 	protected String samlUiServletPath;
-
+	private String authenticationUIServletPath;
 	protected AttributeTypeSupport aTypeSupport;
+	private EnquiryManagement enquiryManagement;
 	
 	@Autowired
 	public IdpConsentDeciderServlet(AttributeTypeSupport aTypeSupport, 
 			PreferencesManagement preferencesMan, 
 			IdPEngine idpEngine,
-			FreemarkerHandler freemarker,
-			SessionManagement sessionMan)
+			FreemarkerAppHandler freemarker,
+			SessionManagement sessionMan,
+			@Qualifier("insecure") EnquiryManagement enquiryManagement)
 	{
 		this.aTypeSupport = aTypeSupport;
 		this.preferencesMan = preferencesMan;
 		this.idpEngine = idpEngine;
+		this.enquiryManagement = enquiryManagement;
 		this.ssoResponseHandler = new SSOResponseHandler(freemarker);
 		this.sessionMan = sessionMan;
 	}
 
-	protected void init(String samlUiServletPath)
+	protected void init(String samlUiServletPath, String authenticationUIServletPath)
 	{
 		this.samlUiServletPath = samlUiServletPath;
+		this.authenticationUIServletPath = authenticationUIServletPath;
+	}
+	
+	@Override
+	protected void service(HttpServletRequest req, HttpServletResponse resp)
+			throws ServletException, IOException
+	{
+		//if we got this request here it means that this is a request from Authentication UI
+		// which was not reloaded with something new - either regular endpoint UI or navigated away with a redirect. 
+		if (VaadinRequestMatcher.isVaadinRequest(req))
+		{
+			String forwardURI = authenticationUIServletPath;
+			if (req.getPathInfo() != null) 
+				forwardURI += req.getPathInfo();
+			log.debug("Request to Vaadin internal address will be forwarded to authN {}", req.getRequestURI());
+			req.getRequestDispatcher(forwardURI).forward(req, resp);
+			return;
+		}
+		super.service(req, resp);
 	}
 	
 	@Override
@@ -139,9 +165,9 @@ public class IdpConsentDeciderServlet extends HttpServlet
 			return;
 
 		}
-		if (isConsentRequired(preferences, samlCtx))
+		if (isInteractiveUIRequired(preferences, samlCtx))
 		{
-			log.trace("Consent is required for SAML request, forwarding to consent UI");
+			log.trace("Interactive step is required for SAML request, forwarding to UI");
 			RoutingServlet.forwardTo(samlUiServletPath, req, resp);
 		} else
 		{
@@ -155,8 +181,25 @@ public class IdpConsentDeciderServlet extends HttpServlet
 		SamlPreferences preferences = SamlPreferences.getPreferences(preferencesMan);
 		return preferences.getSPSettings(samlCtx.getRequest().getIssuer());
 	}
+
+
+	private boolean isInteractiveUIRequired(SPSettings preferences, SAMLAuthnContext samlCtx)
+	{
+		return isConsentRequired(preferences, samlCtx) || isActiveValueSelectionRequired(samlCtx) ||
+				isEnquiryWaiting();
+	}
+
 	
-	protected boolean isConsentRequired(SPSettings preferences, SAMLAuthnContext samlCtx)
+	private boolean isActiveValueSelectionRequired(SAMLAuthnContext samlCtx)
+	{
+		AuthnResponseProcessor samlProcessor = new AuthnResponseProcessor(aTypeSupport, samlCtx, 
+				Calendar.getInstance(TimeZone.getTimeZone("UTC")));
+		SamlIdpProperties config = samlCtx.getSamlConfiguration();
+		return CommonIdPProperties.isActiveValueSelectionConfiguredForClient(config, 
+						samlProcessor.getRequestIssuer());
+	}
+	
+	private boolean isConsentRequired(SPSettings preferences, SAMLAuthnContext samlCtx)
 	{
 		if (preferences.isDoNotAsk())
 			return false;
@@ -168,6 +211,21 @@ public class IdpConsentDeciderServlet extends HttpServlet
 		
 		return true;
 	}
+
+	private boolean isEnquiryWaiting()
+	{
+		LoginSession ae = InvocationContext.getCurrent().getLoginSession();
+		EntityParam entity = new EntityParam(ae.getEntityId());
+		try
+		{
+			return !enquiryManagement.getPendingEnquires(entity).isEmpty();
+		} catch (EngineException e)
+		{
+			log.warn("Can't retrieve pending enquiries for user", e);
+			return false;
+		}
+	}
+
 	
 	/**
 	 * Automatically sends a SAML response, without the consent screen.
@@ -194,10 +252,12 @@ public class IdpConsentDeciderServlet extends HttpServlet
 		{
 			TranslationResult userInfo = getUserInfo(samlCtx.getSamlConfiguration(), samlProcessor, 
 					SAMLConstants.BINDING_HTTP_POST);
+			handleRedirectIfNeeded(userInfo, request.getSession(), response);
 			IdentityParam selectedIdentity = getIdentity(userInfo, samlProcessor, spPreferences);
 			log.debug("Authentication of " + selectedIdentity);
 			Collection<Attribute> attributes = samlProcessor.getAttributes(userInfo, spPreferences);
-			respDoc = samlProcessor.processAuthnRequest(selectedIdentity, attributes);
+			respDoc = samlProcessor.processAuthnRequest(selectedIdentity, attributes, 
+					samlCtx.getResponseDestination());
 		} catch (Exception e)
 		{
 			ssoResponseHandler.handleException(samlProcessor, e, Binding.HTTP_POST, 
@@ -206,8 +266,22 @@ public class IdpConsentDeciderServlet extends HttpServlet
 		}
 		addSessionParticipant(samlCtx, samlProcessor.getAuthenticatedSubject().getNameID(), 
 				samlProcessor.getSessionId(), sessionMan);
+		
 		ssoResponseHandler.sendResponse(Binding.HTTP_POST, respDoc, serviceUrl, 
 				samlCtx.getRelayState(), request, response);
+	}
+	
+	private void handleRedirectIfNeeded(TranslationResult userInfo, HttpSession session,
+			HttpServletResponse response) 
+			throws IOException, EopException
+	{
+		String redirectURL = userInfo.getRedirectURL();
+		if (redirectURL != null)
+		{
+			response.sendRedirect(redirectURL);
+			session.removeAttribute(SamlParseServlet.SESSION_SAML_CONTEXT);
+			throw new EopException();
+		}
 	}
 	
 	protected TranslationResult getUserInfo(SamlIdpProperties samlProperties, AuthnResponseProcessor processor,
@@ -215,14 +289,12 @@ public class IdpConsentDeciderServlet extends HttpServlet
 			throws EngineException
 	{
 		String profile = samlProperties.getValue(CommonIdPProperties.TRANSLATION_PROFILE);
-		boolean skipImport = samlProperties.getBooleanValue(CommonIdPProperties.SKIP_USERIMPORT);
-
 		LoginSession ae = InvocationContext.getCurrent().getLoginSession();
-		return idpEngine.obtainUserInformation(new EntityParam(ae.getEntityId()), 
+		return idpEngine.obtainUserInformationWithEnrichingImport(new EntityParam(ae.getEntityId()), 
 				processor.getChosenGroup(), profile, 
-				processor.getIdentityTarget(), "SAML2", binding,
+				processor.getIdentityTarget(), Optional.empty(), "SAML2", binding,
 				processor.isIdentityCreationAllowed(),
-				!skipImport);
+				samlProperties);
 	}
 
 	
@@ -253,10 +325,8 @@ public class IdpConsentDeciderServlet extends HttpServlet
 	
 	protected String getServiceUrl(SAMLAuthnContext samlCtx)
 	{
-		String serviceUrl = samlCtx.getRequestDocument().getAuthnRequest().getAssertionConsumerServiceURL();
-		if (serviceUrl == null)
-			serviceUrl = samlCtx.getSamlConfiguration().getReturnAddressForRequester(
-					samlCtx.getRequest().getIssuer());
+		String serviceUrl = samlCtx.getSamlConfiguration().getReturnAddressForRequester(
+					samlCtx.getRequest());
 		return serviceUrl;
 	}
 	
@@ -279,10 +349,10 @@ public class IdpConsentDeciderServlet extends HttpServlet
 		private ObjectFactory<IdpConsentDeciderServlet> factory;
 		
 		@Override
-		public IdpConsentDeciderServlet getInstance(String uiServletPath)
+		public IdpConsentDeciderServlet getInstance(String uiServletPath, String authenticationUIServletPath)
 		{
 			IdpConsentDeciderServlet ret = factory.getObject();
-			ret.init(uiServletPath);
+			ret.init(uiServletPath, authenticationUIServletPath);
 			return ret;
 		}
 	}

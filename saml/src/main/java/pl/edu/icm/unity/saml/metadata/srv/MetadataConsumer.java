@@ -1,10 +1,10 @@
 /*
- * Copyright (c) 2017 ICM Uniwersytet Warszawski All rights reserved.
+ * Copyright (c) 2017 Bixbit - Krzysztof Benedyczak All rights reserved.
  * See LICENCE.txt file for licensing information.
  */
 package pl.edu.icm.unity.saml.metadata.srv;
 
-import java.util.function.Consumer;
+import java.util.function.BiConsumer;
 
 import xmlbeans.org.oasis.saml2.metadata.EntitiesDescriptorDocument;
 
@@ -16,11 +16,11 @@ import xmlbeans.org.oasis.saml2.metadata.EntitiesDescriptorDocument;
 class MetadataConsumer
 {
 	final long refreshInterval;
-	final Consumer<EntitiesDescriptorDocument> consumer;
+	final BiConsumer<EntitiesDescriptorDocument, String> consumer;
 	final String id;
 
 	public MetadataConsumer(long refreshInterval,
-			Consumer<EntitiesDescriptorDocument> consumer, String id)
+			BiConsumer<EntitiesDescriptorDocument, String> consumer, String id)
 	{
 		this.refreshInterval = refreshInterval;
 		this.consumer = consumer;

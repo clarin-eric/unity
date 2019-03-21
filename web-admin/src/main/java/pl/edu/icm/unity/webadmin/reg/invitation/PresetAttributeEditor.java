@@ -6,6 +6,7 @@ package pl.edu.icm.unity.webadmin.reg.invitation;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import com.vaadin.ui.Component;
 import com.vaadin.ui.FormLayout;
@@ -16,8 +17,11 @@ import pl.edu.icm.unity.types.basic.AttributeType;
 import pl.edu.icm.unity.types.registration.AttributeRegistrationParam;
 import pl.edu.icm.unity.types.registration.invite.PrefilledEntry;
 import pl.edu.icm.unity.webui.common.FormValidationException;
+import pl.edu.icm.unity.webui.common.attributes.edit.AttributeEditContext;
+import pl.edu.icm.unity.webui.common.attributes.edit.FixedAttributeEditor;
+import pl.edu.icm.unity.webui.common.composite.CompositeLayoutAdapter;
+import pl.edu.icm.unity.webui.common.attributes.edit.AttributeEditContext.ConfirmationMode;
 import pl.edu.icm.unity.webui.common.attributes.AttributeHandlerRegistry;
-import pl.edu.icm.unity.webui.common.attributes.FixedAttributeEditor;
 
 /**
  * Editor of a prefilled invitation {@link Attribute}.
@@ -45,7 +49,7 @@ public class PresetAttributeEditor extends PresetEditorBase<Attribute>
 	}
 
 	@Override
-	protected Attribute getValueInternal() throws FormValidationException
+	protected Optional<Attribute> getValueInternal() throws FormValidationException
 	{
 		try
 		{
@@ -63,9 +67,16 @@ public class PresetAttributeEditor extends PresetEditorBase<Attribute>
 		wrapper.removeAllComponents();
 		selectedParam = formParams.get(position);
 		AttributeType at = attrTypes.get(selectedParam.getAttributeType());
+		
+		AttributeEditContext editContext = AttributeEditContext.builder()
+				.withConfirmationMode(ConfirmationMode.ADMIN).required()
+				.withAttributeType(at)
+				.withAttributeGroup(selectedParam.isUsingDynamicGroup() ? "/" : selectedParam.getGroup())
+				.build();
+		
 		fixedAttributeEditor = new FixedAttributeEditor(msg, attrHandlersRegistry, 
-				at, true, selectedParam.getGroup(), 
-				selectedParam.getAttributeType(), null, true, true, wrapper);
+			editContext, true, selectedParam.getAttributeType(), null);
+		new CompositeLayoutAdapter(wrapper, fixedAttributeEditor.getComponentsGroup());
 	}
 	
 	@Override

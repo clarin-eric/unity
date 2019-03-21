@@ -7,18 +7,21 @@ package pl.edu.icm.unity.oauth.as.token;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 import org.apache.logging.log4j.Logger;
 
 import com.nimbusds.oauth2.sdk.GrantType;
 import com.nimbusds.oauth2.sdk.Scope;
+import com.nimbusds.oauth2.sdk.client.ClientType;
 import com.nimbusds.openid.connect.sdk.claims.UserInfo;
 
 import pl.edu.icm.unity.base.utils.Log;
 import pl.edu.icm.unity.engine.api.authn.InvocationContext;
 import pl.edu.icm.unity.engine.api.authn.LoginSession;
 import pl.edu.icm.unity.engine.api.idp.CommonIdPProperties;
+import pl.edu.icm.unity.engine.api.idp.EntityInGroup;
 import pl.edu.icm.unity.engine.api.idp.IdPEngine;
 import pl.edu.icm.unity.engine.api.translation.out.TranslationResult;
 import pl.edu.icm.unity.exceptions.EngineException;
@@ -81,6 +84,13 @@ public class ClientCredentialsProcessor
 		internalToken.setClientId(loginSession.getEntityId());
 		internalToken.setClientUsername(client);
 		internalToken.setSubject(client);
+		
+		AttributeExt clientTypeA = attributes.get(OAuthSystemAttributesProvider.CLIENT_TYPE);
+		if (clientTypeA != null)
+			internalToken.setClientType(ClientType.valueOf(clientTypeA.getValues().get(0)));
+		else
+			internalToken.setClientType(ClientType.CONFIDENTIAL);
+		
 		internalToken.setTokenValidity(config.getIntValue(OAuthASProperties.ACCESS_TOKEN_VALIDITY));
 		int maxExtendedValidity = config.isSet(OAuthASProperties.MAX_EXTEND_ACCESS_TOKEN_VALIDITY) ?
 				config.getIntValue(OAuthASProperties.MAX_EXTEND_ACCESS_TOKEN_VALIDITY) : 0;
@@ -125,15 +135,19 @@ public class ClientCredentialsProcessor
 			throws EngineException
 	{
 		LoginSession ae = InvocationContext.getCurrent().getLoginSession();
-		boolean skipImport = config.getBooleanValue(CommonIdPProperties.SKIP_USERIMPORT);
-		TranslationResult translationResult = idpEngine.obtainUserInformation(new EntityParam(ae.getEntityId()), 
+		EntityParam clientEntity = new EntityParam(ae.getEntityId());
+		EntityInGroup clientWithGroup = new EntityInGroup(
+				config.getValue(OAuthASProperties.CLIENTS_GROUP), clientEntity);
+		TranslationResult translationResult = idpEngine.obtainUserInformationWithEnrichingImport(
+				clientEntity, 
 				usersGroup, 
 				config.getValue(CommonIdPProperties.TRANSLATION_PROFILE), 
 				client,
+				Optional.of(clientWithGroup),
 				"OAuth2", 
 				GrantType.CLIENT_CREDENTIALS.getValue(),
 				true,
-				!skipImport);
+				config);
 		return translationResult;
 	}
 	

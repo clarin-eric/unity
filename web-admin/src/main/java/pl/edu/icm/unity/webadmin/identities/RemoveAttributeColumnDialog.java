@@ -4,11 +4,13 @@
  */
 package pl.edu.icm.unity.webadmin.identities;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import com.vaadin.v7.ui.ComboBox;
+import com.vaadin.ui.ComboBox;
 import com.vaadin.ui.FormLayout;
 import com.vaadin.ui.Label;
 
@@ -28,7 +30,7 @@ public class RemoveAttributeColumnDialog extends AbstractDialog
 	private String currentGroup;
 	private Map<String, String> labelsToAttr;
 	
-	private ComboBox attributeType;
+	private ComboBox<String> attributeType;
 	
 	
 	public RemoveAttributeColumnDialog(UnityMessageSource msg, Set<String> alreadyUsedInRoot, 
@@ -39,7 +41,7 @@ public class RemoveAttributeColumnDialog extends AbstractDialog
 		this.alreadyUsedInRoot = alreadyUsedInRoot;
 		this.callback = callback;
 		this.currentGroup = currentGroup;
-		setSizeMode(SizeMode.SMALL);
+		setSizeEm(38, 18);
 	}
 
 	@Override
@@ -47,31 +49,45 @@ public class RemoveAttributeColumnDialog extends AbstractDialog
 	{
 		labelsToAttr = new HashMap<>();
 		Label info = new Label(msg.getMessage("RemoveAttributeColumnDialog.info"));
-		attributeType = new ComboBox(msg.getMessage("RemoveAttributeColumnDialog.attribute"));
+		attributeType = new ComboBox<>(msg.getMessage("RemoveAttributeColumnDialog.attribute"));
+		attributeType.setWidth(100, Unit.PERCENTAGE);
+		List<String> values = new ArrayList<>();
 		for (String at: alreadyUsedInRoot)
 		{
-			String key = at + "@/";
-			attributeType.addItem(key);
-			labelsToAttr.put(key, at + "@//" );
+			String value = toRootGroupLabel(at);
+			values.add(value);
+			labelsToAttr.put(value, at + "@/" );
 		}
 		for (String at: alreadyUsedInCurrent)
 		{
-			String key = at + "@" + currentGroup;
-			attributeType.addItem(key);
-			labelsToAttr.put(key, at + "@/" + currentGroup );
+			String value = toCurrentGroupLabel(at);
+			values.add(value);
+			labelsToAttr.put(value, at + "@/" + currentGroup );
 		}
-		if (alreadyUsedInRoot.size()>0)
-			attributeType.select(alreadyUsedInRoot.iterator().next() + "@/");
-		else if (alreadyUsedInCurrent.size()>0)
-			attributeType.select(alreadyUsedInCurrent.iterator().next() + "@" + currentGroup);
+		attributeType.setItems(values);
+		if (alreadyUsedInRoot.size() > 0)
+			attributeType.setSelectedItem(toRootGroupLabel(alreadyUsedInRoot.iterator().next()));
+		else if (alreadyUsedInCurrent.size() > 0)
+			attributeType.setSelectedItem(toCurrentGroupLabel(alreadyUsedInCurrent.iterator().next()));
 
-		attributeType.setNullSelectionAllowed(false);
+		attributeType.setEmptySelectionAllowed(false);
 		FormLayout main = new CompactFormLayout();
 		main.addComponents(info, attributeType);
 		main.setSizeFull();
 		return main;
 	}
 
+	private String toCurrentGroupLabel(String attribute)
+	{
+		return attribute + "@" + currentGroup + " (current)";
+	}
+
+	private String toRootGroupLabel(String attribute)
+	{
+		return attribute + "@/ (fixed)";
+	}
+
+	
 	@Override
 	protected void onConfirm()
 	{

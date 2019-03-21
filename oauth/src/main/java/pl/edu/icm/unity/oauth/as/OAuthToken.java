@@ -7,9 +7,8 @@ package pl.edu.icm.unity.oauth.as;
 import java.io.IOException;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.fasterxml.jackson.core.JsonParseException;
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonMappingException;
+import com.nimbusds.oauth2.sdk.client.ClientType;
 
 import pl.edu.icm.unity.Constants;
 
@@ -39,6 +38,10 @@ public class OAuthToken
 	private String audience;
 	private String issuerUri;
 	
+	private String codeChallenge;
+	private String codeChallengeMethod;
+	private ClientType clientType;
+	
 	public OAuthToken()
 	{
 	}
@@ -66,12 +69,20 @@ public class OAuthToken
 		setRequestedScope(source.getRequestedScope());
 		setAudience(source.getAudience());
 		setIssuerUri(source.getIssuerUri());
+		setCodeChallenge(source.getCodeChallenge());
+		setCodeChallengeMethod(source.getCodeChallengeMethod());
+		setClientType(source.getClientType());
 	}
 	
 	public static OAuthToken getInstanceFromJson(byte[] json) 
-			throws JsonParseException, JsonMappingException, IOException
 	{
-		return Constants.MAPPER.readValue(json, OAuthToken.class);
+		try
+		{
+			return Constants.MAPPER.readValue(json, OAuthToken.class);
+		} catch (IOException e)
+		{
+			throw new IllegalArgumentException("Can not parse token's JSON", e);
+		}
 	}
 	
 	@JsonIgnore
@@ -269,5 +280,35 @@ public class OAuthToken
 	public void setIssuerUri(String issuerUri)
 	{
 		this.issuerUri = issuerUri;
+	}
+
+	public String getCodeChallenge()
+	{
+		return codeChallenge;
+	}
+
+	public void setCodeChallenge(String codeChallenge)
+	{
+		this.codeChallenge = codeChallenge;
+	}
+
+	public String getCodeChallengeMethod()
+	{
+		return codeChallengeMethod;
+	}
+
+	public void setCodeChallengeMethod(String codeChallengeMethod)
+	{
+		this.codeChallengeMethod = codeChallengeMethod;
+	}
+
+	public ClientType getClientType()
+	{
+		return clientType == null ? ClientType.CONFIDENTIAL : clientType;
+	}
+
+	public void setClientType(ClientType clientType)
+	{
+		this.clientType = clientType;
 	}
 }

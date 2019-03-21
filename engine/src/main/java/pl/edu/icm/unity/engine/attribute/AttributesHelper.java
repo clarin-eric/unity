@@ -35,6 +35,7 @@ import pl.edu.icm.unity.stdext.attr.StringAttribute;
 import pl.edu.icm.unity.store.api.AttributeDAO;
 import pl.edu.icm.unity.store.api.AttributeTypeDAO;
 import pl.edu.icm.unity.store.api.EntityDAO;
+import pl.edu.icm.unity.store.api.GroupDAO;
 import pl.edu.icm.unity.store.api.IdentityDAO;
 import pl.edu.icm.unity.store.api.MembershipDAO;
 import pl.edu.icm.unity.store.api.generic.AttributeClassDB;
@@ -69,6 +70,7 @@ public class AttributesHelper
 	private MembershipDAO membershipDAO;
 	private AttributeStatementProcessor statementsHelper;
 	private AttributeTypeHelper atHelper;
+	private GroupDAO groupDAO;
 	
 	
 	
@@ -78,7 +80,8 @@ public class AttributesHelper
 			EntityDAO entityDAO, EntityResolver idResolver,
 			AttributeTypeDAO attributeTypeDAO, AttributeDAO attributeDAO,
 			MembershipDAO membershipDAO, AttributeStatementProcessor statementsHelper,
-			AttributeTypeHelper atHelper, AttributeClassUtil acUtil)
+			AttributeTypeHelper atHelper, AttributeClassUtil acUtil,
+			GroupDAO groupDAO)
 	{
 		this.atMetaProvidersRegistry = atMetaProvidersRegistry;
 		this.acDB = acDB;
@@ -91,6 +94,7 @@ public class AttributesHelper
 		this.statementsHelper = statementsHelper;
 		this.atHelper = atHelper;
 		this.acUtil = acUtil;
+		this.groupDAO = groupDAO;
 	}
 
 	/**
@@ -123,7 +127,8 @@ public class AttributesHelper
 		for (String group: groups)
 		{
 			Map<String, AttributeExt> inGroup = statementsHelper.getEffectiveAttributes(identities, 
-					group, attributeTypeName, allGroups, directAttributesByGroup, allClasses);
+					group, attributeTypeName, allGroups, directAttributesByGroup, allClasses,
+					groupDAO::get, attributeTypeDAO::get);
 			ret.put(group, inGroup);
 		}
 		return ret;
@@ -218,7 +223,7 @@ public class AttributesHelper
 			return null;
 		long entityId = idResolver.getEntityId(entity);
 		Collection<AttributeExt> ret = getAllAttributesInternal(entityId, false, 
-				group, at.getName(), false);
+				group, at.getName(), true);
 		return ret.size() == 1 ? ret.iterator().next() : null; 
 	}
 
@@ -274,7 +279,7 @@ public class AttributesHelper
 	{
 		Map<String, Map<String, AttributeExt>> asMap = getAllAttributesAsMap(entityId, groupPath, effective, 
 				attributeTypeName);
-		List<AttributeExt> ret = new ArrayList<AttributeExt>();
+		List<AttributeExt> ret = new ArrayList<>();
 		for (Map<String, AttributeExt> entry: asMap.values())
 			ret.addAll(entry.values());
 		return ret;
@@ -387,7 +392,7 @@ public class AttributesHelper
 	{
 		@SuppressWarnings("rawtypes")
 		AttributeValueSyntax syntax = atHelper.getUnconfiguredSyntax(attribute.getValueSyntax());
-		if (!syntax.isVerifiable() || honorInitialConfirmation)
+		if (!syntax.isEmailVerifiable() || honorInitialConfirmation)
 			return;
 		
 		if (!update)
@@ -452,17 +457,29 @@ public class AttributesHelper
 		}
 	}
 	
-	private <T extends VerifiableElement> void setUnconfirmed(Attribute attribute, AttributeValueSyntax<T> syntax)
+	public static <T extends VerifiableElement> void setUnconfirmed(Attribute attribute, AttributeValueSyntax<T> syntax)
+	{
+		setConfirmationStatus(attribute, syntax, false);
+	}
+
+	public static <T extends VerifiableElement> void setConfirmed(Attribute attribute, AttributeValueSyntax<T> syntax)
+	{
+		setConfirmationStatus(attribute, syntax, true);
+	}
+
+	private static <T extends VerifiableElement> void setConfirmationStatus(Attribute attribute, 
+			AttributeValueSyntax<T> syntax, boolean confirmed)
 	{
 		List<String> updated = new ArrayList<>(attribute.getValues().size());
 		for (String v : attribute.getValues())
 		{
 			T val = syntax.convertFromString(v);
-			val.setConfirmationInfo(new ConfirmationInfo(0));
+			val.setConfirmationInfo(new ConfirmationInfo(confirmed));
 			updated.add(syntax.convertToString(val));
 		}
 		attribute.setValues(updated);
 	}
+
 	
 	/**
 	 * Checks if the given set of attributes fulfills rules of ACs of a specified group 

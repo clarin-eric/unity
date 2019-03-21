@@ -13,7 +13,9 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
+import org.mockito.internal.util.collections.Sets;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
 
@@ -24,6 +26,9 @@ import pl.edu.icm.unity.base.msgtemplates.reg.RejectRegistrationTemplateDef;
 import pl.edu.icm.unity.engine.api.EnquiryManagement;
 import pl.edu.icm.unity.engine.api.authn.InvocationContext;
 import pl.edu.icm.unity.engine.api.authn.LoginSession;
+import pl.edu.icm.unity.engine.api.bulk.BulkGroupQueryService;
+import pl.edu.icm.unity.engine.api.bulk.GroupMembershipData;
+import pl.edu.icm.unity.engine.api.bulk.GroupMembershipInfo;
 import pl.edu.icm.unity.engine.api.endpoint.SharedEndpointManagement;
 import pl.edu.icm.unity.engine.api.identity.EntityResolver;
 import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
@@ -31,15 +36,15 @@ import pl.edu.icm.unity.engine.api.notification.NotificationProducer;
 import pl.edu.icm.unity.engine.api.registration.FormAutomationSupport;
 import pl.edu.icm.unity.engine.api.registration.PublicRegistrationURLSupport;
 import pl.edu.icm.unity.engine.attribute.AttributesHelper;
-import pl.edu.icm.unity.engine.authz.AuthorizationManager;
+import pl.edu.icm.unity.engine.authz.InternalAuthorizationManager;
 import pl.edu.icm.unity.engine.authz.AuthzCapability;
 import pl.edu.icm.unity.engine.events.InvocationEventProducer;
 import pl.edu.icm.unity.engine.forms.BaseFormValidator;
 import pl.edu.icm.unity.engine.forms.RegistrationConfirmationSupport;
+import pl.edu.icm.unity.engine.forms.RegistrationConfirmationSupport.Phase;
 import pl.edu.icm.unity.exceptions.EngineException;
 import pl.edu.icm.unity.exceptions.WrongArgumentException;
 import pl.edu.icm.unity.stdext.attr.StringAttribute;
-import pl.edu.icm.unity.store.api.MembershipDAO;
 import pl.edu.icm.unity.store.api.generic.EnquiryFormDB;
 import pl.edu.icm.unity.store.api.generic.EnquiryResponseDB;
 import pl.edu.icm.unity.store.api.tx.Transactional;
@@ -56,6 +61,7 @@ import pl.edu.icm.unity.types.registration.EnquiryResponseState;
 import pl.edu.icm.unity.types.registration.RegistrationContext;
 import pl.edu.icm.unity.types.registration.RegistrationRequestAction;
 import pl.edu.icm.unity.types.registration.RegistrationRequestStatus;
+import pl.edu.icm.unity.types.registration.invite.InvitationParam.InvitationType;
 
 /**
  * Implementation of the enquiry management API.
@@ -72,26 +78,28 @@ public class EnquiryManagementImpl implements EnquiryManagement
 	private NotificationProducer notificationProducer;
 	private RegistrationConfirmationSupport confirmationsSupport;
 	private UnityMessageSource msg;
-	private AuthorizationManager authz;
+	private InternalAuthorizationManager authz;
 	private BaseFormValidator baseFormValidator;
-	private EnquiryResponseValidator enquiryResponseValidator;
+	private EnquiryResponsePreprocessor enquiryResponseValidator;
 	private SharedEndpointManagement sharedEndpointMan;
 	private TransactionalRunner tx;
 	private SharedEnquiryManagment internalManagment;
 	private EntityResolver identitiesResolver;
 	private AttributesHelper dbAttributes;
-	private MembershipDAO dbShared;
+	private BulkGroupQueryService bulkService;
 	
 	@Autowired
 	public EnquiryManagementImpl(EnquiryFormDB enquiryFormDB, EnquiryResponseDB requestDB,
 			NotificationProducer notificationProducer,
 			RegistrationConfirmationSupport confirmationsSupport,
-			UnityMessageSource msg, AuthorizationManager authz,
+			UnityMessageSource msg, InternalAuthorizationManager authz,
 			BaseFormValidator baseFormValidator,
-			EnquiryResponseValidator enquiryResponseValidator,
+			EnquiryResponsePreprocessor enquiryResponseValidator,
 			SharedEndpointManagement sharedEndpointMan, TransactionalRunner tx,
 			SharedEnquiryManagment internalManagment, EntityResolver identitiesResolver,
-			AttributesHelper dbAttributes, MembershipDAO dbShared)
+			AttributesHelper dbAttributes,
+			@Qualifier("insecure")
+			BulkGroupQueryService bulkService)
 	{
 		this.enquiryFormDB = enquiryFormDB;
 		this.requestDB = requestDB;
@@ -106,7 +114,7 @@ public class EnquiryManagementImpl implements EnquiryManagement
 		this.internalManagment = internalManagment;
 		this.identitiesResolver = identitiesResolver;
 		this.dbAttributes = dbAttributes;
-		this.dbShared = dbShared;
+		this.bulkService = bulkService;
 	}
 
 	@Transactional
@@ -127,7 +135,7 @@ public class EnquiryManagementImpl implements EnquiryManagement
 		EnquiryForm form = enquiryFormDB.get(enquiryId);
 		EnquiryFormNotifications notificationsCfg = form.getNotificationsConfiguration();
 		
-		if (notificationsCfg.getChannel() != null && notificationsCfg.getEnquiryToFillTemplate() != null)
+		if (notificationsCfg.getEnquiryToFillTemplate() != null)
 		{
 
 			Map<String, String> params = new HashMap<>();
@@ -135,13 +143,19 @@ public class EnquiryManagementImpl implements EnquiryManagement
 			params.put(NewEnquiryTemplateDef.URL, 
 					PublicRegistrationURLSupport.getWellknownEnquiryLink(enquiryId, sharedEndpointMan));
 			
-			for (String group: form.getTargetGroups())
-				notificationProducer.sendNotificationToGroup(
-					group, 
-					notificationsCfg.getChannel(), 
-					notificationsCfg.getEnquiryToFillTemplate(),
-					params,
-					msg.getDefaultLocaleCode());
+			
+			GroupMembershipData bulkMembershipData = bulkService.getBulkMembershipData("/");
+			Map<Long, GroupMembershipInfo> membershipInfo = bulkService.getMembershipInfo(bulkMembershipData);
+			
+			for (GroupMembershipInfo info : membershipInfo.values())
+			{
+				if (info.relevantEnquiryForm.contains(form.getName()))
+				{
+					notificationProducer.sendNotification(new EntityParam(info.entityInfo.getId()),
+							notificationsCfg.getEnquiryToFillTemplate(), params,
+							msg.getDefaultLocaleCode(), null, false);
+				}
+			}
 		}
 	}
 	
@@ -155,13 +169,17 @@ public class EnquiryManagementImpl implements EnquiryManagement
 	
 	@Transactional
 	@Override
-	public void updateEnquiry(EnquiryForm updatedForm, boolean ignoreRequests) throws EngineException
+	public void updateEnquiry(EnquiryForm updatedForm, boolean ignoreRequestsAndInvitations)
+			throws EngineException
 	{
 		authz.checkAuthorization(AuthzCapability.maintenance);
 		validateFormContents(updatedForm);
 		String formId = updatedForm.getName();
-		if (!ignoreRequests)
+		if (!ignoreRequestsAndInvitations)
+		{
 			internalManagment.validateIfHasPendingRequests(formId, requestDB);
+			internalManagment.validateIfHasInvitations(formId, InvitationType.ENQUIRY);
+		}
 		enquiryFormDB.update(updatedForm);
 	}
 	
@@ -183,7 +201,7 @@ public class EnquiryManagementImpl implements EnquiryManagement
 		responseFull.setRequestId(UUID.randomUUID().toString());
 		responseFull.setTimestamp(new Date());
 		responseFull.setRegistrationContext(context);
-		responseFull.setEntityId(InvocationContext.getCurrent().getLoginSession().getEntityId());
+		responseFull.setEntityId(getEntity(response.getFormId(), response.getRegistrationCode()));
 		
 		EnquiryForm form = recordRequestAndReturnForm(responseFull);
 		sendNotificationOnNewResponse(form, response);
@@ -191,14 +209,47 @@ public class EnquiryManagementImpl implements EnquiryManagement
 		
 		Long entityId = accepted ? responseFull.getEntityId() : null;
 		tx.runInTransactionThrowing(() -> {
-			confirmationsSupport.sendAttributeConfirmationRequest(responseFull, form, entityId);
-			confirmationsSupport.sendIdentityConfirmationRequest(responseFull, form, entityId);
+			confirmationsSupport.sendAttributeConfirmationRequest(responseFull, form, entityId,
+					Phase.ON_SUBMIT);
+			confirmationsSupport.sendIdentityConfirmationRequest(responseFull, form, entityId,
+					Phase.ON_SUBMIT);
 		});
 		
 		return responseFull.getRequestId();
 	}
+
+	private long getEntity(String formId, String code) throws EngineException
+	{
+		if (code == null)
+		{
+			return getLoggedEntity();
+		} else
+		{
+			return getEntityFromInvitation(formId, code);
+		}
+	}
+
+	private Long getLoggedEntity()
+	{
+		Long entityId = null;
+		try
+		{
+			entityId = InvocationContext.getCurrent().getLoginSession().getEntityId();
+		} catch (Exception e)
+		{
+			throw new IllegalStateException("Can not get currently logged user");
+		}
+		return entityId;
+	}
 	
-	
+	private Long getEntityFromInvitation(String formId, String code) throws EngineException
+	{
+
+		return tx.runInTransactionRetThrowing(() -> {
+			return enquiryResponseValidator.getEntityFromInvitationAndValidateCode(formId, code);
+		});
+	}
+
 	@Override
 	@Transactional
 	public void processEnquiryResponse(String id, EnquiryResponse finalRequest,
@@ -240,7 +291,7 @@ public class EnquiryManagementImpl implements EnquiryManagement
 			AdminComment publicComment, AdminComment internalComment) 
 			throws EngineException
 	{
-		enquiryResponseValidator.validateSubmittedRequest(form, currentRequest.getRequest(), false);
+		enquiryResponseValidator.validateSubmittedResponse(form, currentRequest.getRequest(), false);
 		requestDB.update(currentRequest);
 		internalManagment.sendProcessingNotification(form, 
 				form.getNotificationsConfiguration().getUpdatedTemplate(),
@@ -251,10 +302,19 @@ public class EnquiryManagementImpl implements EnquiryManagement
 	{
 		return tx.runInTransactionRetThrowing(() -> {
 			EnquiryForm form = enquiryFormDB.get(responseFull.getRequest().getFormId());
-			enquiryResponseValidator.validateSubmittedRequest(form, responseFull.getRequest(), true);
+			enquiryResponseValidator.validateSubmittedResponse(form, responseFull.getRequest(), true);
+			
+			boolean isSticky = form.getType().equals(EnquiryType.STICKY);
+			if (isSticky)
+			{
+				removeAllPendingRequestsOfForm(form.getName(), new EntityParam(responseFull.getEntityId()));
+			}
 			requestDB.create(responseFull);
-			addToAttribute(responseFull.getEntityId(), EnquiryAttributeTypesProvider.FILLED_ENQUIRES, 
-					form.getName());
+			if (!isSticky)
+			{
+				addToAttribute(responseFull.getEntityId(),
+						EnquiryAttributeTypesProvider.FILLED_ENQUIRES, form.getName());
+			}
 			return form;
 		});
 	}
@@ -262,7 +322,7 @@ public class EnquiryManagementImpl implements EnquiryManagement
 	private void sendNotificationOnNewResponse(EnquiryForm form, EnquiryResponse response) throws EngineException
 	{
 		EnquiryFormNotifications notificationsCfg = form.getNotificationsConfiguration();
-		if (notificationsCfg.getChannel() != null && notificationsCfg.getSubmittedTemplate() != null
+		if (notificationsCfg.getSubmittedTemplate() != null
 				&& notificationsCfg.getAdminsNotificationGroup() != null)
 		{
 			Map<String, String> params = new HashMap<>();
@@ -271,7 +331,6 @@ public class EnquiryManagementImpl implements EnquiryManagement
 			params.put(EnquiryFilledTemplateDef.USER, loginSession.getEntityLabel());
 			notificationProducer.sendNotificationToGroup(
 					notificationsCfg.getAdminsNotificationGroup(), 
-					notificationsCfg.getChannel(), 
 					notificationsCfg.getSubmittedTemplate(),
 					params,
 					msg.getDefaultLocaleCode());
@@ -281,8 +340,6 @@ public class EnquiryManagementImpl implements EnquiryManagement
 	private boolean tryAutoProcess(EnquiryForm form, EnquiryResponseState requestFull, 
 			RegistrationContext context) throws EngineException
 	{
-		if (!context.tryAutoAccept)
-			return false;
 		return tx.runInTransactionRetThrowing(() -> {
 			return internalManagment.autoProcessEnquiry(form, requestFull, 
 						"Automatic processing of the request  " + 
@@ -311,6 +368,18 @@ public class EnquiryManagementImpl implements EnquiryManagement
 			throw new WrongArgumentException("Target groups must be set in the form.");
 		if (form.getType() == null)
 			throw new WrongArgumentException("Form type must be set.");
+		if (form.getType().equals(EnquiryType.STICKY))
+		{
+			if (!form.getIdentityParams().isEmpty())
+			{
+				throw new WrongArgumentException("Identity params in sticky enquiry forms must be empty");
+			}
+			
+			if (!form.getCredentialParams().isEmpty())
+			{
+				throw new WrongArgumentException("Credential params in sticky enquiry forms must be empty");
+			}
+		}	
 	}
 	
 	@Transactional
@@ -323,36 +392,72 @@ public class EnquiryManagementImpl implements EnquiryManagement
 
 	@Transactional
 	@Override
+	public EnquiryResponseState getEnquiryResponse(String requestId)
+	{
+		authz.checkAuthorizationRT("/", AuthzCapability.read);
+		return requestDB.get(requestId);
+	}
+	
+	@Transactional
+	@Override
 	public List<EnquiryForm> getPendingEnquires(EntityParam entity) throws EngineException
 	{
 		long entityId = identitiesResolver.getEntityId(entity);
-		authz.checkAuthorization(authz.isSelf(entityId), AuthzCapability.read);
+		authz.checkAuthorization(authz.isSelf(entityId), AuthzCapability.readInfo);
 		
 		List<EnquiryForm> allForms = enquiryFormDB.getAll();
 		
 		Set<String> ignored = getEnquiresFromAttribute(entityId, 
 				EnquiryAttributeTypesProvider.FILLED_ENQUIRES);
 		ignored.addAll(getEnquiresFromAttribute(entityId, EnquiryAttributeTypesProvider.IGNORED_ENQUIRES));
-		
-		Set<String> allGroups = dbShared.getEntityMembershipSimple(entityId);
-		
+	
+		GroupMembershipInfo entityInfo = getMemebershipInfo(entityId);
+	
 		List<EnquiryForm> ret = new ArrayList<>();
-		for (EnquiryForm form: allForms)
+		if (entityInfo == null)
+			return ret;
+		for (EnquiryForm form : allForms)
 		{
 			if (ignored.contains(form.getName()))
 				continue;
-			if (isInTargetGroups(allGroups, form.getTargetGroups()))
+			if (form.getType().equals(EnquiryType.STICKY))
+				continue;
+			if (form.isByInvitationOnly())
+				continue;
+			if (entityInfo.relevantEnquiryForm.contains(form.getName()))
 				ret.add(form);
 		}
 		return ret;
 	}
-
-	private boolean isInTargetGroups(Set<String> groups, String[] targetGroups)
+	
+	@Transactional
+	@Override
+	public List<EnquiryForm> getAvailableStickyEnquires(EntityParam entity) throws EngineException
 	{
-		for (String targetGroup: targetGroups)
-			if (groups.contains(targetGroup))
-				return true;
-		return false;
+		long entityId = identitiesResolver.getEntityId(entity);
+		authz.checkAuthorization(authz.isSelf(entityId), AuthzCapability.readInfo);
+		List<EnquiryForm> allForms = enquiryFormDB.getAll();
+		GroupMembershipInfo entityInfo = getMemebershipInfo(entityId);
+		List<EnquiryForm> ret = new ArrayList<>();
+		if (entityInfo == null)
+			return ret;
+		for (EnquiryForm form : allForms)
+		{
+			if (form.isByInvitationOnly())
+				continue;
+			
+			if (form.getType().equals(EnquiryType.STICKY) &&
+					entityInfo.relevantEnquiryForm.contains(form.getName()))
+				ret.add(form);
+		}
+		return ret;
+	}
+		
+	private GroupMembershipInfo getMemebershipInfo(Long entity) throws EngineException
+	{
+		GroupMembershipData bulkMembershipData = bulkService.getBulkMembershipData("/", Sets.newSet(entity));
+		Map<Long, GroupMembershipInfo> membershipInfo = bulkService.getMembershipInfo(bulkMembershipData);	
+		return membershipInfo.get(entity);	
 	}
 	
 	private Set<String> getEnquiresFromAttribute(long entityId, String attributeName) 
@@ -376,6 +481,20 @@ public class EnquiryManagementImpl implements EnquiryManagement
 		dbAttributes.addAttribute(entityId, attribute, true, false);
 	}
 	
+	private void removeAllPendingRequestsOfForm(String enquiryId, EntityParam entity)
+	{
+		for (EnquiryResponseState en : requestDB.getAll())
+		{
+			if (!en.getStatus().equals(RegistrationRequestStatus.pending))
+				continue;
+			EnquiryResponse res = en.getRequest();
+			if (res.getFormId().equals(enquiryId))
+			{
+				requestDB.delete(en.getRequestId());
+			}
+		}
+	}
+	
 	@Transactional
 	@Override
 	public void ignoreEnquiry(String enquiryId, EntityParam entity) throws EngineException
@@ -383,9 +502,15 @@ public class EnquiryManagementImpl implements EnquiryManagement
 		long entityId = identitiesResolver.getEntityId(entity);
 		authz.checkAuthorization(authz.isSelf(entityId), AuthzCapability.read);
 		EnquiryForm form = enquiryFormDB.get(enquiryId);
-		if (form.getType() == EnquiryType.REQUESTED_MANDATORY)
-			throw new WrongArgumentException("The mandatory enquiry can not be marked as ignored");
-		addToAttribute(entityId, EnquiryAttributeTypesProvider.IGNORED_ENQUIRES, enquiryId);
+		if (form.getType().equals(EnquiryType.STICKY))
+		{
+			removeAllPendingRequestsOfForm(enquiryId, entity);
+		} else
+		{
+			if (form.getType() == EnquiryType.REQUESTED_MANDATORY)
+				throw new WrongArgumentException("The mandatory enquiry can not be marked as ignored");
+			addToAttribute(entityId, EnquiryAttributeTypesProvider.IGNORED_ENQUIRES, enquiryId);
+		}
 	}
 
 	@Transactional
@@ -393,5 +518,24 @@ public class EnquiryManagementImpl implements EnquiryManagement
 	public FormAutomationSupport getFormAutomationSupport(EnquiryForm form)
 	{
 		return confirmationsSupport.getEnquiryFormAutomationSupport(form);
+	}
+
+	@Transactional
+	@Override
+	public void removePendingStickyRequest(String form, EntityParam entity) throws EngineException
+	{
+		long entityId = identitiesResolver.getEntityId(entity);
+		authz.checkAuthorization(authz.isSelf(entityId), AuthzCapability.read);
+		EnquiryForm eform = enquiryFormDB.get(form);
+		if (!eform.getType().equals(EnquiryType.STICKY))
+			throw new WrongArgumentException("Only sticky enquiry request can be removed");
+		removeAllPendingRequestsOfForm(form, entity);		
+	}
+
+	@Transactional
+	@Override
+	public EnquiryForm getEnquiry(String id) throws EngineException
+	{
+		return enquiryFormDB.get(id);
 	}
 }

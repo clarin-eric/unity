@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014 ICM Uniwersytet Warszawski All rights reserved.
+ * Copyright (c) 2017 Bixbit - Krzysztof Benedyczak All rights reserved.
  * See LICENCE.txt file for licensing information.
  */
 package pl.edu.icm.unity.engine.idp;
@@ -11,9 +11,9 @@ import org.springframework.stereotype.Component;
 import pl.edu.icm.unity.engine.api.AttributesManagement;
 import pl.edu.icm.unity.engine.api.EntityManagement;
 import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
+import pl.edu.icm.unity.engine.api.translation.out.OutputTranslationActionsRegistry;
 import pl.edu.icm.unity.engine.api.userimport.UserImportSerivce;
 import pl.edu.icm.unity.engine.attribute.AttributeValueConverter;
-import pl.edu.icm.unity.engine.translation.out.OutputTranslationActionsRegistry;
 import pl.edu.icm.unity.engine.translation.out.OutputTranslationEngine;
 import pl.edu.icm.unity.engine.translation.out.OutputTranslationProfileRepository;
 
@@ -41,7 +41,9 @@ public class IdPEngineImplNoAuthz extends IdPEngineImplBase
 			AttributeValueConverter attrValueConverter,
 			UnityMessageSource msg)
 	{
-		super(attributesMan, identitiesMan, outputProfileRepo, translationEngine, 
-				userImportService, actionsRegistry, attrValueConverter, msg);
+		super(attributesMan, attributesMan, identitiesMan, userImportService, 
+				new OutputProfileExecutor(outputProfileRepo, 
+						translationEngine, actionsRegistry, 
+						attrValueConverter, msg));
 	}
 }

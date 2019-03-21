@@ -28,6 +28,12 @@ public class ScheduledProcessingRuleParam extends TranslationRule
 		this.cronExpression = cronExpression;
 	}
 
+	public ScheduledProcessingRuleParam(ScheduledProcessingRule src)
+	{
+		super(src);
+		this.cronExpression = src.cronExpression;
+	}
+
 	@JsonCreator
 	public ScheduledProcessingRuleParam(ObjectNode root)
 	{
@@ -37,6 +43,11 @@ public class ScheduledProcessingRuleParam extends TranslationRule
 	public String getCronExpression()
 	{
 		return cronExpression;
+	}
+	
+	public void setCronExpression(String cronExpression)
+	{
+		this.cronExpression = cronExpression;
 	}
 
 	@JsonValue

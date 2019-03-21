@@ -23,12 +23,13 @@ import pl.edu.icm.unity.engine.api.authn.LoginSession;
 import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
 import pl.edu.icm.unity.engine.api.notification.NotificationProducer;
 import pl.edu.icm.unity.engine.api.registration.FormAutomationSupport;
-import pl.edu.icm.unity.engine.authz.AuthorizationManager;
+import pl.edu.icm.unity.engine.authz.InternalAuthorizationManager;
 import pl.edu.icm.unity.engine.authz.AuthzCapability;
 import pl.edu.icm.unity.engine.credential.CredentialReqRepository;
 import pl.edu.icm.unity.engine.events.InvocationEventProducer;
 import pl.edu.icm.unity.engine.forms.BaseFormValidator;
 import pl.edu.icm.unity.engine.forms.RegistrationConfirmationSupport;
+import pl.edu.icm.unity.engine.forms.RegistrationConfirmationSupport.Phase;
 import pl.edu.icm.unity.exceptions.EngineException;
 import pl.edu.icm.unity.store.api.generic.RegistrationFormDB;
 import pl.edu.icm.unity.store.api.generic.RegistrationRequestDB;
@@ -36,12 +37,14 @@ import pl.edu.icm.unity.store.api.tx.Transactional;
 import pl.edu.icm.unity.store.api.tx.TransactionalRunner;
 import pl.edu.icm.unity.types.registration.AdminComment;
 import pl.edu.icm.unity.types.registration.RegistrationContext;
+import pl.edu.icm.unity.types.registration.RegistrationContext.TriggeringMode;
 import pl.edu.icm.unity.types.registration.RegistrationForm;
 import pl.edu.icm.unity.types.registration.RegistrationFormNotifications;
 import pl.edu.icm.unity.types.registration.RegistrationRequest;
 import pl.edu.icm.unity.types.registration.RegistrationRequestAction;
 import pl.edu.icm.unity.types.registration.RegistrationRequestState;
 import pl.edu.icm.unity.types.registration.RegistrationRequestStatus;
+import pl.edu.icm.unity.types.registration.invite.InvitationParam.InvitationType;
 
 /**
  * Implementation of registrations subsystem.
@@ -57,23 +60,23 @@ public class RegistrationsManagementImpl implements RegistrationsManagement
 	private RegistrationRequestDB requestDB;
 	private CredentialReqRepository credentialReqRepository;
 	private RegistrationConfirmationSupport confirmationsSupport;
-	private AuthorizationManager authz;
+	private InternalAuthorizationManager authz;
 	private NotificationProducer notificationProducer;
 
 	private SharedRegistrationManagment internalManagment;
 	private UnityMessageSource msg;
 	private TransactionalRunner tx;
-	private RegistrationRequestValidator registrationRequestValidator;
+	private RegistrationRequestPreprocessor registrationRequestValidator;
 	private BaseFormValidator baseValidator;
 
 	@Autowired
 	public RegistrationsManagementImpl(RegistrationFormDB formsDB,
 			RegistrationRequestDB requestDB, CredentialReqRepository credentialReqDB,
 			RegistrationConfirmationSupport confirmationsSupport,
-			AuthorizationManager authz, NotificationProducer notificationProducer,
+			InternalAuthorizationManager authz, NotificationProducer notificationProducer,
 			SharedRegistrationManagment internalManagment, UnityMessageSource msg,
 			TransactionalRunner tx,
-			RegistrationRequestValidator registrationRequestValidator,
+			RegistrationRequestPreprocessor registrationRequestValidator,
 			BaseFormValidator baseValidator)
 	{
 		this.formsDB = formsDB;
@@ -108,14 +111,17 @@ public class RegistrationsManagementImpl implements RegistrationsManagement
 
 	@Override
 	@Transactional
-	public void updateForm(RegistrationForm updatedForm, boolean ignoreRequests)
+	public void updateForm(RegistrationForm updatedForm, boolean ignoreRequestsAndInvitations)
 			throws EngineException
 	{
 		authz.checkAuthorization(AuthzCapability.maintenance);
 		validateFormContents(updatedForm);
 		String formId = updatedForm.getName();
-		if (!ignoreRequests)
+		if (!ignoreRequestsAndInvitations)
+		{
 			internalManagment.validateIfHasPendingRequests(formId, requestDB);
+			internalManagment.validateIfHasInvitations(formId, InvitationType.REGISTRATION);
+		}
 		formsDB.update(updatedForm);
 	}
 
@@ -131,6 +137,7 @@ public class RegistrationsManagementImpl implements RegistrationsManagement
 	public String submitRegistrationRequest(RegistrationRequest request, final RegistrationContext context) 
 			throws EngineException
 	{
+		authz.checkAuthorization(AuthzCapability.maintenance);
 		RegistrationRequestState requestFull = new RegistrationRequestState();
 		requestFull.setStatus(RegistrationRequestStatus.pending);
 		requestFull.setRequest(request);
@@ -142,11 +149,14 @@ public class RegistrationsManagementImpl implements RegistrationsManagement
 		
 		sendNotification(form, requestFull);
 		
+		
 		Long entityId = tryAutoProcess(form, requestFull, context);
 		
 		tx.runInTransactionThrowing(() -> {
-			confirmationsSupport.sendAttributeConfirmationRequest(requestFull, entityId, form);
-			confirmationsSupport.sendIdentityConfirmationRequest(requestFull, entityId, form);	
+			confirmationsSupport.sendAttributeConfirmationRequest(requestFull, entityId, form,
+					Phase.ON_SUBMIT);
+			confirmationsSupport.sendIdentityConfirmationRequest(requestFull, entityId, form,
+					Phase.ON_SUBMIT);	
 		});
 		
 		return requestFull.getRequestId();
@@ -158,24 +168,37 @@ public class RegistrationsManagementImpl implements RegistrationsManagement
 		return tx.runInTransactionRetThrowing(() -> {
 			RegistrationRequest request = requestFull.getRequest();
 			RegistrationForm form = formsDB.get(request.getFormId());
-			registrationRequestValidator.validateSubmittedRequest(form, request, true);
+			if (isCredentialsValidationSkipped(requestFull.getRegistrationContext().triggeringMode))
+				registrationRequestValidator.validateSubmittedRequestExceptCredentials(form, request, true);
+			else
+				registrationRequestValidator.validateSubmittedRequest(form, request, true);
 			requestDB.create(requestFull);
 			return form;
 		});
+	}
+	
+	/**
+	 * When user enters the registration form after selecting an option of
+	 * remote authentication to fill out a form, the credentials are filtered
+	 * out by default and not available to the user. This behavior is fixed, 
+	 * meaning no configuration option to control this.
+	 */
+	private boolean isCredentialsValidationSkipped(TriggeringMode mode)
+	{
+		return mode == TriggeringMode.afterRemoteLoginFromRegistrationForm;
 	}
 
 	private void sendNotification(RegistrationForm form, RegistrationRequestState requestFull) 
 			throws EngineException
 	{
 		RegistrationFormNotifications notificationsCfg = form.getNotificationsConfiguration();
-		if (notificationsCfg.getChannel() != null && notificationsCfg.getSubmittedTemplate() != null
+		if (notificationsCfg.getSubmittedTemplate() != null
 				&& notificationsCfg.getAdminsNotificationGroup() != null)
 		{
 			Map<String, String> params = internalManagment.getBaseNotificationParams(
 					form.getName(), requestFull.getRequestId()); 
 			notificationProducer.sendNotificationToGroup(
 					notificationsCfg.getAdminsNotificationGroup(), 
-					notificationsCfg.getChannel(), 
 					notificationsCfg.getSubmittedTemplate(),
 					params,
 					msg.getDefaultLocaleCode());
@@ -185,8 +208,6 @@ public class RegistrationsManagementImpl implements RegistrationsManagement
 	private Long tryAutoProcess(RegistrationForm form, RegistrationRequestState requestFull, 
 			RegistrationContext context) throws EngineException
 	{
-		if (!context.tryAutoAccept)
-			return null;
 		return tx.runInTransactionRetThrowing(() -> {
 			return internalManagment.autoProcess(form, requestFull, 
 						"Automatic processing of the request  " + 
@@ -202,6 +223,23 @@ public class RegistrationsManagementImpl implements RegistrationsManagement
 		return requestDB.getAll();
 	}
 
+
+	@Override
+	@Transactional
+	public RegistrationRequestState getRegistrationRequest(String id) throws EngineException
+	{
+		authz.checkAuthorization(AuthzCapability.read);
+		return requestDB.get(id);
+	}
+
+	@Override
+	@Transactional
+	public boolean hasForm(String id)
+	{
+		authz.checkAuthorizationRT("/", AuthzCapability.read);
+		return formsDB.exists(id);
+	}
+	
 	@Override
 	@Transactional
 	public void processRegistrationRequest(String id, RegistrationRequest finalRequest,
@@ -294,5 +332,12 @@ public class RegistrationsManagementImpl implements RegistrationsManagement
 	public FormAutomationSupport getFormAutomationSupport(RegistrationForm form)
 	{
 		return confirmationsSupport.getRegistrationFormAutomationSupport(form);
+	}
+
+	@Override
+	@Transactional
+	public RegistrationForm getForm(String id) throws EngineException
+	{
+		return formsDB.get(id);
 	}
 }

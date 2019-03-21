@@ -6,6 +6,7 @@ package pl.edu.icm.unity.webadmin.attribute;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Optional;
 
 import com.vaadin.shared.ui.MarginInfo;
 import com.vaadin.ui.CustomComponent;
@@ -15,12 +16,15 @@ import com.vaadin.ui.HorizontalSplitPanel;
 import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
 import pl.edu.icm.unity.types.basic.Attribute;
 import pl.edu.icm.unity.types.basic.AttributeType;
+import pl.edu.icm.unity.types.basic.EntityParam;
 import pl.edu.icm.unity.webadmin.attribute.AttributeMetaEditorPanel.TypeChangeCallback;
 import pl.edu.icm.unity.webui.common.CompactFormLayout;
 import pl.edu.icm.unity.webui.common.FormValidationException;
 import pl.edu.icm.unity.webui.common.Styles;
+import pl.edu.icm.unity.webui.common.attributes.edit.AttributeEditContext;
+import pl.edu.icm.unity.webui.common.attributes.edit.FixedAttributeEditor;
+import pl.edu.icm.unity.webui.common.attributes.edit.AttributeEditContext.ConfirmationMode;
 import pl.edu.icm.unity.webui.common.attributes.AttributeHandlerRegistry;
-import pl.edu.icm.unity.webui.common.attributes.FixedAttributeEditor;
 
 /**
  * Allows for editing an attribute or for creating a new one.
@@ -41,26 +45,41 @@ public class AttributeEditor extends CustomComponent
 	 * @param groupPath
 	 * @param handlerRegistry
 	 */
-	public AttributeEditor(final UnityMessageSource msg, Collection<AttributeType> attributeTypes, String groupPath,
+	public AttributeEditor(final UnityMessageSource msg, Collection<AttributeType> attributeTypes, EntityParam owner, String groupPath,
 			final AttributeHandlerRegistry handlerRegistry, final boolean required)
 	{
 		this.groupPath = groupPath;
 		attrTypePanel = new AttributeMetaEditorPanel(attributeTypes, groupPath, msg);
 		AttributeType initial = attrTypePanel.getAttributeType();
 		attrValuesContainer = new CompactFormLayout();
-		valuesPanel = new FixedAttributeEditor(msg, handlerRegistry, initial, 
-				false, AttributeEditor.this.groupPath, null, null, 
-				required, true, attrValuesContainer);
+		
+		
+		AttributeEditContext editContext = AttributeEditContext.builder()
+				.withConfirmationMode(ConfirmationMode.ADMIN).withRequired(required)
+				.withAttributeType(initial)
+				.withAttributeGroup(AttributeEditor.this.groupPath)
+				.withAttributeOwner(owner).build();
 
+		valuesPanel = new FixedAttributeEditor(msg, handlerRegistry, editContext, 
+				false, null, null);
+		valuesPanel.placeOnLayout(attrValuesContainer);
+		
 		attrTypePanel.setCallback(new TypeChangeCallback()
 		{
 			@Override
 			public void attributeTypeChanged(AttributeType newType)
 			{
+				
 				attrValuesContainer.removeAllComponents();
-				valuesPanel = new FixedAttributeEditor(msg, handlerRegistry, newType, 
-						false, AttributeEditor.this.groupPath, 
-						null, null, required, true, attrValuesContainer);
+				AttributeEditContext newEditContext = AttributeEditContext.builder()
+						.withConfirmationMode(ConfirmationMode.ADMIN).withRequired(required)
+						.withAttributeType(newType)
+						.withAttributeGroup(AttributeEditor.this.groupPath)
+						.withAttributeOwner(owner).build();
+
+				valuesPanel = new FixedAttributeEditor(msg, handlerRegistry, newEditContext, 
+						false, null, null);
+				valuesPanel.placeOnLayout(attrValuesContainer);
 			}
 		});
 		initCommon();
@@ -84,15 +103,21 @@ public class AttributeEditor extends CustomComponent
 	 * @param attribute
 	 * @param handlerRegistry
 	 */
-	public AttributeEditor(UnityMessageSource msg, AttributeType attributeType, Attribute attribute, 
+	public AttributeEditor(UnityMessageSource msg, AttributeType attributeType, Attribute attribute, EntityParam owner, 
 			AttributeHandlerRegistry handlerRegistry)
 	{
 		this.groupPath = attribute.getGroupPath();
 		attrTypePanel = new AttributeMetaEditorPanel(attributeType, groupPath, msg);
 		attrValuesContainer = new CompactFormLayout();
-		valuesPanel = new FixedAttributeEditor(msg, handlerRegistry, attributeType, 
-				false, AttributeEditor.this.groupPath, null, null, true, true, 
-				attrValuesContainer);
+		
+		AttributeEditContext editContext = AttributeEditContext.builder()
+				.withConfirmationMode(ConfirmationMode.ADMIN).required()
+				.withAttributeType(attributeType)
+				.withAttributeGroup(AttributeEditor.this.groupPath)
+				.withAttributeOwner(owner).build();
+		
+		valuesPanel = new FixedAttributeEditor(msg, handlerRegistry, editContext, false, null, null);
+		valuesPanel.placeOnLayout(attrValuesContainer);
 		valuesPanel.setAttributeValues(attribute.getValues());
 		initCommon();
 	}
@@ -104,15 +129,21 @@ public class AttributeEditor extends CustomComponent
 	 * @param attribute
 	 * @param handlerRegistry
 	 */
-	public AttributeEditor(UnityMessageSource msg, AttributeType attributeType, String groupPath, 
+	public AttributeEditor(UnityMessageSource msg, AttributeType attributeType, EntityParam owner, String groupPath, 
 			AttributeHandlerRegistry handlerRegistry)
 	{
 		this.groupPath = groupPath;
 		attrTypePanel = new AttributeMetaEditorPanel(attributeType, groupPath, msg);
 		attrValuesContainer = new CompactFormLayout();
-		valuesPanel = new FixedAttributeEditor(msg, handlerRegistry, attributeType, 
-				false, AttributeEditor.this.groupPath, null, null, true, true, 
-				attrValuesContainer);
+		
+		AttributeEditContext editContext = AttributeEditContext.builder()
+				.withConfirmationMode(ConfirmationMode.ADMIN).required()
+				.withAttributeType(attributeType)
+				.withAttributeGroup(AttributeEditor.this.groupPath)
+				.withAttributeOwner(owner).build();
+
+		valuesPanel = new FixedAttributeEditor(msg, handlerRegistry, editContext, false, null, null);
+		valuesPanel.placeOnLayout(attrValuesContainer);
 		typeFixed = true;
 		initCommon();
 	}
@@ -120,22 +151,24 @@ public class AttributeEditor extends CustomComponent
 	private void initCommon()
 	{
 		HorizontalSplitPanel split = new HorizontalSplitPanel(attrTypePanel, attrValuesContainer);
+		split.setSplitPosition(45);
 		attrValuesContainer.setMargin(new MarginInfo(true, true, true, true));
 		attrValuesContainer.setSizeUndefined();
+		attrTypePanel.setMargin(new MarginInfo(false, true, false, false));
 		setCompositionRoot(split);
 		split.addStyleName(Styles.visibleScroll.toString());
 	}
 	
 	public Attribute getAttribute() throws FormValidationException
 	{
-		Attribute ret = valuesPanel.getAttribute();
-		if (ret == null)
+		Optional<Attribute> ret = valuesPanel.getAttribute();
+		if (!ret.isPresent())
 		{
 			AttributeType at = attrTypePanel.getAttributeType();
 			return new Attribute(at.getName(), at.getValueSyntax(), groupPath, 
 					new ArrayList<>());
 		}
-		return ret;
+		return ret.get();
 	}
 
 }

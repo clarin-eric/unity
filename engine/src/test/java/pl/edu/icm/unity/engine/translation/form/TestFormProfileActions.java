@@ -25,6 +25,7 @@ import com.google.common.collect.Lists;
 
 import pl.edu.icm.unity.engine.api.attributes.AttributeTypeSupport;
 import pl.edu.icm.unity.engine.api.attributes.AttributeValueSyntax;
+import pl.edu.icm.unity.engine.api.identity.IdentityTypeSupport;
 import pl.edu.icm.unity.engine.api.registration.RequestSubmitStatus;
 import pl.edu.icm.unity.engine.api.translation.form.GroupParam;
 import pl.edu.icm.unity.engine.api.translation.form.RegistrationTranslationAction;
@@ -38,17 +39,16 @@ import pl.edu.icm.unity.engine.translation.form.action.AddAttributeClassActionFa
 import pl.edu.icm.unity.engine.translation.form.action.AddIdentityActionFactory;
 import pl.edu.icm.unity.engine.translation.form.action.AddToGroupActionFactory;
 import pl.edu.icm.unity.engine.translation.form.action.AutoProcessActionFactory;
-import pl.edu.icm.unity.engine.translation.form.action.ConfirmationRedirectActionFactory;
 import pl.edu.icm.unity.engine.translation.form.action.FilterAttributeActionFactory;
 import pl.edu.icm.unity.engine.translation.form.action.FilterGroupActionFactory;
 import pl.edu.icm.unity.engine.translation.form.action.FilterIdentityActionFactory;
-import pl.edu.icm.unity.engine.translation.form.action.RedirectActionFactory;
 import pl.edu.icm.unity.engine.translation.form.action.ScheduleEntityChangeActionFactory;
 import pl.edu.icm.unity.engine.translation.form.action.SetCredentialRequirementActionFactory;
 import pl.edu.icm.unity.engine.translation.form.action.SetEntityStateActionFactory;
 import pl.edu.icm.unity.engine.translation.form.action.SetEntityStateActionFactory.EntityStateLimited;
 import pl.edu.icm.unity.exceptions.EngineException;
 import pl.edu.icm.unity.stdext.attr.StringAttributeSyntax;
+import pl.edu.icm.unity.stdext.identity.IdentifierIdentity;
 import pl.edu.icm.unity.types.basic.Attribute;
 import pl.edu.icm.unity.types.basic.AttributeType;
 import pl.edu.icm.unity.types.basic.EntityScheduledOperation;
@@ -56,6 +56,7 @@ import pl.edu.icm.unity.types.basic.EntityState;
 import pl.edu.icm.unity.types.basic.IdentityParam;
 import pl.edu.icm.unity.types.registration.AttributeRegistrationParam;
 import pl.edu.icm.unity.types.registration.GroupRegistrationParam;
+import pl.edu.icm.unity.types.registration.GroupSelection;
 import pl.edu.icm.unity.types.registration.IdentityRegistrationParam;
 import pl.edu.icm.unity.types.registration.ParameterRetrievalSettings;
 import pl.edu.icm.unity.types.registration.RegistrationContext.TriggeringMode;
@@ -169,9 +170,11 @@ public class TestFormProfileActions
 	@Test
 	public void testAddIdentity() throws EngineException
 	{
-		AddIdentityActionFactory factory = new AddIdentityActionFactory();
+		IdentityTypeSupport idTypeSupport = mock(IdentityTypeSupport.class);
+		when(idTypeSupport.getTypeDefinition("identifier")).thenReturn(new IdentifierIdentity());
+		AddIdentityActionFactory factory = new AddIdentityActionFactory(idTypeSupport);
 		
-		RegistrationTranslationAction action = factory.getInstance("idType", "'identity'");
+		RegistrationTranslationAction action = factory.getInstance("identifier", "'identity'");
 				
 		TranslatedRegistrationRequest state = new TranslatedRegistrationRequest("defaultCR");
 		
@@ -180,7 +183,7 @@ public class TestFormProfileActions
 		assertThat(state.getIdentities().size(), is(1));
 		IdentityParam id = state.getIdentities().iterator().next();
 		assertThat(id.getValue(), is("identity"));
-		assertThat(id.getTypeId(), is("idType"));
+		assertThat(id.getTypeId(), is("identifier"));
 	}
 
 	@Test
@@ -211,32 +214,6 @@ public class TestFormProfileActions
 		action.invoke(state, createContext(), "testProf");
 		
 		assertThat(state.getAutoAction(), is(AutomaticRequestAction.accept));
-	}	
-
-	@Test
-	public void testConfirmationRedirect() throws EngineException
-	{
-		ConfirmationRedirectActionFactory factory = new ConfirmationRedirectActionFactory();
-		RegistrationTranslationAction action = factory.getInstance("'http://someurl'");
-		
-		TranslatedRegistrationRequest state = new TranslatedRegistrationRequest("defaultCR");
-		
-		action.invoke(state, createContext(), "testProf");
-		
-		assertThat(state.getRedirectURL(), is("http://someurl"));
-	}
-	
-	@Test
-	public void testRedirect() throws EngineException
-	{
-		RedirectActionFactory factory = new RedirectActionFactory();
-		RegistrationTranslationAction action = factory.getInstance("'http://someurl'");
-		
-		TranslatedRegistrationRequest state = new TranslatedRegistrationRequest("defaultCR");
-		
-		action.invoke(state, createContext(), "testProf");
-		
-		assertThat(state.getRedirectURL(), is("http://someurl"));
 	}	
 
 	@Test
@@ -370,8 +347,8 @@ public class TestFormProfileActions
 				new IdentityParam("username", "user", "idp", "prof")
 				));
 		when(request.getGroupSelections()).thenReturn(Lists.newArrayList(
-				new Selection(true),
-				new Selection(true, "idp", "prof")
+				new GroupSelection("/local"),
+				new GroupSelection("/remote", "idp", "prof")
 				));
 		when(request.getAgreements()).thenReturn(Lists.newArrayList(
 				new Selection(true)

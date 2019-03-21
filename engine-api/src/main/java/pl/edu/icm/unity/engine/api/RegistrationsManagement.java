@@ -38,13 +38,16 @@ public interface RegistrationsManagement
 	
 	/**
 	 * Updates an existing form.
+	 * 
 	 * @param updatedForm
-	 * @param ignoreRequests if true then operation will ignore form requests. If false then it will fail if there 
-	 * are any pending requests of the form.
+	 * @param ignoreRequestsAndInvitations
+	 *                if true then operation will ignore form requests and
+	 *                invitations. If false then it will fail if there are
+	 *                any pending requests of the form.
 	 * @throws EngineException
 	 */
-	void updateForm(RegistrationForm updatedForm, boolean ignoreRequests) throws EngineException;
-	
+	void updateForm(RegistrationForm updatedForm, boolean ignoreRequestsAndInvitations) throws EngineException;
+
 	/**
 	 * 
 	 * @return all available forms.
@@ -52,11 +55,29 @@ public interface RegistrationsManagement
 	 */
 	List<RegistrationForm> getForms() throws EngineException;
 	
+	
+	/**
+	 * 
+	 * @return form with given id.
+	 * @throws EngineException
+	 */
+	RegistrationForm getForm(String id) throws EngineException;
+
+	/**
+	 * @return true if form with given name exists
+	 */
+	boolean hasForm(String id);
+	
 	/**
 	 * Submits a new registration request. It gets a pending state unless automatically processed by the 
 	 * form's automation.
 	 * Note that the input parameter can be modified by the invocation: all the supplied credential secrets
-	 * are transformed to the internal (typically hashed) form. 
+	 * are transformed to the internal (typically hashed) form.
+	 * Important: this API call requires high authZ privileges. This is because the operation trusts confirmation
+	 * state of the passed arguments. In case such operation shall be exposed with a public, unprivileged API,
+	 * then we need an other variant, forcing unconfirmed state of parameters. This can be problematic for mobile 
+	 * numbers.
+	 *    
 	 * @param request
 	 * @param context
 	 * @return automatically assigned identifier of the request
@@ -71,6 +92,11 @@ public interface RegistrationsManagement
 	 * @throws EngineException
 	 */
 	List<RegistrationRequestState> getRegistrationRequests() throws EngineException;
+
+	/**
+	 * @return registration request by id
+	 */
+	RegistrationRequestState getRegistrationRequest(String id) throws EngineException;
 	
 	/**
 	 * Accepts, deletes or rejects a given registration request. The request can be freely modified at this time

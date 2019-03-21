@@ -20,9 +20,9 @@ import eu.unicore.samly2.binding.HttpRedirectBindingSupport;
 import eu.unicore.samly2.binding.SAMLMessageType;
 import eu.unicore.samly2.exceptions.SAMLServerException;
 import pl.edu.icm.unity.base.utils.Log;
+import pl.edu.icm.unity.engine.api.utils.FreemarkerAppHandler;
 import pl.edu.icm.unity.saml.SAMLProcessingException;
 import pl.edu.icm.unity.saml.SamlProperties.Binding;
-import pl.edu.icm.unity.saml.idp.FreemarkerHandler;
 import pl.edu.icm.unity.webui.idpcommon.EopException;
 
 /**
@@ -34,9 +34,9 @@ import pl.edu.icm.unity.webui.idpcommon.EopException;
 public abstract class ResponseHandlerBase
 {
 	private static final Logger log = Log.getLogger(Log.U_SERVER_SAML, ResponseHandlerBase.class);
-	protected FreemarkerHandler freemarker;
+	protected FreemarkerAppHandler freemarker;
 	
-	public ResponseHandlerBase(FreemarkerHandler freemarker)
+	public ResponseHandlerBase(FreemarkerAppHandler freemarker)
 	{
 		this.freemarker = freemarker;
 	}
@@ -53,13 +53,11 @@ public abstract class ResponseHandlerBase
 	protected void showError(Exception error, HttpServletResponse response) 
 			throws IOException, EopException
 	{
-		response.setContentType("application/xhtml+xml; charset=utf-8");
+		response.setContentType("text/html; charset=utf-8");
 		PrintWriter w = response.getWriter();
-		Map<String, String> data = new HashMap<String, String>();
-		data.put("error", error.getMessage());
-		if (error.getCause() != null)
-			data.put("errorCause", error.getCause().toString());
-		freemarker.process("finishError.ftl", data, w);
+		String errorMsg = error.getMessage();
+		String cause = error.getCause() != null ? error.getCause().toString() : null;
+		freemarker.printAppErrorPage(w, "SAML", "SAML IdP got an invalid request.", errorMsg, cause);
 		throw new EopException();
 	}
 	
@@ -85,7 +83,7 @@ public abstract class ResponseHandlerBase
 		
 		response.setContentType("application/xhtml+xml; charset=utf-8");
 		PrintWriter w = response.getWriter();
-		freemarker.process("finishSaml.ftl", data, w);
+		freemarker.printGenericPage(w, "finishSaml.ftl", data);
 		throw new EopException();
 	}
 	
@@ -126,10 +124,9 @@ public abstract class ResponseHandlerBase
 		default:
 			throw new IllegalStateException("Unsupported binding: " + binding);
 		}
-
 	}
 
-	protected void handleRedirectGeneric(String xml, String info, SAMLMessageType type, String serviceUrl, 
+	private void handleRedirectGeneric(String xml, String info, SAMLMessageType type, String serviceUrl, 
 			String relayState, HttpServletResponse response) throws IOException, EopException
 	{
 		setCommonHeaders(response);
@@ -146,7 +143,7 @@ public abstract class ResponseHandlerBase
 	}
 
 
-	protected void handlePostGeneric(String xml, String info, SAMLMessageType type, String serviceUrl, 
+	private void handlePostGeneric(String xml, String info, SAMLMessageType type, String serviceUrl, 
 			String relayState, HttpServletResponse response) throws IOException, EopException
 	{
 		response.setContentType("text/html; charset=utf-8");
@@ -166,7 +163,7 @@ public abstract class ResponseHandlerBase
 	}
 	
 	
-	protected void setCommonHeaders(HttpServletResponse response)
+	private void setCommonHeaders(HttpServletResponse response)
 	{
 		response.setHeader("Cache-Control","no-cache,no-store");
 		response.setHeader("Pragma","no-cache");

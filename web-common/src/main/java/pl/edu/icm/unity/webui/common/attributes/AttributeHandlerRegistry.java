@@ -13,6 +13,7 @@ import java.util.Set;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import com.vaadin.server.Sizeable.Unit;
 import com.vaadin.shared.ui.MarginInfo;
 import com.vaadin.ui.Label;
 import com.vaadin.ui.VerticalLayout;
@@ -22,6 +23,7 @@ import pl.edu.icm.unity.engine.api.attributes.AttributeValueSyntax;
 import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
 import pl.edu.icm.unity.stdext.attr.StringAttributeSyntax;
 import pl.edu.icm.unity.types.basic.Attribute;
+import pl.edu.icm.unity.types.basic.AttributeType;
 import pl.edu.icm.unity.webui.common.Styles;
 
 /**
@@ -54,25 +56,54 @@ public class AttributeHandlerRegistry
 	 * Returns web attribute handler for the given attribute, falling back to string 
 	 * attribute handler if there is no system defined attribute for the argument attribute 
 	 * name (can happen for dynamic attributes created by output profiles).
-	 * @param at
+	 * @param attribute
 	 * @return attribute handler
 	 */
-	public WebAttributeHandler getHandlerWithStringFallback(Attribute at)
+	public WebAttributeHandler getHandlerWithStringFallback(Attribute attribute)
 	{
-		AttributeValueSyntax<?> syntax = getSyntaxWithStringFallback(at);
+		AttributeValueSyntax<?> syntax = getSyntaxWithStringFallback(attribute);
 		return getHandler(syntax);
 	}
-
+	
 	/**
-	 * @param at
+	 * Returns web attribute handler for the given attribute type, falling back to string 
+	 * attribute handler if there is no system defined attribute type for the argument attribute type
+	 * (can happen for dynamic attributes created by output profiles).
+	 * @param attributeType
+	 * @return attribute handler
+	 */
+	public WebAttributeHandler getHandlerWithStringFallback(AttributeType attributeType)
+	{
+		AttributeValueSyntax<?> syntax = getSyntaxWithStringFallback(attributeType);
+		return getHandler(syntax);
+	}
+	
+	/**
+	 * @param attribute
 	 * @return syntax for the given attribute, or String attribute syntax,
 	 * if the attribute type is not defined.
 	 */
-	public AttributeValueSyntax<?> getSyntaxWithStringFallback(Attribute at)
+	public AttributeValueSyntax<?> getSyntaxWithStringFallback(Attribute attribute)
 	{
 		try
 		{
-			return aTypeSupport.getSyntax(at);
+			return aTypeSupport.getSyntax(attribute);
+		} catch (IllegalArgumentException e)
+		{
+			return new StringAttributeSyntax();
+		}
+	}
+	
+	/**
+	 * @param attributeType
+	 * @return syntax for the given attribute type, or String attribute syntax,
+	 * if the attribute type is not defined.
+	 */
+	public AttributeValueSyntax<?> getSyntaxWithStringFallback(AttributeType attributeType)
+	{
+		try
+		{
+			return aTypeSupport.getSyntax(attributeType);
 		} catch (IllegalArgumentException e)
 		{
 			return new StringAttributeSyntax();
@@ -123,7 +154,11 @@ public class AttributeHandlerRegistry
 		indentedValues.setSpacing(true);
 		WebAttributeHandler handler = getHandler(syntax);
 		for (String value: attribute.getValues())
-			indentedValues.addComponent(handler.getRepresentation(value));
+		{
+			com.vaadin.ui.Component valueRep = handler.getRepresentation(value, AttributeViewerContext.EMPTY);
+			valueRep.setWidth(100, Unit.PERCENTAGE);
+			indentedValues.addComponent(valueRep);
+		}
 		vl.addComponent(indentedValues);
 		return vl;
 	}
@@ -149,7 +184,7 @@ public class AttributeHandlerRegistry
 	 * @param attribute
 	 * @return
 	 */
-	public String getSimplifiedAttributeRepresentation(Attribute attribute, String displayedName)
+	private String getSimplifiedAttributeRepresentation(Attribute attribute, String displayedName)
 	{
 		StringBuilder sb = new StringBuilder();
 		sb.append(displayedName);
@@ -167,12 +202,16 @@ public class AttributeHandlerRegistry
 	 * @param attribute
 	 * @return
 	 */
-	public String getSimplifiedAttributeValuesRepresentation(Attribute attribute)
+	private String getSimplifiedAttributeValuesRepresentation(Attribute attribute)
+	{
+		WebAttributeHandler handler = getHandlerWithStringFallback(attribute);
+		return getSimplifiedAttributeValuesRepresentation(attribute, handler);
+	}
+	
+	public String getSimplifiedAttributeValuesRepresentation(Attribute attribute, WebAttributeHandler handler)
 	{
 		StringBuilder sb = new StringBuilder();
 		List<String> values = attribute.getValues();
-		AttributeValueSyntax<?> syntax = getSyntaxWithStringFallback(attribute);
-		WebAttributeHandler handler = getHandler(syntax);
 		for (int i=0; i<values.size(); i++)
 		{
 			String val = handler.getValueAsString(values.get(i));

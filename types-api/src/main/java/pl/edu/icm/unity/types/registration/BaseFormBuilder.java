@@ -8,7 +8,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import pl.edu.icm.unity.types.I18nString;
-import pl.edu.icm.unity.types.registration.layout.FormLayout;
+import pl.edu.icm.unity.types.registration.layout.FormLayoutSettings;
 import pl.edu.icm.unity.types.translation.TranslationProfile;
 
 /**
@@ -29,6 +29,13 @@ public class BaseFormBuilder<T extends BaseFormBuilder<?>>
 	}
 
 	@SuppressWarnings("unchecked")
+	public T withByInvitationOnly(boolean aValue)
+	{
+		instance.setByInvitationOnly(aValue);
+		return (T) this;
+	}
+	
+	@SuppressWarnings("unchecked")
 	public T withTranslationProfile(TranslationProfile profile)
 	{
 		instance.setTranslationProfile(profile);
@@ -42,7 +49,7 @@ public class BaseFormBuilder<T extends BaseFormBuilder<?>>
 
 		return (T) this;
 	}
-
+	
 	@SuppressWarnings("unchecked")
 	public T withAddedIdentityParam(IdentityRegistrationParam aValue)
 	{
@@ -210,16 +217,29 @@ public class BaseFormBuilder<T extends BaseFormBuilder<?>>
 
 		return (T) this;
 	}
-
-	@SuppressWarnings("unchecked")
-	public T withLayout(FormLayout layout)
-	{
-		instance.setLayout(layout);
-
-		return (T) this;
-	}
-
 	
+	
+	@SuppressWarnings("unchecked")
+	public T withPageTitle(I18nString aValue)
+	{
+		instance.setPageTitle(aValue);
+		return (T)this;
+	}
+	
+	@SuppressWarnings("unchecked")
+	public T withWrapUpConfig(List<RegistrationWrapUpConfig> config)
+	{
+		instance.setWrapUpConfig(config);
+		return (T)this;
+	}
+	
+	
+	@SuppressWarnings("unchecked")
+	public T withFormLayoutSettings(FormLayoutSettings settings)
+	{
+		instance.setLayoutSettings(settings);
+		return (T)this;
+	}
 	
 	public class GroupRegistrationParamBuilder
 	{
@@ -266,6 +286,13 @@ public class BaseFormBuilder<T extends BaseFormBuilder<?>>
 			return this;
 		}
 
+		public GroupRegistrationParamBuilder withMultiselect(boolean aValue)
+		{
+			instance.setMultiSelect(aValue);
+
+			return this;
+		}
+		
 		public T endGroupParam()
 		{
 			return parent;
@@ -337,6 +364,12 @@ public class BaseFormBuilder<T extends BaseFormBuilder<?>>
 			return this;
 		}
 
+		public AttributeRegistrationParamBuilder withConfirmationMode(ConfirmationMode confirmationMode)
+		{
+			instance.setConfirmationMode(confirmationMode);
+			return this;
+		}
+		
 		public T endAttributeParam()
 		{
 			return parent;
@@ -391,6 +424,12 @@ public class BaseFormBuilder<T extends BaseFormBuilder<?>>
 		{
 			instance.setRetrievalSettings(aValue);
 
+			return this;
+		}
+		
+		public IdentityRegistrationParamBuilder withConfirmationMode(ConfirmationMode confirmationMode)
+		{
+			instance.setConfirmationMode(confirmationMode);
 			return this;
 		}
 

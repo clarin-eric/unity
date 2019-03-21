@@ -9,16 +9,14 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
 
-import com.vaadin.v7.data.Property;
-import com.vaadin.v7.data.Property.ValueChangeEvent;
 import com.vaadin.ui.Button;
 import com.vaadin.ui.Button.ClickEvent;
-import com.vaadin.v7.ui.ComboBox;
+import com.vaadin.ui.ComboBox;
 import com.vaadin.ui.Component;
 import com.vaadin.ui.FormLayout;
-import com.vaadin.v7.ui.HorizontalLayout;
+import com.vaadin.ui.HorizontalLayout;
 import com.vaadin.ui.Label;
-import com.vaadin.v7.ui.VerticalLayout;
+import com.vaadin.ui.VerticalLayout;
 
 import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
 import pl.edu.icm.unity.webui.common.AbstractDialog;
@@ -53,7 +51,7 @@ public class MetadataEditor extends VerticalLayout
 	
 	private void initUI()
 	{
-		setSpacing(true);
+		setMargin(false);
 		Button addNew = new Button(msg.getMessage("MetadataEditor.addButton"));
 		addNew.setIcon(Images.add.getResource());
 		
@@ -124,7 +122,7 @@ public class MetadataEditor extends VerticalLayout
 		{
 			this.handler = handler;
 			this.value = value;
-			setSpacing(true);
+			setMargin(false);
 			Button edit = new Button();
 			edit.setDescription(msg.getMessage("MetadataEditor.editButton"));
 			edit.setIcon(Images.edit.getResource());
@@ -156,6 +154,7 @@ public class MetadataEditor extends VerticalLayout
 			});
 			
 			Component current = handler.getRepresentation(value);
+			current.setWidth(100, Unit.PERCENTAGE);
 			addComponents(edit, remove, current);
 		}
 		
@@ -198,6 +197,7 @@ public class MetadataEditor extends VerticalLayout
 		{
 			FormLayout main = new CompactFormLayout();
 			editorPanel = new SafePanel();
+			editorPanel.setWidth(100, Unit.PERCENTAGE);
 			editorPanel.setStyleName(Styles.vPanelLight.toString());
 			if (initialKey != null)
 			{
@@ -205,34 +205,34 @@ public class MetadataEditor extends VerticalLayout
 				info.setCaption(msg.getMessage("MetadataEditor.metaName"));
 				main.addComponent(info);
 				editor = attrMetaHandlerReg.getHandler(initialKey).getEditorComponent(initialValue);
-				editorPanel.setContent(editor.getEditor());
+				Component editor2 = editor.getEditor();
+				editor2.setWidth(100, Unit.PERCENTAGE);
+				editorPanel.setContent(editor2);
 				key = initialKey;
 			} else
 			{
-				final ComboBox metaChoice = new ComboBox(msg.getMessage("MetadataEditor.metaSelect"));
-				metaChoice.setNullSelectionAllowed(false);
+				final ComboBox<String> metaChoice = new ComboBox<>(
+						msg.getMessage("MetadataEditor.metaSelect"));
+				metaChoice.setEmptySelectionAllowed(false);
 				Set<String> supported = attrMetaHandlerReg.getSupportedSyntaxes();
 				supported.removeAll(entries.keySet());
 				if (supported.isEmpty())
 				{
-					NotificationPopup.showNotice(msg, msg.getMessage("notice"), 
+					NotificationPopup.showNotice(msg.getMessage("notice"), 
 							msg.getMessage("MetadataEditor.noMoreMetadataAvailable"));
 					throw new FormValidationException();
 				}
-				for (String aval: supported)
-					metaChoice.addItem(aval);
-				metaChoice.addValueChangeListener(new Property.ValueChangeListener()
+				metaChoice.setItems(supported);
+				metaChoice.addValueChangeListener(event ->
 				{
-					@Override
-					public void valueChange(ValueChangeEvent event)
-					{
-						key = (String) metaChoice.getValue();
-						editor = attrMetaHandlerReg.getHandler(key).getEditorComponent(null);
-						editorPanel.setContent(editor.getEditor());
-					}
+					key = metaChoice.getValue();
+					editor = attrMetaHandlerReg.getHandler(key).getEditorComponent(null);
+					Component editor2 = editor.getEditor();
+					editor2.setWidth(100, Unit.PERCENTAGE);
+					editorPanel.setContent(editor2);
 				});
 				main.addComponent(metaChoice);
-				metaChoice.select(supported.iterator().next());
+				metaChoice.setSelectedItem(supported.iterator().next());
 			}
 			main.addComponent(editorPanel);
 			return main;

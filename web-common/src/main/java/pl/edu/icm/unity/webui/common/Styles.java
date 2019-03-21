@@ -24,13 +24,7 @@ public enum Styles
 	negativeTopMargin("u-negativeTopMargin"),
 	verticalPaddingSmall("u-verticalPaddingSmall"),
 	smallMargins("u-smallMargins"),
-	imageWidthTiny("u-imageWidthTiny"),
-	imageHeightTiny("u-imageHeightTiny"),
-	imageWidthSmall("u-imageWidthSmall"),
-	imageHeightSmall("u-imageHeightSmall"),
-	maxHeightMedium("u-imageMaxHeightMedium"),
-	maxHeightSmall("u-imageMaxHeightSmall"),
-	maxHeightTiny("u-imageMaxHeightTiny"),
+	iconError("u-error-icon"),
 	maxWidthColumn("u-maxWidthColumn"),
 	
 	bigTabs("u-bigTabs"),
@@ -41,10 +35,10 @@ public enum Styles
 	messageBox("u-messageBox"),
 	error("u-error"),
 	success("u-success"),
+	textTitle("u-textTitle"),
 	textLarge("u-textLarge"),
 	textXLarge("u-textXLarge"),
 	textEndpointName("u-textEndpointHeading"),
-	textSubHeading("u-textHeading2"),
 	toolbarButton("u-toolbarButton"),
 	verticalBar("u-verticalBar"),
 	horizontalBar("u-horizontalBar"),
@@ -63,6 +57,10 @@ public enum Styles
 	floatRight("u-floatRight"),
 	horizontalMarginSmall("u-hMarginSmall"),
 	rightMargin("u-rightMargin"),
+	leftMargin("u-leftMargin"),
+	leftMarginSmall("u-leftMarginSmall"),
+	passwordQuality("u-passwordQuality"),
+	nonCompactTopMargin("u-passwordQuality-nonCompactTopMargin"),
 	bottomMargin("u-bottomMargin"),
 	margin("u-margin"),
 	idpTile("u-idptile"),
@@ -70,6 +68,17 @@ public enum Styles
 	link("u-link"),
 	hamburgerMenu("u-hamburgerMenu"),
 	uGridNoHorizontalLines("u-noGridHorizontalLines"),
+	uDenseTreeGrid("u-denseTreeGrid"),
+	largeIcon("u-largeIcon"),
+	veryLargeIcon("u-veryLargeIcon"),
+	signInButton("u-signInButton"),
+	signUpButton("u-signUpButton"),
+	externalSignInButton("u-externalSignInButton"),
+	externalGridSignInButton("u-externalGridSignInButton"),
+	greenProgressBar("u-greenProgressBar"),
+	redProgressBar("u-redProgressBar"),
+	RegistrationLink("registrationLink"),
+	indentComboBox("u-indentComboBox"),
 	
 	//Valo
 	vPanelLight(ValoTheme.PANEL_BORDERLESS),
@@ -86,8 +95,11 @@ public enum Styles
 	vSmall(ValoTheme.TEXTFIELD_SMALL),
 	vTiny(ValoTheme.TEXTFIELD_TINY),
 	vTableNoHorizontalLines(ValoTheme.TABLE_NO_HORIZONTAL_LINES),
-	vComboSmall(ValoTheme.COMBOBOX_SMALL);
-
+	vComboSmall(ValoTheme.COMBOBOX_SMALL),
+	vDropLayout("drop-layout"),	
+	vGroupBrowser("v-tree8");
+	
+	
 	/**
 	 * Number of columns for wider then regular text fields.
 	 */
@@ -100,6 +112,7 @@ public enum Styles
 		this.value = value;
 	}
 	
+	@Override
 	public String toString()
 	{
 		return value;
@@ -112,6 +125,7 @@ public enum Styles
 		case "en":
 		case "pl":
 		case "de":
+		case "nb":
 			return "u-flag-bg-" + localeCode;
 		}
 		return null;

@@ -17,21 +17,24 @@ import com.vaadin.shared.ui.Orientation;
 import com.vaadin.ui.HorizontalLayout;
 import com.vaadin.ui.VerticalLayout;
 
+import io.imunity.webadmin.credentials.CredentialDefinitionChangedEvent;
+import io.imunity.webadmin.credentials.CredentialDefinitionEditor;
+import io.imunity.webadmin.credentials.CredentialDefinitionViewer;
 import pl.edu.icm.unity.engine.api.CredentialManagement;
 import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
+import pl.edu.icm.unity.engine.api.utils.MessageUtils;
 import pl.edu.icm.unity.types.authn.CredentialDefinition;
 import pl.edu.icm.unity.types.authn.LocalCredentialState;
-import pl.edu.icm.unity.webadmin.utils.MessageUtils;
 import pl.edu.icm.unity.webui.WebSession;
 import pl.edu.icm.unity.webui.bus.EventsBus;
-import pl.edu.icm.unity.webui.common.ComponentWithToolbar2;
+import pl.edu.icm.unity.webui.common.ComponentWithToolbar;
 import pl.edu.icm.unity.webui.common.ConfirmDialog;
 import pl.edu.icm.unity.webui.common.ErrorComponent;
-import pl.edu.icm.unity.webui.common.GenericElementsTable2;
+import pl.edu.icm.unity.webui.common.GenericElementsTable;
 import pl.edu.icm.unity.webui.common.NotificationPopup;
-import pl.edu.icm.unity.webui.common.SingleActionHandler2;
+import pl.edu.icm.unity.webui.common.SingleActionHandler;
 import pl.edu.icm.unity.webui.common.Styles;
-import pl.edu.icm.unity.webui.common.Toolbar2;
+import pl.edu.icm.unity.webui.common.Toolbar;
 import pl.edu.icm.unity.webui.common.credentials.CredentialEditorFactory;
 import pl.edu.icm.unity.webui.common.credentials.CredentialEditorRegistry;
 
@@ -48,7 +51,7 @@ public class CredentialDefinitionsComponent extends VerticalLayout
 	private CredentialEditorRegistry credentialEditorReg;
 	private EventsBus bus;
 	
-	private GenericElementsTable2<CredentialDefinition> table;
+	private GenericElementsTable<CredentialDefinition> table;
 	private CredentialDefinitionViewer viewer;
 	private com.vaadin.ui.Component main;
 	
@@ -70,7 +73,7 @@ public class CredentialDefinitionsComponent extends VerticalLayout
 		addStyleName(Styles.visibleScroll.toString());
 		setCaption(msg.getMessage("CredentialDefinitions.caption"));
 		viewer = new CredentialDefinitionViewer(msg);
-		table =  new GenericElementsTable2<>(
+		table =  new GenericElementsTable<>(
 				msg.getMessage("CredentialDefinitions.credentialDefinitionsHeader"), 
 				el -> el.getName());
 		table.setStyleGenerator(item -> item.isReadOnly() ? 
@@ -100,17 +103,16 @@ public class CredentialDefinitionsComponent extends VerticalLayout
 		table.addActionHandler(getAddAction());
 		table.addActionHandler(getEditAction());
 		table.addActionHandler(getDeleteAction());
-		Toolbar2<CredentialDefinition> toolbar = new Toolbar2<>(Orientation.HORIZONTAL);
+		Toolbar<CredentialDefinition> toolbar = new Toolbar<>(Orientation.HORIZONTAL);
 		table.addSelectionListener(toolbar.getSelectionListener());
 		toolbar.addActionHandlers(table.getActionHandlers());
-		ComponentWithToolbar2 tableWithToolbar = new ComponentWithToolbar2(table, toolbar);
+		ComponentWithToolbar tableWithToolbar = new ComponentWithToolbar(table, toolbar);
 		tableWithToolbar.setWidth(90, Unit.PERCENTAGE);
 		
 		HorizontalLayout hl = new HorizontalLayout();
 		hl.addComponents(tableWithToolbar, viewer);
 		hl.setSizeFull();
 		hl.setMargin(new MarginInfo(true, false, true, false));
-		hl.setSpacing(true);
 		main = hl;
 		refresh();
 	}
@@ -141,7 +143,7 @@ public class CredentialDefinitionsComponent extends VerticalLayout
 			refresh();
 			bus.fireEvent(new CredentialDefinitionChangedEvent(true, cd.getName()));
 			if (desiredCredState == LocalCredentialState.outdated)
-				NotificationPopup.showNotice(msg, msg.getMessage("notice"), 
+				NotificationPopup.showNotice(msg.getMessage("notice"), 
 						msg.getMessage("CredentialDefinitions.outdatedUpdateInfo"));
 			return true;
 		} catch (Exception e)
@@ -181,16 +183,16 @@ public class CredentialDefinitionsComponent extends VerticalLayout
 		}
 	}
 
-	private SingleActionHandler2<CredentialDefinition> getRefreshAction()
+	private SingleActionHandler<CredentialDefinition> getRefreshAction()
 	{
-		return SingleActionHandler2.builder4Refresh(msg, CredentialDefinition.class)
+		return SingleActionHandler.builder4Refresh(msg, CredentialDefinition.class)
 				.withHandler(selection -> refresh())
 				.build();
 	}
 	
-	private SingleActionHandler2<CredentialDefinition> getAddAction()
+	private SingleActionHandler<CredentialDefinition> getAddAction()
 	{
-		return SingleActionHandler2.builder4Add(msg, CredentialDefinition.class)
+		return SingleActionHandler.builder4Add(msg, CredentialDefinition.class)
 				.withHandler(this::showAddCredDialog)
 				.build();
 	}
@@ -204,9 +206,9 @@ public class CredentialDefinitionsComponent extends VerticalLayout
 		dialog.show();
 	}
 
-	private SingleActionHandler2<CredentialDefinition> getEditAction()
+	private SingleActionHandler<CredentialDefinition> getEditAction()
 	{
-		return SingleActionHandler2.builder4Edit(msg, CredentialDefinition.class)
+		return SingleActionHandler.builder4Edit(msg, CredentialDefinition.class)
 				.withHandler(this::showEditCredDialog)
 				.withDisabledPredicate(cr -> cr.isReadOnly())
 				.build();
@@ -226,9 +228,9 @@ public class CredentialDefinitionsComponent extends VerticalLayout
 	}
 
 	
-	private SingleActionHandler2<CredentialDefinition> getDeleteAction()
+	private SingleActionHandler<CredentialDefinition> getDeleteAction()
 	{
-		return SingleActionHandler2.builder4Delete(msg, CredentialDefinition.class)
+		return SingleActionHandler.builder4Delete(msg, CredentialDefinition.class)
 				.withHandler(this::handleDelete)
 				.withDisabledPredicate(cr -> cr.isReadOnly())
 				.build();

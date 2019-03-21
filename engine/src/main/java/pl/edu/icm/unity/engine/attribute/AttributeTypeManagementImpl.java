@@ -19,7 +19,7 @@ import pl.edu.icm.unity.engine.api.attributes.AttributeMetadataProvider;
 import pl.edu.icm.unity.engine.api.attributes.AttributeMetadataProvidersRegistry;
 import pl.edu.icm.unity.engine.api.attributes.AttributeSyntaxFactoriesRegistry;
 import pl.edu.icm.unity.engine.api.attributes.AttributeValueSyntaxFactory;
-import pl.edu.icm.unity.engine.authz.AuthorizationManager;
+import pl.edu.icm.unity.engine.authz.InternalAuthorizationManager;
 import pl.edu.icm.unity.engine.authz.AuthzCapability;
 import pl.edu.icm.unity.engine.events.InvocationEventProducer;
 import pl.edu.icm.unity.exceptions.EngineException;
@@ -46,7 +46,7 @@ public class AttributeTypeManagementImpl implements AttributeTypeManagement
 	private AttributeDAO attributeDAO;
 	private IdentityTypeDAO dbIdentities;
 	private AttributeMetadataProvidersRegistry atMetaProvidersRegistry;
-	private AuthorizationManager authz;
+	private InternalAuthorizationManager authz;
 	private AttributeTypeHelper atHelper;
 	private AttributesHelper aHelper;
 
@@ -56,7 +56,7 @@ public class AttributeTypeManagementImpl implements AttributeTypeManagement
 			AttributeTypeDAO attributeTypeDAO, AttributeDAO attributeDAO,
 			IdentityTypeDAO dbIdentities,
 			AttributeMetadataProvidersRegistry atMetaProvidersRegistry,
-			AuthorizationManager authz, AttributeTypeHelper atHelper,
+			InternalAuthorizationManager authz, AttributeTypeHelper atHelper,
 			AttributesHelper aHelper)
 	{
 		this.attrValueTypesReg = attrValueTypesReg;
@@ -86,6 +86,7 @@ public class AttributeTypeManagementImpl implements AttributeTypeManagement
 	public void addAttributeType(AttributeType toAdd) throws EngineException
 	{
 		toAdd.validateInitialization();
+		atHelper.validateSyntax(toAdd);
 		if (toAdd.getFlags() != 0)
 			throw new IllegalAttributeTypeException("Custom attribute types must not have any flags set");
 		authz.checkAuthorization(AuthzCapability.maintenance);
@@ -101,10 +102,16 @@ public class AttributeTypeManagementImpl implements AttributeTypeManagement
 	public void updateAttributeType(AttributeType at) throws EngineException
 	{
 		at.validateInitialization();
+		atHelper.validateSyntax(at);
 		if (at.getFlags() != 0)
 			throw new IllegalAttributeTypeException("Custom attribute types must not have any flags set");
 		authz.checkAuthorization(AuthzCapability.maintenance);
 		AttributeType atExisting = attributeTypeDAO.get(at.getName());
+		if (((atExisting.getFlags() & AttributeType.TYPE_IMMUTABLE_FLAG) != 0) &&
+				((atExisting.getFlags() & AttributeType.INSTANCES_IMMUTABLE_FLAG) != 0))
+			throw new IllegalAttributeTypeException("Attribute type which has immutable type "
+					+ "and values can not be modified in any way.");
+		
 		if ((atExisting.getFlags() & AttributeType.TYPE_IMMUTABLE_FLAG) != 0)
 		{
 			updateImmutableAttributeType(at, atExisting);
@@ -252,6 +259,7 @@ public class AttributeTypeManagementImpl implements AttributeTypeManagement
 	}
 
 	@Override
+	@Transactional
 	public AttributeType getAttributeType(String name) throws EngineException
 	{
 		authz.checkAuthorization(AuthzCapability.readInfo);

@@ -5,11 +5,11 @@
 package pl.edu.icm.unity.webadmin.reg.formman;
 
 import java.util.List;
-import java.util.Set;
 
-import com.vaadin.v7.ui.ComboBox;
+import com.vaadin.ui.CheckBox;
 
 import pl.edu.icm.unity.base.msgtemplates.reg.AcceptRegistrationTemplateDef;
+import pl.edu.icm.unity.base.msgtemplates.reg.InvitationTemplateDef;
 import pl.edu.icm.unity.base.msgtemplates.reg.RejectRegistrationTemplateDef;
 import pl.edu.icm.unity.base.msgtemplates.reg.UpdateRegistrationTemplateDef;
 import pl.edu.icm.unity.engine.api.GroupsManagement;
@@ -33,12 +33,13 @@ public class BaseFormNotificationsEditor extends LayoutEmbeddable
 	protected final NotificationsManagement notificationsMan;
 	protected final MessageTemplateManagement msgTempMan;
 	
-	private ComboBox channel;
+	private CheckBox sendAdminCopy;
 	private GroupComboBox adminsNotificationGroup;
 
-	private ComboBox rejectedTemplate;
-	private ComboBox acceptedTemplate;
-	private ComboBox updatedTemplate;
+	private CompatibleTemplatesComboBox rejectedTemplate;
+	private CompatibleTemplatesComboBox acceptedTemplate;
+	private CompatibleTemplatesComboBox updatedTemplate;
+	private CompatibleTemplatesComboBox invitationTemplate;
 	
 	public BaseFormNotificationsEditor(UnityMessageSource msg, GroupsManagement groupsMan,
 			NotificationsManagement notificationsMan, MessageTemplateManagement msgTempMan) throws EngineException
@@ -53,14 +54,11 @@ public class BaseFormNotificationsEditor extends LayoutEmbeddable
 
 	protected void initUI() throws EngineException
 	{
-		channel = new ComboBox(msg.getMessage("RegistrationFormViewer.channel"));
-		Set<String> channels = notificationsMan.getNotificationChannels().keySet();
-		for (String c: channels)
-			channel.addItem(c);
+		sendAdminCopy = new CheckBox(msg.getMessage("BaseFormNotificationsEditor.sendAdminCopy"));
 		
 		adminsNotificationGroup = new GroupComboBox(
 				msg.getMessage("RegistrationFormViewer.adminsNotificationsGroup"), groupsMan);
-		adminsNotificationGroup.setNullSelectionAllowed(true);
+		adminsNotificationGroup.setEmptySelectionAllowed(true);
 		adminsNotificationGroup.setInput("/", true);
 		
 		rejectedTemplate =  new CompatibleTemplatesComboBox(RejectRegistrationTemplateDef.NAME, msgTempMan);
@@ -68,28 +66,32 @@ public class BaseFormNotificationsEditor extends LayoutEmbeddable
 		acceptedTemplate =  new CompatibleTemplatesComboBox(AcceptRegistrationTemplateDef.NAME, msgTempMan);
 		acceptedTemplate.setCaption(msg.getMessage("RegistrationFormViewer.acceptedTemplate"));
 		updatedTemplate =  new CompatibleTemplatesComboBox(UpdateRegistrationTemplateDef.NAME, msgTempMan);
-		updatedTemplate.setCaption(msg.getMessage("RegistrationFormViewer.updatedTemplate"));
+		updatedTemplate.setCaption(msg.getMessage("RegistrationFormViewer.updatedTemplate"));	
+		invitationTemplate =  new CompatibleTemplatesComboBox(InvitationTemplateDef.NAME, msgTempMan);
+		invitationTemplate.setCaption(msg.getMessage("RegistrationFormViewer.invitationTemplate"));
 		
-		addComponents(channel, adminsNotificationGroup,
-				rejectedTemplate, acceptedTemplate, updatedTemplate);
+		addComponents(sendAdminCopy, adminsNotificationGroup,
+				rejectedTemplate, acceptedTemplate, updatedTemplate, invitationTemplate);
 	}
 	
 	protected void setValue(BaseFormNotifications toEdit)
 	{
 		adminsNotificationGroup.setValue(toEdit.getAdminsNotificationGroup());
-		channel.setValue(toEdit.getChannel());
+		sendAdminCopy.setValue(toEdit.isSendUserNotificationCopyToAdmin());
 		rejectedTemplate.setValue(toEdit.getRejectedTemplate());
 		acceptedTemplate.setValue(toEdit.getAcceptedTemplate());
 		updatedTemplate.setValue(toEdit.getUpdatedTemplate());
+		invitationTemplate.setValue(toEdit.getInvitationTemplate());
 	}
 	
 	protected void fill(BaseFormNotifications notCfg)
 	{
-		notCfg.setAcceptedTemplate((String) acceptedTemplate.getValue());
-		notCfg.setAdminsNotificationGroup((String) adminsNotificationGroup.getValue());
-		notCfg.setChannel((String) channel.getValue());
-		notCfg.setRejectedTemplate((String) rejectedTemplate.getValue());
-		notCfg.setUpdatedTemplate((String) updatedTemplate.getValue());
+		notCfg.setAcceptedTemplate(acceptedTemplate.getValue());
+		notCfg.setAdminsNotificationGroup(adminsNotificationGroup.getValue());
+		notCfg.setSendUserNotificationCopyToAdmin(sendAdminCopy.getValue());
+		notCfg.setRejectedTemplate(rejectedTemplate.getValue());
+		notCfg.setUpdatedTemplate(updatedTemplate.getValue());
+		notCfg.setInvitationTemplate(invitationTemplate.getValue());
 	}
 	
 	public List<String> getGroups()

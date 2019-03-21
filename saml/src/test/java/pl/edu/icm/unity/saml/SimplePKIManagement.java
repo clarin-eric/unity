@@ -7,13 +7,15 @@ package pl.edu.icm.unity.saml;
 import java.security.cert.X509Certificate;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 import eu.emi.security.authn.x509.X509CertChainValidatorExt;
 import eu.emi.security.authn.x509.X509Credential;
-import eu.emi.security.authn.x509.impl.KeystoreCredential;
 import eu.unicore.security.canl.IAuthnAndTrustConfiguration;
+import pl.edu.icm.unity.engine.DBIntegrationTestBase;
 import pl.edu.icm.unity.engine.api.PKIManagement;
+import pl.edu.icm.unity.engine.api.pki.NamedCertificate;
 import pl.edu.icm.unity.exceptions.EngineException;
 import pl.edu.icm.unity.exceptions.InternalException;
 import pl.edu.icm.unity.exceptions.WrongArgumentException;
@@ -47,9 +49,7 @@ public class SimplePKIManagement implements PKIManagement
 		if (name.equals("MAIN"))
 			try
 			{
-				return new KeystoreCredential("src/test/resources/demoKeystore.p12",
-						"the!uvos".toCharArray(), "the!uvos".toCharArray(), 
-						null, "PKCS12");
+				return DBIntegrationTestBase.getDemoCredential();
 			} catch (Exception e)
 			{
 				throw new InternalException("error loading credential", e);
@@ -64,31 +64,57 @@ public class SimplePKIManagement implements PKIManagement
 	}
 
 	@Override
-	public Set<String> getCertificateNames() throws EngineException
+	public Set<String> getAllCertificateNames() throws EngineException
 	{
 		return null;
 	}
 
 	@Override
-	public X509Certificate getCertificate(String name) throws EngineException
+	public NamedCertificate getCertificate(String name) throws EngineException
 	{
 		return null;
 	}
 
 	@Override
-	public void updateCertificate(String name, X509Certificate updated)
+	public void addVolatileCertificate(String name, X509Certificate updated)
 			throws EngineException
 	{
 	}
 
 	@Override
-	public void removeCertificate(String name) throws EngineException
+	public void addPersistedCertificate(NamedCertificate toAdd) throws EngineException
 	{
+		
 	}
 
 	@Override
-	public void addCertificate(String name, X509Certificate updated)
-			throws EngineException
+	public List<NamedCertificate> getPersistedCertificates() throws EngineException
 	{
+		return null;
+	}
+
+	@Override
+	public void loadCertificatesFromConfigFile()
+	{
+		
+	}
+
+	@Override
+	public List<NamedCertificate> getVolatileCertificates() throws EngineException
+	{
+		return null;
+	}
+	
+	@Override
+	public void removeCertificate(String toRemove) throws EngineException
+	{
+		
+		
+	}
+
+	@Override
+	public void updateCertificate(NamedCertificate toUpdate) throws EngineException
+	{
+		
 	}
 }

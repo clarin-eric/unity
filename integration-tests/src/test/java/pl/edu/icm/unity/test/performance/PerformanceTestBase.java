@@ -31,7 +31,7 @@ import pl.edu.icm.unity.stdext.attr.JpegImageAttribute;
 import pl.edu.icm.unity.stdext.attr.JpegImageAttributeSyntax;
 import pl.edu.icm.unity.stdext.attr.StringAttribute;
 import pl.edu.icm.unity.stdext.attr.StringAttributeSyntax;
-import pl.edu.icm.unity.stdext.credential.PasswordToken;
+import pl.edu.icm.unity.stdext.credential.pass.PasswordToken;
 import pl.edu.icm.unity.stdext.identity.UsernameIdentity;
 import pl.edu.icm.unity.types.basic.Attribute;
 import pl.edu.icm.unity.types.basic.AttributeExt;
@@ -50,7 +50,7 @@ import pl.edu.icm.unity.types.basic.IdentityTaV;
  * Contains all necessary db and time method for integration tests
  * @author P.Piernik
  */
-public class PerformanceTestBase extends TestRESTBase
+public abstract class PerformanceTestBase extends TestRESTBase
 {
 	public final int TEST_REPETITIONS = 10;
 	
@@ -366,7 +366,7 @@ public class PerformanceTestBase extends TestRESTBase
 			String typeName = "jpeg_" + r.nextInt((nDefAttr / 4) - 2);
 			Attribute a = JpegImageAttribute.of(typeName, enInGroup.get(i%NU), im);
 			EntityParam par = new EntityParam(entities.get(i%NU).getId());
-			attrsMan.setAttribute(par, a, true);
+			attrsMan.setAttribute(par, a);
 			op++;
 		}
 
@@ -375,7 +375,7 @@ public class PerformanceTestBase extends TestRESTBase
 			String typeName = "string_" + r.nextInt((nDefAttr  / 4) - 2);
 			Attribute a = StringAttribute.of(typeName, enInGroup.get(i%NU), typeName);
 			EntityParam par = new EntityParam(entities.get(i%NU).getId());
-			attrsMan.setAttribute(par, a, true);
+			attrsMan.setAttribute(par, a);
 			op++;
 		}
 
@@ -385,7 +385,7 @@ public class PerformanceTestBase extends TestRESTBase
 			Attribute a = IntegerAttribute.of(typeName, enInGroup.get(i%NU),
 					new Long(i + 100));
 			EntityParam par = new EntityParam(entities.get(i%NU).getId());
-			attrsMan.setAttribute(par, a, true);
+			attrsMan.setAttribute(par, a);
 			op++;
 		}
 
@@ -395,7 +395,7 @@ public class PerformanceTestBase extends TestRESTBase
 			Attribute a = FloatingPointAttribute.of(typeName, enInGroup.get(i%NU),
 					new Double(i + 100));
 			EntityParam par = new EntityParam(entities.get(i%NU).getId());
-			attrsMan.setAttribute(par, a, true);
+			attrsMan.setAttribute(par, a);
 			op++;
 		}
 		return op;

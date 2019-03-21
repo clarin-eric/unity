@@ -14,11 +14,9 @@ import com.vaadin.ui.Component;
 import com.vaadin.ui.CustomComponent;
 import com.vaadin.ui.FormLayout;
 import com.vaadin.ui.Label;
-import com.vaadin.v7.ui.VerticalLayout;
+import com.vaadin.ui.VerticalLayout;
 
-import pl.edu.icm.unity.engine.api.attributes.AttributeTypeSupport;
 import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
-import pl.edu.icm.unity.stdext.attr.StringAttributeSyntax;
 import pl.edu.icm.unity.types.basic.Attribute;
 import pl.edu.icm.unity.types.basic.AttributeType;
 import pl.edu.icm.unity.types.basic.DynamicAttribute;
@@ -27,6 +25,7 @@ import pl.edu.icm.unity.webui.common.ListOfSelectableElements;
 import pl.edu.icm.unity.webui.common.Styles;
 import pl.edu.icm.unity.webui.common.attributes.AttributeHandlerRegistry;
 import pl.edu.icm.unity.webui.common.attributes.AttributeViewer;
+import pl.edu.icm.unity.webui.common.attributes.AttributeViewerContext;
 import pl.edu.icm.unity.webui.common.safehtml.HtmlLabel;
 import pl.edu.icm.unity.webui.common.safehtml.HtmlTag;
 
@@ -39,17 +38,15 @@ import pl.edu.icm.unity.webui.common.safehtml.HtmlTag;
 public class ExposedAttributesComponent extends CustomComponent
 {
 	private UnityMessageSource msg;
-	private AttributeTypeSupport atSupport;
 	
 	protected Map<String, DynamicAttribute> attributes;
 	protected ListOfSelectableElements attributesHiding;
 	private AttributeHandlerRegistry handlersRegistry;
 
-	public ExposedAttributesComponent(UnityMessageSource msg, AttributeTypeSupport atSupport,
+	public ExposedAttributesComponent(UnityMessageSource msg,
 			AttributeHandlerRegistry handlersRegistry,
 			Collection<DynamicAttribute> attributesCol)
 	{
-		this.atSupport = atSupport;
 		this.msg = msg;
 		this.handlersRegistry = handlersRegistry;
 
@@ -70,11 +67,14 @@ public class ExposedAttributesComponent extends CustomComponent
 	private void initUI()
 	{
 		VerticalLayout contents = new VerticalLayout();
-		contents.setSpacing(true);
+		contents.setMargin(false);
 
 		final VerticalLayout details = new VerticalLayout();
+		details.setMargin(false);
+		details.setSpacing(false);
 		final ExpandCollapseButton showDetails = new ExpandCollapseButton(true, details);
-
+		showDetails.setId("ExposedAttributes.showDetails");
+		
 		Label attributesL = new Label(
 				msg.getMessage("ExposedAttributesComponent.attributes"));
 		attributesL.addStyleName(Styles.bold.toString());
@@ -111,45 +111,9 @@ public class ExposedAttributesComponent extends CustomComponent
 	private List<Component> getAttributeComponent(DynamicAttribute dat)
 	{
 		Attribute at = dat.getAttribute();
-		AttributeType attributeType;
-		try
-		{
-			attributeType = atSupport.getType(at);
-		} catch (IllegalArgumentException e)
-		{
-			// can happen for dynamic attributes from output translation profile
-			attributeType = new AttributeType(at.getName(),	StringAttributeSyntax.ID);
-		}
+		AttributeType attributeType = dat.getAttributeType();
 		AttributeViewer attrViewer = new AttributeViewer(msg, handlersRegistry, 
-				attributeType, at, false); 
-		String name = getAttributeDisplayedName(dat, attributeType);
-		String desc = getAttributeDescription(dat, attributeType);
-		return attrViewer.getAsComponents(name, desc);
-	}
-
-	private String getAttributeDescription(DynamicAttribute dat, AttributeType attributeType)
-	{
-		String attrDescription = dat.getDescription();
-		if (attrDescription == null || attrDescription.isEmpty())
-		{
-			attrDescription = attributeType.getDescription() != null
-					? attributeType.getDescription().getValue(msg)
-					: dat.getAttribute().getName();
-		}
-		
-		return attrDescription;
-	}
-
-	private String getAttributeDisplayedName(DynamicAttribute dat, AttributeType attributeType)
-	{
-		String attrDisplayedName = dat.getDisplayedName();
-		if (attrDisplayedName == null || attrDisplayedName.isEmpty())
-		{
-			attrDisplayedName = attributeType.getDisplayedName() != null
-					? attributeType.getDisplayedName().getValue(msg)
-					: dat.getAttribute().getName();
-		}
-		
-		return attrDisplayedName;
+				attributeType, at, false, AttributeViewerContext.EMPTY); 
+		return attrViewer.getAsComponents(dat.getDisplayedName(), dat.getDescription());
 	}
 }

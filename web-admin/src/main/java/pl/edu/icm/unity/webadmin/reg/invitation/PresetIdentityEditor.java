@@ -5,6 +5,7 @@
 package pl.edu.icm.unity.webadmin.reg.invitation;
 
 import java.util.List;
+import java.util.Optional;
 
 import com.vaadin.ui.Component;
 import com.vaadin.ui.FormLayout;
@@ -14,8 +15,10 @@ import pl.edu.icm.unity.exceptions.IllegalIdentityValueException;
 import pl.edu.icm.unity.types.basic.IdentityParam;
 import pl.edu.icm.unity.types.registration.IdentityRegistrationParam;
 import pl.edu.icm.unity.types.registration.invite.PrefilledEntry;
+import pl.edu.icm.unity.webui.common.ComponentsContainer;
 import pl.edu.icm.unity.webui.common.FormValidationException;
 import pl.edu.icm.unity.webui.common.identities.IdentityEditor;
+import pl.edu.icm.unity.webui.common.identities.IdentityEditorContext;
 import pl.edu.icm.unity.webui.common.identities.IdentityEditorRegistry;
 
 /**
@@ -41,11 +44,11 @@ public class PresetIdentityEditor extends PresetEditorBase<IdentityParam>
 	}
 
 	@Override
-	protected IdentityParam getValueInternal() throws FormValidationException
+	protected Optional<IdentityParam> getValueInternal() throws FormValidationException
 	{
 		try
 		{
-			return editor.getValue();
+			return Optional.ofNullable(editor.getValue());
 		} catch (IllegalIdentityValueException e)
 		{
 			throw new FormValidationException(msg.getMessage("PresetEditor.invalidEntry", 
@@ -59,7 +62,10 @@ public class PresetIdentityEditor extends PresetEditorBase<IdentityParam>
 		selectedParam = formParameters.get(position);
 		editor = identityEditorRegistry.getEditor(selectedParam.getIdentityType());
 		container.removeAllComponents();
-		container.addComponents(editor.getEditor(true, true).getComponents());
+		ComponentsContainer editorComponent = editor.getEditor(IdentityEditorContext.builder()
+					.withRequired(true)
+					.withAdminMode(true).build());
+		container.addComponents(editorComponent.getComponents());
 	}
 
 	@Override

@@ -28,8 +28,10 @@ import pl.edu.icm.unity.stdext.attr.JpegImageAttributeSyntax;
 import pl.edu.icm.unity.stdext.attr.StringAttribute;
 import pl.edu.icm.unity.stdext.attr.StringAttributeSyntax;
 import pl.edu.icm.unity.stdext.attr.VerifiableEmailAttributeSyntax;
+import pl.edu.icm.unity.stdext.attr.VerifiableMobileNumberAttributeSyntax;
 import pl.edu.icm.unity.stdext.identity.UsernameIdentity;
 import pl.edu.icm.unity.stdext.utils.ContactEmailMetadataProvider
+import pl.edu.icm.unity.stdext.utils.ContactMobileMetadataProvider
 import pl.edu.icm.unity.stdext.utils.EntityNameMetadataProvider
 import pl.edu.icm.unity.types.basic.Attribute;
 import pl.edu.icm.unity.types.basic.AttributeStatement;
@@ -43,6 +45,7 @@ import groovy.transform.Field
 
 @Field final String NAME_ATTR = "name"
 @Field final String EMAIL_ATTR = "email";
+@Field final String MOBILE_ATTR = "mobile";
 
 
 //run only if it is the first start of the server on clean DB.
@@ -108,18 +111,30 @@ void initializeCommonAttributeTypes() throws EngineException
 	verifiableEmail.getMetadata().put(ContactEmailMetadataProvider.NAME, "");
 	if (!existingATs.containsKey(EMAIL_ATTR))
 		attributeTypeManagement.addAttributeType(verifiableEmail);
+		
+	//The mobile attribute will be marked as special attribute providing owner's contact mobile.
+	AttributeType verifiableMobile = new AttributeType(MOBILE_ATTR, 
+		VerifiableMobileNumberAttributeSyntax.ID, msgSrc);
+	verifiableMobile.setMinElements(1);
+	verifiableMobile.setMaxElements(5);
+	verifiableMobile.getMetadata().put(ContactMobileMetadataProvider.NAME, "");
+	if (!existingATs.containsKey(MOBILE_ATTR))
+		attributeTypeManagement.addAttributeType(verifiableMobile);	
+	
 }
 
 void assignNameToAdmin() throws EngineException
 {
 	//admin user has no "name" - let's assign one.
 	String adminU = config.getValue(UnityServerConfiguration.INITIAL_ADMIN_USER);
+	if (adminU == null)
+		return;
 	Attribute nameA = StringAttribute.of(NAME_ATTR, "/", "Default Administrator");
 	EntityParam entity = new EntityParam(new IdentityTaV(UsernameIdentity.ID, adminU));
 	try
 	{
 		if (attributesManagement.getAttributes(entity, "/", NAME_ATTR).isEmpty())
-			attributesManagement.setAttribute(entity, nameA, false);
+			attributesManagement.createAttribute(entity, nameA);
 	} catch (IllegalIdentityValueException e)
 	{
 		//ok - no default admin, no default Name.

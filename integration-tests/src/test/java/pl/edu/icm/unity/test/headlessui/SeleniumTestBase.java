@@ -7,10 +7,13 @@ package pl.edu.icm.unity.test.headlessui;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.OutputStream;
+import java.util.Arrays;
 import java.util.NoSuchElementException;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
 
 import org.apache.commons.io.IOUtils;
+import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
@@ -24,10 +27,12 @@ import org.openqa.selenium.TakesScreenshot;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.chrome.ChromeDriver;
+import org.openqa.selenium.chrome.ChromeOptions;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 
+import pl.edu.icm.unity.base.utils.Log;
 import pl.edu.icm.unity.engine.UnityIntegrationTest;
 import pl.edu.icm.unity.engine.server.JettyServer;
 
@@ -41,9 +46,10 @@ import pl.edu.icm.unity.engine.server.JettyServer;
  */
 @RunWith(SpringJUnit4ClassRunner.class)
 @UnityIntegrationTest
-@TestPropertySource(properties = { "unityConfig: src/test/resources/unityServerSelenium.conf" })
-public class SeleniumTestBase
+@TestPropertySource(properties = { "unityConfig: src/test/resources/selenium/unityServer.conf" })
+public abstract class SeleniumTestBase
 {
+	private static final Logger log = Log.getLogger(Log.U_SERVER, SeleniumTestBase.class);
 	protected String baseUrl = "https://localhost:2443";
 	public static final int WAIT_TIME_S = Integer.parseInt(
 			System.getProperty("unity.selenium.wait", "30"));
@@ -52,7 +58,6 @@ public class SeleniumTestBase
 			System.getProperty("unity.selenium.delay", "1500"));
 	protected WebDriver driver;
 
-	private StringBuffer verificationErrors = new StringBuffer();
 	@Autowired
 	protected JettyServer httpServer;
 	
@@ -60,19 +65,33 @@ public class SeleniumTestBase
 	public void setUp() throws Exception
 	{
 		httpServer.start();
-		driver = new ChromeDriver();
+		ChromeOptions chromeOptions = new ChromeOptions();
+		chromeOptions.addArguments("window-size=1280,1024", "no-sandbox", "force-device-scale-factor=1");
+		String seleniumOpts = System.getProperty("unity.selenium.opts");
+		if (seleniumOpts != null && !seleniumOpts.isEmpty())
+		{
+			String[] opts = seleniumOpts.split(",");
+			log.info("Using additional Selenium options: {}", Arrays.toString(opts));
+			chromeOptions.addArguments(opts);
+		}
+		driver = new ChromeDriver(chromeOptions);
 		driver.manage().timeouts().implicitlyWait(WAIT_TIME_S, TimeUnit.SECONDS);
 	}
 
-	
 	@Rule
 	public TestRule watchman = new TestWatcher() 
 	{
 		@Override
 		protected void failed(Throwable e, Description description) 
 		{
-			takeScreenshot(description.getClassName() + "-" + description.getMethodName());
-			cleanup();
+			try
+			{
+				takeScreenshot(description.getClassName() + 
+						"-" + description.getMethodName());
+			} finally
+			{
+				cleanup();
+			}
 		}
 		
 		@Override
@@ -100,11 +119,6 @@ public class SeleniumTestBase
 			driver.manage().deleteAllCookies();
 			httpServer.stop();
 			driver.quit();
-			String verificationErrorString = verificationErrors.toString();
-			if (!"".equals(verificationErrorString))
-			{
-				Assert.fail(verificationErrorString);
-			}
 		}
 	};
 
@@ -112,15 +126,20 @@ public class SeleniumTestBase
 	
 	protected WebElement waitForElement(By by)
 	{
+		waitFor(() -> isElementPresent(by) != null);
+		return isElementPresent(by);
+	}
+	
+	protected void waitFor(Supplier<Boolean> awaited)
+	{
 		for (int i = 0;; i++)
 		{
 			if (i >= WAIT_TIME_S*1000/SLEEP_TIME_MS)
 				Assert.fail("timeout");
 			try
 			{
-				WebElement elementPresent = isElementPresent(by);
-				if (elementPresent != null)
-					return elementPresent;
+				if (awaited.get())
+					return;
 				Thread.sleep(SLEEP_TIME_MS);
 			} catch (InterruptedException e)
 			{
@@ -148,6 +167,12 @@ public class SeleniumTestBase
 		WebElement ret = waitForElement(someElement);
 		simpleWait();
 		return ret;
+	}
+
+	protected void waitForPageLoadByURL(String urlSuffix)
+	{
+		waitFor(() -> driver.getCurrentUrl().endsWith(urlSuffix)); 
+		simpleWait();
 	}
 	
 	private void simpleWait()

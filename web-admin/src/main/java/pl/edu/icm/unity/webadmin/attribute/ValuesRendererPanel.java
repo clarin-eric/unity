@@ -9,13 +9,14 @@ import java.util.List;
 import com.vaadin.shared.ui.MarginInfo;
 import com.vaadin.ui.Component;
 import com.vaadin.ui.Label;
-import com.vaadin.v7.ui.VerticalLayout;
+import com.vaadin.ui.VerticalLayout;
 
 import pl.edu.icm.unity.engine.api.attributes.AttributeTypeSupport;
 import pl.edu.icm.unity.engine.api.attributes.AttributeValueSyntax;
 import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
 import pl.edu.icm.unity.types.basic.AttributeExt;
 import pl.edu.icm.unity.webui.common.Styles;
+import pl.edu.icm.unity.webui.common.attributes.AttributeViewerContext;
 import pl.edu.icm.unity.webui.common.attributes.WebAttributeHandler;
 import pl.edu.icm.unity.webui.common.safehtml.HtmlLabel;
 import pl.edu.icm.unity.webui.common.safehtml.SafePanel;
@@ -70,6 +71,8 @@ public class ValuesRendererPanel extends VerticalLayout
 		
 		Label infoDate = new Label(created + " " + updated);
 		VerticalLayout contents = new VerticalLayout();
+		contents.setMargin(false);
+		contents.setSpacing(false);
 		contents.addComponent(info);
 		if (!created.equals(""))
 			contents.addComponent(infoDate);
@@ -86,6 +89,8 @@ public class ValuesRendererPanel extends VerticalLayout
 		valuePanel.addStyleName(Styles.vPanelLight.toString());
 		valuePanel.setSizeFull();
 		VerticalLayout contents = new VerticalLayout();
+		contents.setMargin(false);
+		contents.setSpacing(false);
 		contents.setSpacing(true);
 		valuePanel.setContent(contents);
 		for (String value: values)
@@ -98,7 +103,7 @@ public class ValuesRendererPanel extends VerticalLayout
 			WebAttributeHandler handler, AttributeValueSyntax<T> syntax, 
 			String value)
 	{
-		Component c = handler.getRepresentation(value);
+		Component c = handler.getRepresentation(value, AttributeViewerContext.EMPTY);
 		c.setSizeUndefined();
 		c.setWidth(100, Unit.PERCENTAGE);
 		contents.addComponent(c);

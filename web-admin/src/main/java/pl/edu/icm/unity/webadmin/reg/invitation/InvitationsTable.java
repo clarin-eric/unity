@@ -7,35 +7,47 @@ package pl.edu.icm.unity.webadmin.reg.invitation;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
-import com.google.common.collect.Lists;
-import com.vaadin.v7.data.Property.ValueChangeEvent;
-import com.vaadin.v7.data.Property.ValueChangeListener;
-import com.vaadin.v7.data.util.BeanItemContainer;
+import com.vaadin.data.ValueProvider;
+import com.vaadin.shared.data.sort.SortDirection;
 import com.vaadin.shared.ui.Orientation;
 import com.vaadin.ui.CustomComponent;
-import com.vaadin.ui.Label;
-import com.vaadin.v7.ui.Table;
+import com.vaadin.ui.Grid;
+import com.vaadin.ui.Grid.SelectionMode;
 
 import pl.edu.icm.unity.engine.api.AttributeTypeManagement;
+import pl.edu.icm.unity.engine.api.EnquiryManagement;
+import pl.edu.icm.unity.engine.api.GroupsManagement;
 import pl.edu.icm.unity.engine.api.InvitationManagement;
-import pl.edu.icm.unity.engine.api.NotificationsManagement;
+import pl.edu.icm.unity.engine.api.MessageTemplateManagement;
 import pl.edu.icm.unity.engine.api.RegistrationsManagement;
+import pl.edu.icm.unity.engine.api.attributes.AttributeSupport;
+import pl.edu.icm.unity.engine.api.bulk.BulkGroupQueryService;
+import pl.edu.icm.unity.engine.api.bulk.GroupMembershipData;
+import pl.edu.icm.unity.engine.api.bulk.GroupMembershipInfo;
 import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
+import pl.edu.icm.unity.engine.api.notification.NotificationProducer;
 import pl.edu.icm.unity.engine.api.utils.TimeUtil;
 import pl.edu.icm.unity.exceptions.EngineException;
 import pl.edu.icm.unity.exceptions.WrongArgumentException;
+import pl.edu.icm.unity.stdext.utils.EntityNameMetadataProvider;
+import pl.edu.icm.unity.types.basic.AttributeType;
+import pl.edu.icm.unity.types.registration.EnquiryForm;
 import pl.edu.icm.unity.types.registration.RegistrationForm;
 import pl.edu.icm.unity.types.registration.invite.InvitationParam;
 import pl.edu.icm.unity.types.registration.invite.InvitationWithCode;
 import pl.edu.icm.unity.webui.common.ComponentWithToolbar;
 import pl.edu.icm.unity.webui.common.ConfirmDialog;
 import pl.edu.icm.unity.webui.common.ErrorComponent;
+import pl.edu.icm.unity.webui.common.GridContextMenuSupport;
+import pl.edu.icm.unity.webui.common.GridSelectionSupport;
 import pl.edu.icm.unity.webui.common.Images;
 import pl.edu.icm.unity.webui.common.NotificationPopup;
 import pl.edu.icm.unity.webui.common.SingleActionHandler;
 import pl.edu.icm.unity.webui.common.SmallGrid;
-import pl.edu.icm.unity.webui.common.SmallTableDeprecated;
 import pl.edu.icm.unity.webui.common.Styles;
 import pl.edu.icm.unity.webui.common.Toolbar;
 import pl.edu.icm.unity.webui.common.attributes.AttributeHandlerRegistry;
@@ -48,90 +60,104 @@ import pl.edu.icm.unity.webui.common.identities.IdentityEditorRegistry;
 public class InvitationsTable extends CustomComponent
 {
 	private UnityMessageSource msg;
-	private Table invitationsTable;
+	private Grid<TableInvitationBean> invitationsTable;
 	private RegistrationsManagement registrationManagement;
+	private EnquiryManagement enquiryManagement;
 	private InvitationManagement invitationManagement;
-	private NotificationsManagement notificationsManagement;
 	private IdentityEditorRegistry identityEditorRegistry;
 	private AttributeHandlerRegistry attrHandlersRegistry;
 	private AttributeTypeManagement attributesManagement;
+	private MessageTemplateManagement msgTemplateManagement;
+	private GroupsManagement groupsManagement;
+	private NotificationProducer notificationsProducer;
+	private BulkGroupQueryService bulkQuery;
+	private AttributeSupport attributeSupport;
+	
 	
 	public InvitationsTable(UnityMessageSource msg,
 			RegistrationsManagement registrationManagement,
+			EnquiryManagement enquiryManagement,
 			InvitationManagement invitationManagement,
-			NotificationsManagement notificationsManagement,
 			AttributeTypeManagement attributesManagement,
 			IdentityEditorRegistry identityEditorRegistry,
-			AttributeHandlerRegistry attrHandlersRegistry)
+			AttributeHandlerRegistry attrHandlersRegistry,
+			MessageTemplateManagement msgTemplateManagement,
+			GroupsManagement groupsManagement,
+			NotificationProducer notificationsProducer,
+			BulkGroupQueryService bulkQuery,
+			AttributeSupport attributeSupport)
 	{
 		this.msg = msg;
 		this.registrationManagement = registrationManagement;
+		this.enquiryManagement = enquiryManagement;
 		this.invitationManagement = invitationManagement;
-		this.notificationsManagement = notificationsManagement;
 		this.attributesManagement = attributesManagement;
 		this.identityEditorRegistry = identityEditorRegistry;
 		this.attrHandlersRegistry = attrHandlersRegistry;
+		this.msgTemplateManagement = msgTemplateManagement;
+		this.groupsManagement = groupsManagement;
+		this.notificationsProducer = notificationsProducer;
+		this.bulkQuery = bulkQuery;
+		this.attributeSupport = attributeSupport;
 		initUI();
 	}
 
 	private void initUI()
 	{
-		invitationsTable = new SmallTableDeprecated();
-		invitationsTable.setNullSelectionAllowed(false);
+		invitationsTable = new SmallGrid<>();
 		invitationsTable.setSizeFull();
-		BeanItemContainer<TableInvitationBean> tableContainer = new BeanItemContainer<>(TableInvitationBean.class);
-		tableContainer.removeContainerProperty("element");
-		invitationsTable.setSelectable(true);
-		invitationsTable.setMultiSelect(true);
-		invitationsTable.setContainerDataSource(tableContainer);
-		invitationsTable.setVisibleColumns(new Object[] {"form", "address", "code", "expiration"});
-		invitationsTable.setColumnHeaders(new String[] {
-				msg.getMessage("InvitationsTable.form"),
-				msg.getMessage("InvitationsTable.contactAddress"),
-				msg.getMessage("InvitationsTable.code"),
-				msg.getMessage("InvitationsTable.expiration")});
-		invitationsTable.setSortContainerPropertyId(invitationsTable.getContainerPropertyIds().iterator().next());
-		invitationsTable.setSortAscending(true);
-
-		RefreshActionHandler refreshA = new RefreshActionHandler();
-		AddNewActionHandler addA = new AddNewActionHandler();
-		SendCodeActionHandler sendA = new SendCodeActionHandler();
-		DeleteActionHandler deleteA = new DeleteActionHandler();
-		Toolbar toolbar = new Toolbar(invitationsTable, Orientation.HORIZONTAL);
-		addAction(refreshA, toolbar);
-		addAction(addA, toolbar);
-		addAction(sendA, toolbar);
-		addAction(deleteA, toolbar);
-
+		invitationsTable.setSelectionMode(SelectionMode.MULTI);
+		
+		invitationsTable.addColumn(TableInvitationBean::getType, ValueProvider.identity())
+		.setCaption(msg.getMessage("InvitationsTable.type"))
+		.setId("type");
+		
+		invitationsTable.addColumn(TableInvitationBean::getForm, ValueProvider.identity())
+			.setCaption(msg.getMessage("InvitationsTable.form"))
+			.setId("form");
+		invitationsTable.addColumn(TableInvitationBean::getAddress, ValueProvider.identity())
+			.setCaption(msg.getMessage("InvitationsTable.contactAddress"))
+			.setId("contactAddress");
+		invitationsTable.addColumn(TableInvitationBean::getCode, ValueProvider.identity())
+			.setCaption(msg.getMessage("InvitationsTable.code"))
+			.setId("code");
+		invitationsTable.addColumn(TableInvitationBean::getExpiration, ValueProvider.identity())
+			.setCaption(msg.getMessage("InvitationsTable.expiration"))
+			.setStyleGenerator(invitation -> invitation.isExpired() ? Styles.error.toString() : null)
+			.setId("expiration");
+		
+		invitationsTable.sort("contactAddress", SortDirection.ASCENDING);
+		
+		GridContextMenuSupport<TableInvitationBean> contextMenu = new GridContextMenuSupport<>(invitationsTable);
+		contextMenu.addActionHandler(getRefreshAction());
+		contextMenu.addActionHandler(getAddAction());
+		contextMenu.addActionHandler(getSendAction());
+		contextMenu.addActionHandler(getDeleteAction());
+		GridSelectionSupport.installClickListener(invitationsTable);
+		
+		Toolbar<TableInvitationBean> toolbar = new Toolbar<>(Orientation.HORIZONTAL);
+		invitationsTable.addSelectionListener(toolbar.getSelectionListener());
+		toolbar.addActionHandlers(contextMenu.getActionHandlers());
+		
 		ComponentWithToolbar tableWithToolbar = new ComponentWithToolbar(invitationsTable, toolbar);
 		tableWithToolbar.setSizeFull();
 		
 		setCompositionRoot(tableWithToolbar);
 		refresh();
 	}
-
+	
 	public void addValueChangeListener(final InvitationSelectionListener listener)
 	{
-		invitationsTable.addValueChangeListener(new ValueChangeListener()
+		invitationsTable.addSelectionListener(event ->
 		{
-			@Override
-			public void valueChange(ValueChangeEvent event)
-			{
-				TableInvitationBean selected = getOnlyOneSelected();
-				listener.invitationChanged(selected == null ? null : selected.invitation);
-			}
+			TableInvitationBean selected = getOnlyOneSelected();
+			listener.invitationChanged(selected == null ? null : selected.invitationWithCode);
 		});
-	}
-	
-	private void addAction(SingleActionHandler action, Toolbar toolbar)
-	{
-		invitationsTable.addActionHandler(action);
-		toolbar.addActionHandler(action);
 	}
 	
 	private TableInvitationBean getOnlyOneSelected()
 	{
-		Collection<?> beans = (Collection<?>) invitationsTable.getValue();
+		Collection<TableInvitationBean> beans = invitationsTable.getSelectedItems();
 		return beans == null || beans.isEmpty() || beans.size() > 1 ? 
 				null : ((TableInvitationBean)beans.iterator().next());
 	}
@@ -163,14 +189,13 @@ public class InvitationsTable extends CustomComponent
 		return true;
 	}
 
-	private void removeInvitation(Collection<?> items)
+	private void removeInvitation(Set<TableInvitationBean> items)
 	{
 		try
 		{
-			for (Object item: items)
+			for (TableInvitationBean item: items)
 			{
-				TableInvitationBean bean = (TableInvitationBean) item;
-				invitationManagement.removeInvitation(bean.getCode());
+				invitationManagement.removeInvitation(item.getCode());
 			}
 			refresh();
 		} catch (Exception e)
@@ -180,14 +205,24 @@ public class InvitationsTable extends CustomComponent
 		}
 	}
 
-	private void sendInvitation(Collection<?> items)
+
+	private SingleActionHandler<TableInvitationBean> getSendAction()
+	{
+		return SingleActionHandler.builder(TableInvitationBean.class)
+			.withCaption(msg.getMessage("InvitationsTable.sendCodeAction"))
+			.withIcon(Images.messageSend.getResource())
+			.multiTarget()
+			.withHandler(this::sendInvitation)
+			.build();
+	}
+	
+	private void sendInvitation(Set<TableInvitationBean> items)
 	{
 		try
 		{
-			for (Object item: items)
+			for (TableInvitationBean item: items)
 			{
-				TableInvitationBean bean = (TableInvitationBean) item;
-				invitationManagement.sendInvitation(bean.getCode());
+				invitationManagement.sendInvitation(item.getCode());
 			}
 			refresh();
 		} catch (Exception e)
@@ -197,29 +232,41 @@ public class InvitationsTable extends CustomComponent
 		}
 	}
 	
-	private Collection<RegistrationForm> getForms() throws EngineException
+	private Collection<EnquiryForm> getEnquiryForms() throws EngineException
+	{
+		return enquiryManagement.getEnquires();
+	}
+	
+	private Collection<RegistrationForm> getRegistrationForms() throws EngineException
 	{
 		return registrationManagement.getForms();
 	}
 	
-	private Collection<String> getChannels() throws EngineException
+	private SingleActionHandler<TableInvitationBean> getRefreshAction()
 	{
-		return notificationsManagement.getNotificationChannels().keySet();
+		return SingleActionHandler
+			.builder4Refresh(msg, TableInvitationBean.class)
+			.withHandler(selection -> refresh())
+			.build();
 	}
 	
-	private void refresh()
+	void refresh()
 	{
 		try
 		{
 			TableInvitationBean selected = getOnlyOneSelected();
-			List<InvitationWithCode> invitations = invitationManagement.getInvitations();
-			invitationsTable.removeAllItems();
-			for (InvitationWithCode invitation: invitations)
+			List<TableInvitationBean> invitations = invitationManagement.getInvitations()
+					.stream()
+					.map(invitation -> new TableInvitationBean(msg, invitation))
+					.collect(Collectors.toList());
+			invitationsTable.setItems(invitations);
+			if (selected != null)
 			{
-				TableInvitationBean item = new TableInvitationBean(invitation);
-				invitationsTable.addItem(item);
-				if (selected != null && selected.getCode().equals(invitation.getRegistrationCode()))
-					invitationsTable.setValue(Lists.newArrayList(item));
+				String selectedCode = selected.getCode();
+				invitations.stream()
+					.filter(invitation -> selectedCode.equals(invitation.getCode()))
+					.findFirst()
+					.ifPresent(invitation -> invitationsTable.select(invitation));
 			}
 		} catch (Exception e)
 		{
@@ -228,107 +275,98 @@ public class InvitationsTable extends CustomComponent
 			setCompositionRoot(error);
 		}
 	}
-
-	private class RefreshActionHandler extends SingleActionHandler
+	
+	private SingleActionHandler<TableInvitationBean> getAddAction()
 	{
-		public RefreshActionHandler()
-		{
-			super(msg.getMessage("InvitationsTable.refreshAction"), Images.refresh.getResource());
-			setNeedsTarget(false);
-		}
-
-		@Override
-		public void handleAction(Object sender, final Object target)
-		{
-			refresh();
-		}
+		return SingleActionHandler.builder(TableInvitationBean.class)
+			.withCaption(msg.getMessage("InvitationsTable.addInvitationAction"))
+			.withIcon(Images.add.getResource())
+			.dontRequireTarget()
+			.withHandler(this::handleAdd)
+			.build();
 	}
 
-	private class AddNewActionHandler extends SingleActionHandler
+	private void handleAdd(Set<TableInvitationBean> items)
 	{
-		public AddNewActionHandler()
+		InvitationEditor editor;
+		try
 		{
-			super(msg.getMessage("InvitationsTable.addInvitationAction"), Images.add.getResource());
-			setNeedsTarget(false);
-		}
-
-		@Override
-		public void handleAction(Object sender, final Object target)
+			editor = new InvitationEditor(msg, identityEditorRegistry, attrHandlersRegistry,
+					msgTemplateManagement.listTemplates(), getRegistrationForms(),
+					getEnquiryForms(), attributesManagement.getAttributeTypesAsMap(),
+					notificationsProducer, getEntities(), getNameAttribute(), groupsManagement.getGroupsByWildcard("/**"),
+					msgTemplateManagement);
+		} catch (WrongArgumentException e)
 		{
-			
-			InvitationEditor editor;
-			try
-			{
-				editor = new InvitationEditor(msg, identityEditorRegistry, attrHandlersRegistry, 
-						getForms(), getChannels(), attributesManagement.getAttributeTypesAsMap());
-			} catch (WrongArgumentException e)
-			{
-				NotificationPopup.showError(msg, msg.getMessage("InvitationsTable.noValidForms"), 
-						msg.getMessage("InvitationsTable.noValidFormsDesc"));
-				return;
-			} catch (EngineException e)
-			{
-				NotificationPopup.showError(msg, msg.getMessage("InvitationsTable.errorGetData"), e);
-				return;
-			}
-			InvitationEditDialog dialog = new InvitationEditDialog(msg, 
-					msg.getMessage("InvitationsTable.addInvitationAction"), editor, 
-					(invitation, sendInvitation) -> addInvitation(invitation, sendInvitation));
-			dialog.show();
+			NotificationPopup.showError(msg.getMessage("InvitationsTable.noValidForms"), 
+					msg.getMessage("InvitationsTable.noValidFormsDesc"));
+			return;
+		} catch (EngineException e)
+		{
+			NotificationPopup.showError(msg, msg.getMessage("InvitationsTable.errorGetData"), e);
+			return;
 		}
+		InvitationEditDialog dialog = new InvitationEditDialog(msg, 
+				msg.getMessage("InvitationsTable.addInvitationAction"), editor, 
+				(invitation, sendInvitation) -> addInvitation(invitation, sendInvitation));
+		dialog.show();
 	}
 
 	
-	private class SendCodeActionHandler extends SingleActionHandler
+	private Map<Long, GroupMembershipInfo> getEntities() throws EngineException
 	{
-		public SendCodeActionHandler()
-		{
-			super(msg.getMessage("InvitationsTable.sendCodeAction"), Images.messageSend.getResource());
-			setMultiTarget(true);
-		}
-
-		@Override
-		public void handleAction(Object sender, final Object target)
-		{
-			final Collection<?> items = (Collection<?>) invitationsTable.getValue();
-			sendInvitation(items);
-		}
+		GroupMembershipData bulkMembershipData = bulkQuery.getBulkMembershipData("/");
+		return bulkQuery.getMembershipInfo(bulkMembershipData);
 	}
 	
-	private class DeleteActionHandler extends SingleActionHandler
+	private String getNameAttribute() throws EngineException
 	{
-		public DeleteActionHandler()
-		{
-			super(msg.getMessage("InvitationsTable.deleteAction"), Images.delete.getResource());
-			setMultiTarget(true);
-		}
-
-		@Override
-		public void handleAction(Object sender, final Object target)
-		{
-			final Collection<?> items = (Collection<?>) invitationsTable.getValue();
-			new ConfirmDialog(msg, msg.getMessage(
-					"InvitationsTable.confirmDelete", items.size()),
-					new ConfirmDialog.Callback()
+		AttributeType type = attributeSupport.getAttributeTypeWithSingeltonMetadata(EntityNameMetadataProvider.NAME);
+		if (type == null)
+			return null;
+		return type.getName();
+	}
+	
+	private SingleActionHandler<TableInvitationBean> getDeleteAction()
+	{
+		return SingleActionHandler.builder4Delete(msg, TableInvitationBean.class)
+			.withHandler(this::handleDelete)
+			.build();
+	}
+	
+	public void handleDelete(Set<TableInvitationBean> items)
+	{
+		new ConfirmDialog(msg, msg.getMessage(
+				"InvitationsTable.confirmDelete", items.size()),
+				new ConfirmDialog.Callback()
+				{
+					@Override
+					public void onConfirm()
 					{
-						@Override
-						public void onConfirm()
-						{
-							removeInvitation(items);
-						}
-					}).show();
-		}
+						removeInvitation(items);
+					}
+				}).show();
 	}
-	
+
 	public static class TableInvitationBean
 	{
-		private InvitationWithCode invitation;
+		private UnityMessageSource msg;
+		private InvitationWithCode invitationWithCode;
+		private InvitationParam invitation;
 		
-		public TableInvitationBean(InvitationWithCode invitation)
+		public TableInvitationBean(UnityMessageSource msg, InvitationWithCode invitationWithCode)
 		{
-			this.invitation = invitation;
+			this.invitationWithCode = invitationWithCode;
+			this.invitation = invitationWithCode.getInvitation();
+			this.msg = msg;
 		}
 
+		
+		public String getType()
+		{
+			return msg.getMessage("InvitationType." + invitation.getType().toString().toLowerCase());
+		}
+		
 		public String getForm()
 		{
 			return invitation.getFormId();
@@ -336,15 +374,17 @@ public class InvitationsTable extends CustomComponent
 		
 		public String getCode()
 		{
-			return invitation.getRegistrationCode();
+			return invitationWithCode.getRegistrationCode();
 		}
 		
-		public Label getExpiration()
+		public String getExpiration()
 		{
-			Label ret = new Label(TimeUtil.formatMediumInstant(invitation.getExpiration()));
-			if (Instant.now().isAfter(invitation.getExpiration()))
-				ret.addStyleName(Styles.error.toString());
-			return ret;
+			return TimeUtil.formatMediumInstant(invitation.getExpiration());
+		}
+		
+		public boolean isExpired()
+		{
+			return Instant.now().isAfter(invitation.getExpiration());
 		}
 		
 		public String getAddress()
@@ -357,5 +397,4 @@ public class InvitationsTable extends CustomComponent
 	{
 		void invitationChanged(InvitationWithCode invitation);
 	}
-
 }

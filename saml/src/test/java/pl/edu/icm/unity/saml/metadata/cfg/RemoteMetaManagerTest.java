@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013 ICM Uniwersytet Warszawski All rights reserved.
+ * Copyright (c) 2017 Bixbit - Krzysztof Benedyczak All rights reserved.
  * See LICENCE.txt file for licensing information.
  */
 package pl.edu.icm.unity.saml.metadata.cfg;
@@ -20,6 +20,7 @@ import static pl.edu.icm.unity.saml.idp.SamlIdpProperties.SPMETA_PREFIX;
 import java.io.File;
 import java.io.IOException;
 import java.util.Properties;
+import java.util.function.BiConsumer;
 
 import org.apache.commons.io.FileUtils;
 import org.awaitility.Awaitility;
@@ -34,6 +35,7 @@ import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
 import pl.edu.icm.unity.exceptions.EngineException;
 import pl.edu.icm.unity.saml.idp.SamlIdpProperties;
 import pl.edu.icm.unity.saml.metadata.srv.RemoteMetadataService;
+import xmlbeans.org.oasis.saml2.metadata.EntitiesDescriptorDocument;
 
 public class RemoteMetaManagerTest extends DBIntegrationTestBase
 {
@@ -45,7 +47,120 @@ public class RemoteMetaManagerTest extends DBIntegrationTestBase
 
 	@Autowired
 	private UnityMessageSource msg;
+
+	@Test
+	public void shouldUpdateStaticConfigurationAfterReload() throws Exception
+	{
+		Properties p = new Properties();
+		p.setProperty(P + CREDENTIAL, "MAIN");
+		p.setProperty(P + ISSUER_URI, "me");
+		p.setProperty(P + GROUP, "group");
+		p.setProperty(P + DEFAULT_GROUP, "group");
+		SamlIdpProperties configuration = new SamlIdpProperties(p, pkiManagement);
+
+		RemoteMetaManager manager = new RemoteMetaManager(configuration,
+					pkiManagement,
+					new MetaToIDPConfigConverter(pkiManagement, msg),
+					metadataService, SamlIdpProperties.SPMETA_PREFIX);
+
+		p.setProperty(P + GROUP, "UPDATED");
+		manager.setBaseConfiguration(new SamlIdpProperties(p, pkiManagement));
+		
+		assertThat(manager.getVirtualConfiguration().getValue(GROUP), is("UPDATED"));
+	}
+
+	@Test
+	public void shouldRefreshMetadataOriginatingConfigurationAfterReload() throws Exception
+	{
+		Properties p = new Properties();
+		p.setProperty(P + CREDENTIAL, "MAIN");
+		p.setProperty(P + ISSUER_URI, "me");
+		p.setProperty(P + GROUP, "group");
+		p.setProperty(P + DEFAULT_GROUP, "group");
+		p.setProperty(P + SPMETA_PREFIX + "1." + METADATA_URL,
+				new String("foo"));
+		SamlIdpProperties configuration = new SamlIdpProperties(p, pkiManagement);
+		MockMetadataService mockMetaService = new MockMetadataService();
+		
+		
+		RemoteMetaManager manager = new RemoteMetaManager(configuration,
+					pkiManagement,
+					new MetaToIDPConfigConverter(pkiManagement, msg),
+					mockMetaService, SamlIdpProperties.SPMETA_PREFIX);
+
+		EntitiesDescriptorDocument meta = EntitiesDescriptorDocument.Factory.parse(
+				new File("src/test/resources/unity-as-sp-meta.xml"));
+		mockMetaService.publishMetadata(meta);
+		
+		//when
+		p.setProperty(P + GROUP, "UPDATED");
+		manager.setBaseConfiguration(new SamlIdpProperties(p, pkiManagement));
+		
+		assertThat(manager.getVirtualConfiguration()
+				.getStructuredListKeys(SamlIdpProperties.ALLOWED_SP_PREFIX).size(), is(0));
+	}
 	
+	@Test
+	public void shouldInsertPublishedMetadataAfterInit() throws Exception
+	{
+		Properties p = new Properties();
+		p.setProperty(P + CREDENTIAL, "MAIN");
+		p.setProperty(P + ISSUER_URI, "me");
+		p.setProperty(P + GROUP, "group");
+		p.setProperty(P + DEFAULT_GROUP, "group");
+		p.setProperty(P + SPMETA_PREFIX + "1." + METADATA_URL,
+				new String("foo"));
+		SamlIdpProperties configuration = new SamlIdpProperties(p, pkiManagement);
+		MockMetadataService mockMetaService = new MockMetadataService();
+		
+		RemoteMetaManager manager = new RemoteMetaManager(configuration,
+					pkiManagement,
+					new MetaToIDPConfigConverter(pkiManagement, msg),
+					mockMetaService, SamlIdpProperties.SPMETA_PREFIX);
+
+		//when
+		EntitiesDescriptorDocument meta = EntitiesDescriptorDocument.Factory.parse(
+				new File("src/test/resources/unity-as-sp-meta.xml"));
+		mockMetaService.publishMetadata(meta);
+		
+		//expect
+		assertThat(manager.getVirtualConfiguration()
+				.getStructuredListKeys(SamlIdpProperties.ALLOWED_SP_PREFIX).size(), is(1));
+	}
+	
+	private static class MockMetadataService implements RemoteMetadataService
+	{
+		private BiConsumer<EntitiesDescriptorDocument, String> consumer;
+
+		@Override
+		public void registerConsumer(String key, long refreshIntervalMs,
+				String customTruststore,
+				BiConsumer<EntitiesDescriptorDocument, String> consumer)
+		{
+			this.consumer = consumer;
+		}
+
+		void publishMetadata(EntitiesDescriptorDocument doc)
+		{
+			consumer.accept(doc, "1");
+		}
+		
+		@Override
+		public void unregisterConsumer(String id)
+		{
+		}
+
+		@Override
+		public void reset()
+		{
+		}
+
+		@Override
+		public String preregisterConsumer(String url)
+		{
+			return "1";
+		}
+	}
 	
 	@Ignore
 	@Test

@@ -21,7 +21,7 @@ import pl.edu.icm.unity.types.basic.EntityScheduledOperation;
 import pl.edu.icm.unity.types.basic.GroupMembership;
 import pl.edu.icm.unity.types.basic.Identity;
 import pl.edu.icm.unity.webui.common.EntityWithLabel;
-import pl.edu.icm.unity.webui.common.ListOfElements;
+import pl.edu.icm.unity.webui.common.ListOfElementsWithActions;
 import pl.edu.icm.unity.webui.common.identities.IdentityFormatter;
 import pl.edu.icm.unity.webui.common.identities.MembershipFormatter;
 import pl.edu.icm.unity.webui.common.safehtml.HtmlLabel;
@@ -40,10 +40,10 @@ public class EntityDetailsPanel extends FormLayout
 	private Label id;
 	private Label status;
 	private Label scheduledAction;
-	private ListOfElements<String> identities;
+	private ListOfElementsWithActions<String> identities;
 	private Label credReq;
 	private HtmlLabel credStatus;
-	private ListOfElements<String> groups;
+	private ListOfElementsWithActions<String> groups;
 	
 	@Autowired
 	public EntityDetailsPanel(UnityMessageSource msg, IdentityFormatter idFormatter)
@@ -59,14 +59,7 @@ public class EntityDetailsPanel extends FormLayout
 		scheduledAction = new Label();
 		scheduledAction.setCaption(msg.getMessage("IdentityDetails.expiration"));
 		
-		identities = new ListOfElements<>(msg, new ListOfElements.LabelConverter<String>()
-		{
-			@Override
-			public Label toLabel(String value)
-			{
-				return new HtmlSimplifiedLabel(value);
-			}
-		});
+		identities = new ListOfElementsWithActions<>(this::labelConverter);
 		identities.setAddSeparatorLine(false);
 		identities.setCaption(msg.getMessage("IdentityDetails.identities"));
 
@@ -76,18 +69,18 @@ public class EntityDetailsPanel extends FormLayout
 		credStatus = new HtmlLabel(msg);
 		credStatus.setCaption(msg.getMessage("IdentityDetails.credStatus"));
 
-		groups = new ListOfElements<>(msg, new ListOfElements.LabelConverter<String>()
-		{
-			@Override
-			public Label toLabel(String value)
-			{
-				return new HtmlSimplifiedLabel(value);
-			}
-		}); 
+		groups = new ListOfElementsWithActions<>(this::labelConverter); 
 		groups.setAddSeparatorLine(false);
 		groups.setCaption(msg.getMessage("IdentityDetails.groups"));
 		
 		addComponents(id, status, scheduledAction, identities, credReq, credStatus, groups);
+	}
+	
+	private Label labelConverter(String value) 
+	{
+		Label ret = new HtmlSimplifiedLabel(value);
+		ret.setWidth(100, Unit.PERCENTAGE);
+		return ret;
 	}
 	
 	public void setInput(EntityWithLabel entityWithLabel, Collection<GroupMembership> groups)

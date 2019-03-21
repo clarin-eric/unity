@@ -4,35 +4,31 @@
  */
 package pl.edu.icm.unity.webadmin.attributeclass;
 
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Map;
+import java.util.Set;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.config.ConfigurableBeanFactory;
 import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Component;
 
-import com.vaadin.v7.data.Property.ValueChangeEvent;
-import com.vaadin.v7.data.Property.ValueChangeListener;
 import com.vaadin.shared.ui.MarginInfo;
 import com.vaadin.shared.ui.Orientation;
-import com.vaadin.v7.ui.HorizontalLayout;
-import com.vaadin.v7.ui.VerticalLayout;
+import com.vaadin.ui.HorizontalLayout;
+import com.vaadin.ui.VerticalLayout;
 
 import pl.edu.icm.unity.engine.api.AttributeClassManagement;
 import pl.edu.icm.unity.engine.api.AttributeTypeManagement;
 import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
+import pl.edu.icm.unity.engine.api.utils.MessageUtils;
 import pl.edu.icm.unity.exceptions.EngineException;
 import pl.edu.icm.unity.types.basic.AttributeType;
 import pl.edu.icm.unity.types.basic.AttributesClass;
-import pl.edu.icm.unity.webadmin.utils.MessageUtils;
 import pl.edu.icm.unity.webui.common.ComponentWithToolbar;
 import pl.edu.icm.unity.webui.common.ConfirmDialog;
 import pl.edu.icm.unity.webui.common.ErrorComponent;
 import pl.edu.icm.unity.webui.common.GenericElementsTable;
-import pl.edu.icm.unity.webui.common.GenericElementsTable.GenericItem;
-import pl.edu.icm.unity.webui.common.Images;
 import pl.edu.icm.unity.webui.common.NotificationPopup;
 import pl.edu.icm.unity.webui.common.SingleActionHandler;
 import pl.edu.icm.unity.webui.common.Styles;
@@ -70,37 +66,35 @@ public class AttributesClassesComponent extends VerticalLayout
 	
 	private void init()
 	{
+		setMargin(false);
 		addStyleName(Styles.visibleScroll.toString());
 		setCaption(msg.getMessage("AttributesClass.caption"));
 		viewer = new AttributesClassViewer(msg);
-		table =  new GenericElementsTable<String>(
+		table = new GenericElementsTable<>(
 				msg.getMessage("AttributesClass.attributesClassesHeader"));
-		table.addValueChangeListener(new ValueChangeListener()
-		{
-			@Override
-			public void valueChange(ValueChangeEvent event)
-			{
-				Collection<String> items = getItems(table.getValue());
-				if (items.size() > 1 || items.isEmpty())
-				{
-					viewer.setInput(null, allACs);
-					return;
-				}
-				String item = items.iterator().next();	
-				if (item != null)
-				{
-					viewer.setInput(item, allACs);
-				} else
-					viewer.setInput(null, allACs);
-			}
-		});
-		table.addActionHandler(new RefreshActionHandler());
-		table.addActionHandler(new AddActionHandler());
-		table.addActionHandler(new EditActionHandler());
-		table.addActionHandler(new DeleteActionHandler());
-		table.setWidth(90, Unit.PERCENTAGE);
 		table.setMultiSelect(true);
-		Toolbar toolbar = new Toolbar(table, Orientation.HORIZONTAL);
+		table.addSelectionListener(event ->
+		{
+			Collection<String> items = table.getSelectedItems();
+			if (items.size() > 1 || items.isEmpty())
+			{
+				viewer.setInput(null, allACs);
+				return;
+			}
+			String item = items.iterator().next();	
+			if (item != null)
+			{
+				viewer.setInput(item, allACs);
+			} else
+				viewer.setInput(null, allACs);
+		});
+		table.addActionHandler(getRefreshAction());
+		table.addActionHandler(getAddAction());
+		table.addActionHandler(getEditAction());
+		table.addActionHandler(getDeleteAction());
+		table.setWidth(90, Unit.PERCENTAGE);
+		Toolbar<String> toolbar = new Toolbar<>(Orientation.HORIZONTAL);
+		table.addSelectionListener(toolbar.getSelectionListener());
 		toolbar.addActionHandlers(table.getActionHandlers());
 		ComponentWithToolbar tableWithToolbar = new ComponentWithToolbar(table, toolbar);
 		tableWithToolbar.setWidth(90, Unit.PERCENTAGE);
@@ -110,7 +104,6 @@ public class AttributesClassesComponent extends VerticalLayout
 		hl.addComponents(tableWithToolbar, viewer);
 		hl.setSizeFull();
 		hl.setMargin(new MarginInfo(true, false, true, false));
-		hl.setSpacing(true);
 		main = hl;
 		refresh();
 	}
@@ -177,132 +170,80 @@ public class AttributesClassesComponent extends VerticalLayout
 		}
 	}
 	
-	private Collection<String> getItems(Object target)
+	private SingleActionHandler<String> getRefreshAction()
 	{
-		Collection<?> c = (Collection<?>) target;
-		Collection<String> items = new ArrayList<String>();
-		for (Object o: c)
-		{
-			GenericItem<?> i = (GenericItem<?>) o;
-			items.add((String) i.getElement());	
-		}
-		return items;
-	}
-
-	private class RefreshActionHandler extends SingleActionHandler
-	{
-		public RefreshActionHandler()
-		{
-			super(msg.getMessage("AttributesClass.refreshAction"), Images.refresh.getResource());
-			setNeedsTarget(false);
-		}
-
-		@Override
-		public void handleAction(Object sender, final Object target)
-		{
-			refresh();
-		}
-	}
-
-	private class AddActionHandler extends SingleActionHandler
-	{
-		public AddActionHandler()
-		{
-			super(msg.getMessage("AttributesClass.addAction"), Images.add.getResource());
-			setNeedsTarget(false);
-		}
-
-		@Override
-		public void handleAction(Object sender, final Object target)
-		{
-			Collection<AttributeType> allTypes;
-			try
-			{
-				allTypes = attrMan.getAttributeTypes();
-			} catch (EngineException e)
-			{
-				NotificationPopup.showError(msg, msg.getMessage("AttributesClass.errorGetAttributeTypes"), e);
-				return;
-			}
-			AttributesClassEditor editor = new AttributesClassEditor(msg, allACs, allTypes);
-			AttributesClassEditDialog dialog = new AttributesClassEditDialog(msg, 
-					msg.getMessage("AttributesClass.addACCaption"), editor, 
-					new AttributesClassEditDialog.Callback()
-					{
-						@Override
-						public boolean newAttributesClass(AttributesClass newAC)
-						{
-							return addAC(newAC);
-						}
-					});
-			dialog.show();
-		}
-	}
-
-	private class EditActionHandler extends SingleActionHandler
-	{
-		public EditActionHandler()
-		{
-			super(msg.getMessage("AttributesClass.editAction"), Images.edit.getResource());
-			setNeedsTarget(true);
-		}
-
-		@Override
-		public void handleAction(Object sender, final Object target)
-		{
-			Collection<AttributeType> allTypes;
-			try
-			{
-				allTypes = attrMan.getAttributeTypes();
-			} catch (EngineException e)
-			{
-				NotificationPopup.showError(msg, msg.getMessage("AttributesClass.errorGetAttributeTypes"), e);
-				return;
-			}
-			AttributesClassEditor editor = new AttributesClassEditor(msg, allACs, allTypes);
-			editor.setEditedClass(allACs.get(((GenericItem<?>)target).getElement()));
-			AttributesClassEditDialog dialog = new AttributesClassEditDialog(msg, 
-					msg.getMessage("AttributesClass.addACCaption"), editor, 
-					new AttributesClassEditDialog.Callback()
-					{
-						@Override
-						public boolean newAttributesClass(AttributesClass newAC)
-						{
-							return updateAC(newAC);
-						}
-					});
-			dialog.show();
-		}
+		return SingleActionHandler.builder4Refresh(msg, String.class)
+				.withHandler(selection -> refresh())
+				.build();
 	}
 	
-	private class DeleteActionHandler extends SingleActionHandler
+	private SingleActionHandler<String> getAddAction()
 	{
-		public DeleteActionHandler()
+		return SingleActionHandler.builder4Add(msg, String.class)
+				.withHandler(this::showAddDialog)
+				.build();
+	}
+	
+	public void showAddDialog(Collection<String> selection)
+	{
+		Collection<AttributeType> allTypes;
+		try
 		{
-			super(msg.getMessage("AttributesClass.deleteAction"), 
-					Images.delete.getResource());
-			setMultiTarget(true);
-		}
-		
-		@Override
-		public void handleAction(Object sender, Object target)
+			allTypes = attrMan.getAttributeTypes();
+		} catch (EngineException e)
 		{
-			final Collection<String> items = getItems(target);
-			
-			String confirmText = MessageUtils.createConfirmFromStrings(msg, items);
-			new ConfirmDialog(msg, msg.getMessage("AttributesClass.confirmDelete", confirmText),
-					new ConfirmDialog.Callback()
-			{
-				@Override
-				public void onConfirm()
-				{
-					for (String item : items)
-					{
-						removeAC(item);
-					}
-				}
-			}).show();
+			NotificationPopup.showError(msg, msg.getMessage("AttributesClass.errorGetAttributeTypes"), e);
+			return;
 		}
+		AttributesClassEditor editor = new AttributesClassEditor(msg, allACs, allTypes);
+		AttributesClassEditDialog dialog = new AttributesClassEditDialog(msg, 
+				msg.getMessage("AttributesClass.addACCaption"), editor, 
+				newAC -> addAC(newAC));
+		dialog.show();
+	}
+	
+	private SingleActionHandler<String> getEditAction()
+	{
+		return SingleActionHandler.builder4Edit(msg, String.class)
+				.withHandler(this::showEditDialog)
+				.build();
+	}
+	
+	private void showEditDialog(Set<String> items)
+	{
+		String item = items.iterator().next();
+		Collection<AttributeType> allTypes;
+		try
+		{
+			allTypes = attrMan.getAttributeTypes();
+		} catch (EngineException e)
+		{
+			NotificationPopup.showError(msg, msg.getMessage("AttributesClass.errorGetAttributeTypes"), e);
+			return;
+		}
+		AttributesClassEditor editor = new AttributesClassEditor(msg, allACs, allTypes);
+		editor.setEditedClass(allACs.get(item));
+		AttributesClassEditDialog dialog = new AttributesClassEditDialog(msg, 
+				msg.getMessage("AttributesClass.addACCaption"), editor, 
+				newAC -> updateAC(newAC));
+		dialog.show();
+	}
+	
+	private SingleActionHandler<String> getDeleteAction()
+	{
+		return SingleActionHandler.builder4Delete(msg, String.class)
+				.withHandler(this::handleDelete)
+				.build();
+	}
+	
+	private void handleDelete(Set<String> items)
+	{
+		String confirmText = MessageUtils.createConfirmFromStrings(msg, items);
+		new ConfirmDialog(msg, msg.getMessage("AttributesClass.confirmDelete", confirmText),
+		() -> {
+			for (String item : items)
+				removeAC(item);
+		}).show();
 	}
 
 }

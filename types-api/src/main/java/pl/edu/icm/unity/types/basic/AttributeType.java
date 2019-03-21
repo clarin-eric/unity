@@ -307,10 +307,18 @@ public class AttributeType extends I18nDescribedObject implements Initialization
 	}
 
 	@Override
+	public AttributeType clone()
+	{
+		ObjectNode json = toJson();
+		return new AttributeType(json);
+	}
+	
+	@Override
 	public String toString()
 	{
 		return "AttributeType [description=" + description + ", name=" + name
-				+ ", valueSyntax=" + valueSyntax + ", minElements=" + minElements
+				+ ", valueSyntax=" + valueSyntax + ", valueSyntaxConfig="
+				+ valueSyntaxConfiguration + ", minElements=" + minElements
 				+ ", maxElements=" + maxElements + ", uniqueValues=" + uniqueValues
 				+ ", selfModificable=" + selfModificable + ", flags=" + flags + "]";
 	}

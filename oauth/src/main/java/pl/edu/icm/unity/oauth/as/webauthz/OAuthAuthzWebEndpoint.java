@@ -8,9 +8,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Map;
-import java.util.Set;
 
 import javax.servlet.DispatcherType;
 import javax.servlet.Filter;
@@ -36,6 +34,7 @@ import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
 import pl.edu.icm.unity.engine.api.server.NetworkServer;
 import pl.edu.icm.unity.engine.api.session.LoginToHttpSessionBinder;
 import pl.edu.icm.unity.engine.api.session.SessionManagement;
+import pl.edu.icm.unity.engine.api.utils.FreemarkerAppHandler;
 import pl.edu.icm.unity.engine.api.utils.HiddenResourcesFilter;
 import pl.edu.icm.unity.engine.api.utils.PrototypeComponent;
 import pl.edu.icm.unity.engine.api.utils.RoutingServlet;
@@ -45,9 +44,12 @@ import pl.edu.icm.unity.types.endpoint.EndpointTypeDescription;
 import pl.edu.icm.unity.webui.EndpointRegistrationConfiguration;
 import pl.edu.icm.unity.webui.UnityVaadinServlet;
 import pl.edu.icm.unity.webui.VaadinEndpoint;
+import pl.edu.icm.unity.webui.VaadinEndpointProperties;
 import pl.edu.icm.unity.webui.authn.AuthenticationFilter;
 import pl.edu.icm.unity.webui.authn.AuthenticationUI;
 import pl.edu.icm.unity.webui.authn.InvocationContextSetupFilter;
+import pl.edu.icm.unity.webui.authn.ProxyAuthenticationFilter;
+import pl.edu.icm.unity.webui.authn.RememberMeProcessor;
 import pl.edu.icm.unity.webui.authn.VaadinAuthentication;
 
 /**
@@ -65,7 +67,7 @@ public class OAuthAuthzWebEndpoint extends VaadinEndpoint
 	public static final String OAUTH_CONSENT_DECIDER_SERVLET_PATH = "/oauth2-authz-consentdecider";
 	
 	private OAuthASProperties oauthProperties;
-	private FreemarkerHandler freemarkerHandler;
+	private FreemarkerAppHandler freemarkerHandler;
 	private EntityManagement identitiesManagement;
 	private AttributesManagement attributesManagement;
 	private PKIManagement pkiManagement;
@@ -74,7 +76,7 @@ public class OAuthAuthzWebEndpoint extends VaadinEndpoint
 	
 	@Autowired
 	public OAuthAuthzWebEndpoint(NetworkServer server,
-			ApplicationContext applicationContext, FreemarkerHandler freemarkerHandler,
+			ApplicationContext applicationContext, FreemarkerAppHandler freemarkerHandler,
 			@Qualifier("insecure") EntityManagement identitiesManagement, 
 			@Qualifier("insecure") AttributesManagement attributesManagement,
 			PKIManagement pkiManagement, OAuthEndpointsCoordinator coordinator,
@@ -111,8 +113,7 @@ public class OAuthAuthzWebEndpoint extends VaadinEndpoint
 	 	ServletContextHandler context = new ServletContextHandler(ServletContextHandler.SESSIONS);
 		context.setContextPath(description.getEndpoint().getContextAddress());
 		
-		String endpointURL = getServletUrl(OAUTH_CONSUMER_SERVLET_PATH);
-		Servlet samlParseServlet = new OAuthParseServlet(oauthProperties, endpointURL, 
+		Servlet samlParseServlet = new OAuthParseServlet(oauthProperties, 
 				getServletUrl(OAUTH_ROUTING_SERVLET_PATH), 
 				new ErrorHandler(freemarkerHandler), identitiesManagement, 
 				attributesManagement); 
@@ -122,12 +123,14 @@ public class OAuthAuthzWebEndpoint extends VaadinEndpoint
 		SessionManagement sessionMan = applicationContext.getBean(SessionManagement.class);
 		LoginToHttpSessionBinder sessionBinder = applicationContext.getBean(LoginToHttpSessionBinder.class);
 		UnityServerConfiguration config = applicationContext.getBean(UnityServerConfiguration.class);
+		RememberMeProcessor remeberMeProcessor = applicationContext.getBean(RememberMeProcessor.class);
 		
 		ServletHolder routingServletHolder = createServletHolder(
 				new RoutingServlet(OAUTH_CONSENT_DECIDER_SERVLET_PATH), true);
 		context.addServlet(routingServletHolder, OAUTH_ROUTING_SERVLET_PATH + "/*");
 		
-		Servlet oauthConsentDeciderServlet = dispatcherServletFactory.getInstance(OAUTH_UI_SERVLET_PATH);
+		Servlet oauthConsentDeciderServlet = dispatcherServletFactory.getInstance(
+				OAUTH_UI_SERVLET_PATH, AUTHENTICATION_PATH);
 		ServletHolder oauthConsentDeciderHolder = createServletHolder(oauthConsentDeciderServlet, true);
 		context.addServlet(oauthConsentDeciderHolder, OAUTH_CONSENT_DECIDER_SERVLET_PATH + "/*");
 		
@@ -142,18 +145,24 @@ public class OAuthAuthzWebEndpoint extends VaadinEndpoint
 		
 		authnFilter = new AuthenticationFilter(
 				Collections.singletonList(OAUTH_ROUTING_SERVLET_PATH), 
-				AUTHENTICATION_PATH, description.getRealm(), sessionMan, sessionBinder);
+				AUTHENTICATION_PATH, description.getRealm(), sessionMan, sessionBinder, remeberMeProcessor);
 		context.addFilter(new FilterHolder(authnFilter), "/*", 
 				EnumSet.of(DispatcherType.REQUEST, DispatcherType.FORWARD));
 		
+		proxyAuthnFilter = new ProxyAuthenticationFilter(authenticationFlows, 
+				description.getEndpoint().getContextAddress(),
+				genericEndpointProperties.getBooleanValue(VaadinEndpointProperties.AUTO_LOGIN));
+		context.addFilter(new FilterHolder(proxyAuthnFilter), AUTHENTICATION_PATH + "/*", 
+				EnumSet.of(DispatcherType.REQUEST, DispatcherType.FORWARD));
+		
 		contextSetupFilter = new InvocationContextSetupFilter(config, description.getRealm(),
-				null);
+				null, getAuthenticationFlows());
 		context.addFilter(new FilterHolder(contextSetupFilter), "/*", 
 				EnumSet.of(DispatcherType.REQUEST, DispatcherType.FORWARD));
 		
-		EndpointRegistrationConfiguration registrationConfiguration = getRegistrationConfiguration();
+		EndpointRegistrationConfiguration registrationConfiguration = genericEndpointProperties.getRegistrationConfiguration();
 		authenticationServlet = new UnityVaadinServlet(applicationContext, 
-				AuthenticationUI.class.getSimpleName(), description, authenticators,
+				AuthenticationUI.class.getSimpleName(), description, authenticationFlows,
 				registrationConfiguration, properties, 
 				getBootstrapHandler4Authn(OAUTH_ROUTING_SERVLET_PATH));
 		
@@ -164,7 +173,7 @@ public class OAuthAuthzWebEndpoint extends VaadinEndpoint
 		context.addServlet(authnServletHolder, VAADIN_RESOURCES);
 		
 		theServlet = new UnityVaadinServlet(applicationContext, uiBeanName,
-				description, authenticators, registrationConfiguration, properties,
+				description, authenticationFlows, registrationConfiguration, properties,
 				getBootstrapHandler(OAUTH_ROUTING_SERVLET_PATH));
 		context.addServlet(createVaadinServletHolder(theServlet, false), OAUTH_UI_SERVLET_PATH + "/*");
 
@@ -182,12 +191,10 @@ public class OAuthAuthzWebEndpoint extends VaadinEndpoint
 		
 		private static EndpointTypeDescription initDescription()
 		{
-			Set<String> supportedAuthn = new HashSet<String>();
-			supportedAuthn.add(VaadinAuthentication.NAME);
-			Map<String, String> paths = new HashMap<String, String>();
+			Map<String, String> paths = new HashMap<>();
 			paths.put(OAUTH_CONSUMER_SERVLET_PATH, "OAuth 2 Authorization Grant web endpoint");
 			return new EndpointTypeDescription(NAME, 
-					"OAuth 2 Server - Authorization Grant endpoint", supportedAuthn, paths);
+					"OAuth 2 Server - Authorization Grant endpoint", VaadinAuthentication.NAME, paths);
 		}
 		
 		@Override

@@ -8,13 +8,10 @@ import java.util.Collection;
 import java.util.HashSet;
 import java.util.Set;
 
-import com.vaadin.v7.data.Property.ValueChangeEvent;
-import com.vaadin.v7.data.Property.ValueChangeListener;
 import com.vaadin.ui.Component;
 import com.vaadin.ui.FormLayout;
 import com.vaadin.ui.Label;
 import com.vaadin.ui.Panel;
-import com.vaadin.v7.ui.Table;
 
 import pl.edu.icm.unity.engine.api.AttributeClassManagement;
 import pl.edu.icm.unity.engine.api.GroupsManagement;
@@ -29,6 +26,7 @@ import pl.edu.icm.unity.webadmin.attributeclass.AbstractAttributesClassesDialog;
 import pl.edu.icm.unity.webadmin.attributeclass.EffectiveAttrClassViewer;
 import pl.edu.icm.unity.webui.common.CompactFormLayout;
 import pl.edu.icm.unity.webui.common.EntityWithLabel;
+import pl.edu.icm.unity.webui.common.GenericElementsTable;
 import pl.edu.icm.unity.webui.common.NotificationPopup;
 import pl.edu.icm.unity.webui.common.Styles;
 import pl.edu.icm.unity.webui.common.safehtml.SafePanel;
@@ -44,11 +42,11 @@ import pl.edu.icm.unity.webui.common.safehtml.SafePanel;
 public class EntityAttributesClassesDialog extends AbstractAttributesClassesDialog
 {
 	private EntityWithLabel entity;
-	private Table groupAcs;
-	private Callback callback;
+	private GenericElementsTable<String> groupAcs;
+	private Runnable callback;
 	
 	public EntityAttributesClassesDialog(UnityMessageSource msg, String group, EntityWithLabel entity, 
-			AttributeClassManagement attrMan, GroupsManagement groupsMan, Callback callback)
+			AttributeClassManagement attrMan, GroupsManagement groupsMan, Runnable callback)
 	{
 		super(msg, group, attrMan, groupsMan, msg.getMessage("EntityAttributesClasses.caption"));
 		this.entity = entity;
@@ -63,23 +61,14 @@ public class EntityAttributesClassesDialog extends AbstractAttributesClassesDial
 		
 		acs = new ACTwinColSelect(msg.getMessage("AttributesClass.availableACs"),
 				msg.getMessage("AttributesClass.selectedACs"));
-		acs.addValueChangeListener(new ValueChangeListener()
-		{
-			@Override
-			public void valueChange(ValueChangeEvent event)
-			{
-				updateEffective();
-			}
-		});
+		acs.addValueChangeListener(event -> updateEffective());
 		
 		Panel extraInfo = new SafePanel(msg.getMessage("EntityAttributesClasses.infoPanel"));
 		extraInfo.addStyleName(Styles.vBorderLess.toString());
 		FormLayout extra = new CompactFormLayout();
 		extraInfo.setContent(extra);
 		
-		groupAcs = new Table();
-		groupAcs.addContainerProperty(msg.getMessage("EntityAttributesClasses.groupAcs"), 
-				String.class, null);
+		groupAcs = new GenericElementsTable<>(msg.getMessage("EntityAttributesClasses.groupAcs"));
 		groupAcs.setWidth(90, Unit.PERCENTAGE);
 		groupAcs.setHeight(9, Unit.EM);
 
@@ -111,31 +100,23 @@ public class EntityAttributesClassesDialog extends AbstractAttributesClassesDial
 		acs.setValue(currentSel);
 		
 		Group group = groupsMan.getContents(groupPath, GroupContents.METADATA).getGroup();
-		for (String gac: group.getAttributesClasses())
-			groupAcs.addItem(new String[] {gac}, gac);
+		groupAcs.setItems(group.getAttributesClasses());
 		updateEffective();
 	}
 	
 	@Override
 	protected void onConfirm()
 	{
-		@SuppressWarnings("unchecked")
-		Set<String> selected = (Set<String>) acs.getValue();
+		Set<String> selected = acs.getValue();
 		try
 		{
 			acMan.setEntityAttributeClasses(new EntityParam(entity.getEntity().getId()), 
 					groupPath, selected);
-			callback.onChange();
+			callback.run();
 			close();
 		} catch (EngineException e)
 		{
 			NotificationPopup.showError(msg, msg.getMessage("EntityAttributesClasses.errorUpdatingACs"), e);
 		}
 	}
-	
-	public interface Callback
-	{
-		public void onChange();
-	}
-
 }

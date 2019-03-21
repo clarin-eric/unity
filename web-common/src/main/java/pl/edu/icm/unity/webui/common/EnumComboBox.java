@@ -4,12 +4,11 @@
  */
 package pl.edu.icm.unity.webui.common;
 
-import java.util.HashSet;
-import java.util.Set;
-import java.util.TreeMap;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.function.Predicate;
 
-import com.vaadin.v7.data.Property;
-import com.vaadin.v7.ui.ComboBox;
+import com.vaadin.ui.ComboBox;
 
 import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
 
@@ -19,50 +18,48 @@ import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
  * @author K. Benedyczak
  * @param <T>
  */
-public class EnumComboBox<T extends Enum<?>> extends MapComboBox<T>
-{
+public class EnumComboBox<T extends Enum<?>> extends ComboBox<T>{
+	
 	private UnityMessageSource msg;
 	private String msgPrefix;
 	
 	public EnumComboBox(UnityMessageSource msg, String msgPrefix, Class<T> enumClass, T initialValue)
 	{
-		init(msg, msgPrefix, enumClass, initialValue, new HashSet<T>());
+		init(msg, msgPrefix, enumClass, initialValue, t -> true);
 	}
 	
 	public EnumComboBox(String caption, UnityMessageSource msg, String msgPrefix, Class<T> enumClass, 
 			T initialValue)
 	{
-		this(caption, msg, msgPrefix, enumClass, initialValue, new HashSet<T>());
+		this(caption, msg, msgPrefix, enumClass, initialValue, t -> true);
 	}
 	
 	public EnumComboBox(String caption, UnityMessageSource msg, String msgPrefix, Class<T> enumClass, 
-			T initialValue,	Set<T> hidden)
+			T initialValue,	Predicate<T> filter)
 	{
 		super(caption);
-		init(msg, msgPrefix, enumClass, initialValue, hidden);
+		init(msg, msgPrefix, enumClass, initialValue, filter);
 	}
 
-	private void init(UnityMessageSource msg, String msgPrefix, Class<T> enumClass, T initialValue, 
-			Set<T> hidden)
+	private void init(UnityMessageSource msg, String msgPrefix, Class<T> enumClass, T initialValue,
+		Predicate<T> filter)
 	{
 		this.msg = msg;
 		this.msgPrefix = msgPrefix;
-		TreeMap<String, T> values = new TreeMap<String, T>();
+		List<T> values = new ArrayList<>();
 		T[] consts = enumClass.getEnumConstants();
 		
 		for (T constant: consts)
-			if (!hidden.contains(constant))
-				values.put(msg.getMessage(msgPrefix+constant.toString()), constant);
-		super.init(values, msg.getMessage(msgPrefix+initialValue.toString()));
-	}
-	
-	/**
-	 * In case of i18n the value might be different
-	 */
-	public void setEnumValue(T newValue) throws Property.ReadOnlyException 
-	{
-		String realValue = msg.getMessage(msgPrefix+newValue.toString());
-		super.setValue(realValue);
+			if (filter.test(constant))
+				values.add(constant);
+		setEmptySelectionAllowed(false);
+		setItems(values);
+		setItemCaptionGenerator(i -> msgPrefix == null ? i.toString() : msg.getMessage(msgPrefix + i.toString()));
+		setValue(initialValue);
 	}
 
+	public String getSelectedLabel()
+	{
+		return msg.getMessage(msgPrefix + getValue().toString());
+	}
 }

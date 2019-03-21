@@ -4,22 +4,31 @@
  */
 package pl.edu.icm.unity.webadmin.reg.reqman;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import org.apache.logging.log4j.Logger;
 import org.springframework.beans.factory.annotation.Autowired;
 
+import com.vaadin.shared.ui.MarginInfo;
+import com.vaadin.ui.Component;
 import com.vaadin.ui.Label;
 import com.vaadin.ui.VerticalLayout;
 
 import pl.edu.icm.unity.base.utils.Log;
 import pl.edu.icm.unity.engine.api.EntityManagement;
+import pl.edu.icm.unity.engine.api.GroupsManagement;
 import pl.edu.icm.unity.engine.api.identity.IdentityTypesRegistry;
 import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
 import pl.edu.icm.unity.engine.api.utils.PrototypeComponent;
 import pl.edu.icm.unity.exceptions.EngineException;
 import pl.edu.icm.unity.types.basic.EntityParam;
+import pl.edu.icm.unity.types.basic.Group;
 import pl.edu.icm.unity.types.registration.EnquiryForm;
+import pl.edu.icm.unity.types.registration.EnquiryForm.EnquiryType;
 import pl.edu.icm.unity.types.registration.EnquiryResponse;
 import pl.edu.icm.unity.types.registration.EnquiryResponseState;
+import pl.edu.icm.unity.webui.common.NotificationPopup;
 import pl.edu.icm.unity.webui.common.attributes.AttributeHandlerRegistry;
 import pl.edu.icm.unity.webui.common.identities.IdentityFormatter;
 
@@ -38,9 +47,9 @@ public class EnquiryReviewPanel extends RequestReviewPanelBase
 	@Autowired
 	public EnquiryReviewPanel(UnityMessageSource msg, AttributeHandlerRegistry handlersRegistry,
 			IdentityTypesRegistry idTypesRegistry, EntityManagement identitiesManagement, 
-			IdentityFormatter idFormatter)
+			IdentityFormatter idFormatter, GroupsManagement groupMan)
 	{
-		super(msg, handlersRegistry, idTypesRegistry, idFormatter);
+		super(msg, handlersRegistry, idTypesRegistry, idFormatter, groupMan);
 		this.identitiesManagement = identitiesManagement;
 		initUI();
 	}
@@ -49,12 +58,12 @@ public class EnquiryReviewPanel extends RequestReviewPanelBase
 	{
 		VerticalLayout main = new VerticalLayout();
 		main.setSpacing(true);
-		main.setMargin(true);
+		main.setMargin(new MarginInfo(true, false));
 		entity = new Label();
 		entity.setCaption(msg.getMessage("EnquiryReviewPanel.enquirySubmitter"));
 		main.addComponent(entity);
-		super.addStandardComponents(main);
-		setCompositionRoot(main);
+		super.addStandardComponents(main,  msg.getMessage("EnquiryReviewPanel.groupsChanges"));
+		setCompositionRoot(main);	
 	}
 	
 	public EnquiryResponse getUpdatedRequest()
@@ -79,5 +88,27 @@ public class EnquiryReviewPanel extends RequestReviewPanelBase
 			label = "";
 		label += " [" + requestState.getEntityId() + "]";
 		entity.setValue(label);
+		
+		setGroupEntries(getGroupEntries(requestState, form));
+
+	}
+	
+	private List<Component> getGroupEntries(EnquiryResponseState requestState, EnquiryForm form)
+	{
+		List<Group> allUserGroups = new ArrayList<>();
+		try
+		{
+			allUserGroups.addAll(identitiesManagement
+					.getGroupsForPresentation(new EntityParam(requestState.getEntityId())));
+		} catch (EngineException e)
+		{
+			log.error("Can not establish entities groups", e);
+			NotificationPopup.showError(msg, msg.getMessage("EnquiryReviewPanel.errorEstablishGroups"), e);
+		}
+
+		return super.getGroupEntries(requestState, form, allUserGroups, form.getType().equals(EnquiryType.STICKY));
 	}
 }
+
+
+

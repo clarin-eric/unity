@@ -19,6 +19,7 @@ import pl.edu.icm.unity.types.translation.ActionParameterDefinition.Type;
  * @author K. Benedyczak
  */
 @Component
+@Deprecated
 public class ConfirmationRedirectActionFactory extends AbstractRegistrationTranslationActionFactory
 {
 	
@@ -29,7 +30,7 @@ public class ConfirmationRedirectActionFactory extends AbstractRegistrationTrans
 		super(NAME, new ActionParameterDefinition[] {
 				new ActionParameterDefinition("URL", 
 						"RegTranslationAction.confirmationRedirect.paramDesc.URL",
-						Type.EXPRESSION)
+						Type.EXPRESSION, true)
 		});
 	}
 

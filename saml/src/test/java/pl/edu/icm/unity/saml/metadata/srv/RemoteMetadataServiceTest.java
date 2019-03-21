@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017 ICM Uniwersytet Warszawski All rights reserved.
+ * Copyright (c) 2017 Bixbit - Krzysztof Benedyczak All rights reserved.
  * See LICENCE.txt file for licensing information.
  */
 package pl.edu.icm.unity.saml.metadata.srv;
@@ -49,10 +49,11 @@ public class RemoteMetadataServiceTest
 	@Test
 	public void shouldCreateHandlerForFirstConsumer()
 	{
-		RemoteMetadataService service = new RemoteMetadataService(executorsService, downloader);
+		RemoteMetadataServiceImpl service = new RemoteMetadataServiceImpl(executorsService, downloader);
 		
 		AtomicBoolean gotEvent = new AtomicBoolean(false);
-		service.registerConsumer("url", 100, null, m -> gotEvent.set(true));
+		String key = service.preregisterConsumer("url");
+		service.registerConsumer(key, 100, null, (m,id) -> gotEvent.set(true));
 		
 		Awaitility.await().atMost(Duration.ONE_SECOND).until(
 				() -> gotEvent.get());
@@ -61,12 +62,14 @@ public class RemoteMetadataServiceTest
 	@Test
 	public void shouldCreateHandlerFor2ndConsumerOtherURL()
 	{
-		RemoteMetadataService service = new RemoteMetadataService(executorsService, downloader);
+		RemoteMetadataServiceImpl service = new RemoteMetadataServiceImpl(executorsService, downloader);
 		
-		service.registerConsumer("url1", 100, null, m -> {});
+		String key = service.preregisterConsumer("url");
+		service.registerConsumer(key, 100, null, (m,id) -> {});
 		
 		AtomicBoolean gotEvent = new AtomicBoolean(false);
-		service.registerConsumer("url2", 100, null, m -> gotEvent.set(true));
+		String key2 = service.preregisterConsumer("url2");
+		service.registerConsumer(key2, 100, null, (m,id) -> gotEvent.set(true));
 		
 		Awaitility.await().atMost(Duration.ONE_SECOND).until(
 				() -> gotEvent.get());
@@ -75,17 +78,19 @@ public class RemoteMetadataServiceTest
 	@Test
 	public void shouldReuseHandlerFor2ndConsumerSameURL() throws Exception
 	{
-		RemoteMetadataService service = new RemoteMetadataService(executorsService,
+		RemoteMetadataServiceImpl service = new RemoteMetadataServiceImpl(executorsService,
 				downloader);
 		when(downloader.getCached("url")).thenAnswer((a) -> {
 			String xml = IOUtils.toString(new FileInputStream("src/test/resources/unity-as-sp-meta.xml"));
 			return Optional.of(EntitiesDescriptorDocument.Factory.parse(xml));
 		});
 		
-		service.registerConsumer("url", 200, null, m -> {});
+		String key = service.preregisterConsumer("url");
+		service.registerConsumer(key, 200, null, (m,id) -> {});
 		
 		AtomicBoolean gotEvent = new AtomicBoolean(false);
-		service.registerConsumer("url", 200, null, m -> gotEvent.set(true));
+		String key2 = service.preregisterConsumer("url");
+		service.registerConsumer(key2, 200, null, (m,id) -> gotEvent.set(true));
 		
 		Awaitility.await().atMost(Duration.ONE_SECOND).until(
 				() -> gotEvent.get());
@@ -95,10 +100,11 @@ public class RemoteMetadataServiceTest
 	@Test
 	public void unregistredConsumerIsRemovedFromHandler() throws InterruptedException
 	{
-		RemoteMetadataService service = new RemoteMetadataService(executorsService, downloader);
+		RemoteMetadataServiceImpl service = new RemoteMetadataServiceImpl(executorsService, downloader);
 		
 		AtomicInteger gotEvent = new AtomicInteger(0);
-		String id = service.registerConsumer("url", 25, null, m -> gotEvent.incrementAndGet());
+		String id = service.preregisterConsumer("url");
+		service.registerConsumer(id, 25, null, (m,cid) -> gotEvent.incrementAndGet());
 		
 		Awaitility.await().atMost(Duration.ONE_SECOND).until(
 				() -> gotEvent.get()>0);

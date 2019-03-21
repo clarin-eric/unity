@@ -58,7 +58,7 @@ public class EntityNameMetadataHandler implements WebAttributeMetadataHandler
 				ret.setMargin(false);
 				ret.addComponent(new Label(msg.getMessage("EntityNameMetadataHandler.label")));
 				ret.addComponent(new Label(" "));
-				ret.addComponent(new Label(msg.getMessage("EntityNameMetadataHandler.noParamsAreNeeded")));
+				ret.addComponent(new Label(msg.getMessage("MetadataHandler.noParamsAreNeeded")));
 				return ret;
 			}
 		};

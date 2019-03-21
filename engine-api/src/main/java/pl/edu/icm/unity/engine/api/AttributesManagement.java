@@ -18,13 +18,48 @@ import pl.edu.icm.unity.types.basic.EntityParam;
 public interface AttributesManagement
 {
 	/**
-	 * Creates or updates an attribute.
+	 * @deprecated use any of other create or set methods. Left as may be popular in groovy scripts 
+	 * around
+	 */
+	@Deprecated
+	void setAttribute(EntityParam entity, Attribute attribute, boolean allowUpdate) throws EngineException;
+	
+	/**
+	 * Creates an attribute (must not be present). Confirmation will be sent if needed for attribute.
 	 * @param entity
 	 * @param attribute
 	 * @param update
 	 * @throws EngineException
 	 */
-	void setAttribute(EntityParam entity, Attribute attribute, boolean update) throws EngineException;
+	void createAttribute(EntityParam entity, Attribute attribute) throws EngineException;
+
+	/**
+	 * Updates or creates an attribute (may be present). Confirmation will be sent if needed for attribute.
+	 * @param entity
+	 * @param attribute
+	 * @param update
+	 * @throws EngineException
+	 */
+	void setAttribute(EntityParam entity, Attribute attribute) throws EngineException;
+
+	/**
+	 * Creates an attribute (must not be present). Confirmation will not be sent.
+	 * @param entity
+	 * @param attribute
+	 * @param update
+	 * @throws EngineException
+	 */
+	void createAttributeSuppressingConfirmation(EntityParam entity, Attribute attribute) throws EngineException;
+
+	/**
+	 * Updates or creates an attribute (may be present). Confirmation will not be sent.
+	 * @param entity
+	 * @param attribute
+	 * @param update
+	 * @throws EngineException
+	 */
+	void setAttributeSuppressingConfirmation(EntityParam entity, Attribute attribute) throws EngineException;
+
 	
 	/**
 	 * Removes a given attribute
@@ -37,7 +72,7 @@ public interface AttributesManagement
 
 	/**
 	 * Returns visible attributes of an entity. The two last arguments can be null, 
-	 * meaning that there is no restriction.
+	 * meaning that there is no restriction. The security sensitive attributes are not included.
 	 * @param entity
 	 * @param groupPath
 	 * @param attributeTypeId

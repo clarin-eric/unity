@@ -15,9 +15,9 @@ import org.springframework.stereotype.Component;
 import com.vaadin.annotations.Theme;
 import com.vaadin.server.VaadinRequest;
 import com.vaadin.ui.Alignment;
-import com.vaadin.v7.ui.VerticalLayout;
+import com.vaadin.ui.VerticalLayout;
 
-import pl.edu.icm.unity.engine.api.authn.AuthenticationOption;
+import pl.edu.icm.unity.engine.api.authn.AuthenticationFlow;
 import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
 import pl.edu.icm.unity.home.HomeEndpointProperties;
 import pl.edu.icm.unity.home.UserAccountComponent;
@@ -27,7 +27,7 @@ import pl.edu.icm.unity.webadmin.AdminTopHeader.ViewSwitchCallback;
 import pl.edu.icm.unity.webui.EndpointRegistrationConfiguration;
 import pl.edu.icm.unity.webui.UnityEndpointUIBase;
 import pl.edu.icm.unity.webui.UnityWebUI;
-import pl.edu.icm.unity.webui.authn.WebAuthenticationProcessor;
+import pl.edu.icm.unity.webui.authn.StandardWebAuthenticationProcessor;
 import pl.edu.icm.unity.webui.common.Styles;
 import pl.edu.icm.unity.webui.forms.enquiry.EnquiresDialogLauncher;
 import pl.edu.icm.unity.webui.sandbox.SandboxAuthnRouter;
@@ -47,16 +47,18 @@ public class WebAdminUI extends UnityEndpointUIBase implements UnityWebUI
 	private SchemaManagementTab schemaManagement;
 	private ServerManagementTab serverManagement;
 	private UserAccountComponent userAccount;
-	private WebAuthenticationProcessor authnProcessor;
+	private StandardWebAuthenticationProcessor authnProcessor;
 	
 	private MainTabPanel tabPanel;
 	private HomeEndpointProperties config;
+	private VerticalLayout mainWrapper;
+	private VerticalLayout contents;
 	
 	@Autowired
 	public WebAdminUI(UnityMessageSource msg, ContentsManagementTab contentsManagement,
 			SchemaManagementTab schemaManagement, RegistrationsManagementTab registrationsManagement,
 			UserAccountComponent userAccount, ServerManagementTab serverManagement,
-			WebAuthenticationProcessor authnProcessor, EnquiresDialogLauncher enquiryDialogLauncher)
+			StandardWebAuthenticationProcessor authnProcessor, EnquiresDialogLauncher enquiryDialogLauncher)
 	{
 		super(msg, enquiryDialogLauncher);
 		this.contentsManagement = contentsManagement;
@@ -69,21 +71,23 @@ public class WebAdminUI extends UnityEndpointUIBase implements UnityWebUI
 	
 	@Override
 	public void configure(ResolvedEndpoint description,
-			List<AuthenticationOption> authenticators,
+			List<AuthenticationFlow> authenticationFlows,
 			EndpointRegistrationConfiguration regCfg, Properties endpointProperties)
 	{
-		super.configure(description, authenticators, regCfg, endpointProperties);
+		super.configure(description, authenticationFlows, regCfg, endpointProperties);
 		this.config = new HomeEndpointProperties(endpointProperties);
 	}
 	
 	@Override
-	protected void appInit(VaadinRequest request)
+	protected void enter(VaadinRequest request)
 	{
-		VerticalLayout contents = new VerticalLayout();
+		contents = new VerticalLayout();
+		contents.setMargin(false);
+		contents.setSpacing(false);
 
-		final VerticalLayout mainWrapper = new VerticalLayout();
+		mainWrapper = new VerticalLayout();
 		mainWrapper.setSizeFull();
-		mainWrapper.setMargin(true);
+		mainWrapper.setSpacing(false);
 
 		I18nString displayedName = endpointDescription.getEndpoint().getConfiguration().getDisplayedName();
 		AdminTopHeader header = new AdminTopHeader(displayedName.getValue(msg), 
@@ -93,7 +97,8 @@ public class WebAdminUI extends UnityEndpointUIBase implements UnityWebUI
 					@Override
 					public void showView(boolean admin)
 					{
-						switchView(mainWrapper, admin ? tabPanel : userAccount);
+						switchView(admin ? tabPanel : userAccount,
+								!admin);
 					}
 				});
 
@@ -111,7 +116,7 @@ public class WebAdminUI extends UnityEndpointUIBase implements UnityWebUI
 		
 		setContent(contents);
 	
-		switchView(mainWrapper, tabPanel);
+		switchView(tabPanel, false);
 	}
 
 	private void createMainTabPanel()
@@ -121,12 +126,21 @@ public class WebAdminUI extends UnityEndpointUIBase implements UnityWebUI
 		tabPanel.addStyleName(Styles.largeTabsheet.toString());
 	}
 	
-	private void switchView(VerticalLayout contents, com.vaadin.ui.Component component)
+	private void switchView(com.vaadin.ui.Component component, boolean setUndefinedHeight)
 	{
-		contents.removeAllComponents();
-		contents.addComponent(component);
-		contents.setComponentAlignment(component, Alignment.TOP_CENTER);
-		contents.setExpandRatio(component, 1.0f);		
+		mainWrapper.removeAllComponents();
+		mainWrapper.addComponent(component);
+		mainWrapper.setComponentAlignment(component, Alignment.TOP_CENTER);
+		mainWrapper.setExpandRatio(component, 1.0f);
+		if (setUndefinedHeight)
+		{
+			mainWrapper.setHeightUndefined();
+			contents.setHeightUndefined();
+		} else
+		{
+			mainWrapper.setHeight(100, Unit.PERCENTAGE);
+			contents.setHeight(100, Unit.PERCENTAGE);
+		}
 	}
 	
 	@Override

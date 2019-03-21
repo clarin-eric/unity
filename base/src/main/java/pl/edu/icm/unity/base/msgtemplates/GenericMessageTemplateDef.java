@@ -1,11 +1,13 @@
 /*
- * Copyright (c) 2017 ICM Uniwersytet Warszawski All rights reserved.
+ * Copyright (c) 2017 Bixbit - Krzysztof Benedyczak All rights reserved.
  * See LICENCE.txt file for licensing information.
  */
 package pl.edu.icm.unity.base.msgtemplates;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 
 import org.springframework.stereotype.Component;
 
@@ -37,5 +39,11 @@ public class GenericMessageTemplateDef implements MessageTemplateDefinition
 	{
 		Map<String, MessageTemplateVariable> vars = new HashMap<>();
 		return vars;
+	}
+
+	@Override
+	public Set<String> getCompatibleFacilities()
+	{
+		return Collections.emptySet();
 	}
 }

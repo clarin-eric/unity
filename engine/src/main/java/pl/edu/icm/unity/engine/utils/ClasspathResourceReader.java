@@ -1,15 +1,15 @@
 /*
- * Copyright (c) 2016 ICM Uniwersytet Warszawski All rights reserved.
+ * Copyright (c) 2017 Bixbit - Krzysztof Benedyczak All rights reserved.
  * See LICENCE.txt file for licensing information.
  */
 
 package pl.edu.icm.unity.engine.utils;
 
-import java.io.File;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import org.apache.commons.io.IOUtils;
 import org.springframework.context.ApplicationContext;
@@ -63,30 +63,14 @@ public class ClasspathResourceReader
 		return jsons;
 	}
 	
-	public List<File> getFilesFromClasspathResourceDir(String path)
+	public List<Resource> getResourcesFromClasspath(String path)
 	{
-		ArrayList<File> files = new ArrayList<>();
 		Resource[] resources = getResources(path + "/*.json");
-		
 		if (resources == null || resources.length == 0)
 		{
-			return files;
+			return new ArrayList<>();
 		}
-		try
-		{
-			for (Resource r : resources)
-			{
-				files.add(r.getFile());
-
-			}
-		} catch (IOException e)
-		{
-			throw new InternalException(
-					"Can't get files from classpath: "
-							+ path,
-					e);
-		}
-		return files;
+		return Stream.of(resources).collect(Collectors.toList());
 	}
 	
 	private Resource[]  getResources(String path)

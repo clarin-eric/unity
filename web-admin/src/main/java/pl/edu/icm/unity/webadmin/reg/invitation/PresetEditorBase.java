@@ -4,8 +4,10 @@
  */
 package pl.edu.icm.unity.webadmin.reg.invitation;
 
+import java.util.Optional;
+
 import com.vaadin.server.Sizeable.Unit;
-import com.vaadin.v7.ui.CheckBox;
+import com.vaadin.ui.CheckBox;
 import com.vaadin.ui.Component;
 
 import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
@@ -42,7 +44,7 @@ public abstract class PresetEditorBase <T> implements Editor<PrefilledEntry<T>>
 		active.addValueChangeListener(event -> {
 			setEnabled(active.getValue());
 		});
-		mode = new EnumComboBox<PrefilledEntryMode>(msg, "PrefilledEntryMode.", 
+		mode = new EnumComboBox<>(msg, "PrefilledEntryMode.", 
 				PrefilledEntryMode.class, PrefilledEntryMode.DEFAULT);
 		container.add(active, mode);
 		mode.setWidth(20, Unit.EM);
@@ -62,7 +64,7 @@ public abstract class PresetEditorBase <T> implements Editor<PrefilledEntry<T>>
 	/**
 	 * @return the edited value
 	 */
-	protected abstract T getValueInternal() throws FormValidationException;
+	protected abstract Optional<T> getValueInternal() throws FormValidationException;
 	
 	/**
 	 * @return the components of the editor
@@ -74,8 +76,8 @@ public abstract class PresetEditorBase <T> implements Editor<PrefilledEntry<T>>
 	{
 		if (active.getValue())
 		{
-			T value = getValueInternal();
-			return value != null ? new PrefilledEntry<>(value, mode.getSelectedValue()) : null;	
+			Optional<T> value = getValueInternal();
+			return value.isPresent() ? new PrefilledEntry<>(value.get(), mode.getValue()) : null;	
 		}
 		return null;
 	}

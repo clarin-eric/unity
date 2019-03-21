@@ -12,7 +12,7 @@ import pl.edu.icm.unity.oauth.as.OAuthSystemAttributesProvider
 import pl.edu.icm.unity.oauth.as.OAuthSystemAttributesProvider.GrantFlow
 import pl.edu.icm.unity.stdext.attr.EnumAttribute
 import pl.edu.icm.unity.stdext.attr.StringAttribute
-import pl.edu.icm.unity.stdext.credential.PasswordToken
+import pl.edu.icm.unity.stdext.credential.pass.PasswordToken
 import pl.edu.icm.unity.stdext.identity.UsernameIdentity
 import pl.edu.icm.unity.types.basic.Attribute
 import pl.edu.icm.unity.types.basic.EntityParam
@@ -20,6 +20,9 @@ import pl.edu.icm.unity.types.basic.EntityState
 import pl.edu.icm.unity.types.basic.Group
 import pl.edu.icm.unity.types.basic.Identity
 import pl.edu.icm.unity.types.basic.IdentityParam
+import groovy.transform.Field
+
+@Field final String NAME_ATTR = "name"
 
 if (!isColdStart)
 {
@@ -34,20 +37,25 @@ try
 	Identity oauthClientA = entityManagement.addEntity(oauthClient,
 			EntityState.valid, false);
 	PasswordToken pToken2 = new PasswordToken("oauth-pass1");
-	entityCredentialManagement.setEntityCredential(new EntityParam(oauthClientA.getEntityId()), EngineInitialization.DEFAULT_CREDENTIAL,
-			pToken2.toJson());
-	log.warn("Default OAuth client user was created with default password. Please change it!");
-	groupsManagement.addMemberFromParent("/oauth-clients", new EntityParam(oauthClientA.getEntityId()));
+	
+	EntityParam entityP = new EntityParam(oauthClientA.getEntityId());
+	entityCredentialManagement.setEntityCredential(entityP, EngineInitialization.DEFAULT_CREDENTIAL, pToken2.toJson());
+	log.warn("Default OAuth client user was created with default password.  Please change it! U: oauth-client P: oauth-pass1");
+	
+	Attribute cnA = StringAttribute.of(NAME_ATTR, "/", "OAuth client");
+	attributesManagement.createAttribute(entityP, cnA);
+	
+	groupsManagement.addMemberFromParent("/oauth-clients", entityP);
 	Attribute flowsA = EnumAttribute.of(OAuthSystemAttributesProvider.ALLOWED_FLOWS,
 			"/oauth-clients",
 			Lists.newArrayList(
 			GrantFlow.authorizationCode.toString(), GrantFlow.implicit.toString(),
 			GrantFlow.openidHybrid.toString()));
-	attributesManagement.setAttribute(new EntityParam(oauthClientA.getEntityId()), flowsA, false);
+	attributesManagement.createAttribute(entityP, flowsA);
 	Attribute returnUrlA = StringAttribute.of(OAuthSystemAttributesProvider.ALLOWED_RETURN_URI,
 			"/oauth-clients",
 			"https://localhost:2443/unitygw/oauth2ResponseConsumer");
-	attributesManagement.setAttribute(new EntityParam(oauthClientA.getEntityId()), returnUrlA, false);
+	attributesManagement.createAttribute(entityP, returnUrlA);
 } catch (Exception e)
 {
 	log.warn("Error loading OAuth demo contents. This can happen and by far is not critical." +

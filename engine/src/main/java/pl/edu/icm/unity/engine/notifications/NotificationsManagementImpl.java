@@ -4,6 +4,7 @@
  */
 package pl.edu.icm.unity.engine.notifications;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 
@@ -12,7 +13,7 @@ import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
 
 import pl.edu.icm.unity.engine.api.NotificationsManagement;
-import pl.edu.icm.unity.engine.authz.AuthorizationManager;
+import pl.edu.icm.unity.engine.authz.InternalAuthorizationManager;
 import pl.edu.icm.unity.engine.authz.AuthzCapability;
 import pl.edu.icm.unity.engine.events.InvocationEventProducer;
 import pl.edu.icm.unity.exceptions.EngineException;
@@ -33,12 +34,12 @@ public class NotificationsManagementImpl implements NotificationsManagement
 {
 	private NotificationChannelDB notificationDB;
 	private NotificationsManagementCore notificationsCore;
-	private AuthorizationManager authz;
+	private InternalAuthorizationManager authz;
 	
 	
 	@Autowired
 	public NotificationsManagementImpl(NotificationChannelDB notificationDB,
-			NotificationsManagementCore notificationsCore, AuthorizationManager authz)
+			NotificationsManagementCore notificationsCore, InternalAuthorizationManager authz)
 	{
 		this.notificationDB = notificationDB;
 		this.notificationsCore = notificationsCore;
@@ -104,4 +105,21 @@ public class NotificationsManagementImpl implements NotificationsManagement
 		return notificationDB.getAllAsMap();
 	}
 
+	@Transactional
+	@Override
+	public Map<String, NotificationChannel> getNotificationChannelsForFacilities(
+			Set<String> facilites) throws EngineException
+	{
+		authz.checkAuthorization(AuthzCapability.maintenance);
+
+		if (facilites == null)
+			return new HashMap<>();
+
+		Map<String, NotificationChannel> all = notificationDB.getAllAsMap();
+		Map<String, NotificationChannel> ret = new HashMap<>(all);
+		for (NotificationChannel ch : all.values())
+			if (!facilites.contains(ch.getFacilityId()))
+				ret.remove(ch.getName());
+		return ret;
+	}
 }

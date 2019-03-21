@@ -14,18 +14,11 @@ public class BaseFormNotifications
 	private String rejectedTemplate;
 	private String acceptedTemplate;
 	private String updatedTemplate;
+	private String invitationTemplate;
 	
-	private String channel;
 	private String adminsNotificationGroup;
+	private boolean sendUserNotificationCopyToAdmin;
 	
-	public String getChannel()
-	{
-		return channel;
-	}
-	public void setChannel(String channel)
-	{
-		this.channel = channel;
-	}
 	public String getAdminsNotificationGroup()
 	{
 		return adminsNotificationGroup;
@@ -58,7 +51,23 @@ public class BaseFormNotifications
 	{
 		this.updatedTemplate = updatedTemplate;
 	}
-
+	public boolean isSendUserNotificationCopyToAdmin()
+	{
+		return sendUserNotificationCopyToAdmin;
+	}
+	public void setSendUserNotificationCopyToAdmin(boolean sendUserNotificationCopyToAdmin)
+	{
+		this.sendUserNotificationCopyToAdmin = sendUserNotificationCopyToAdmin;
+	}
+	public String getInvitationTemplate()
+	{
+		return invitationTemplate;
+	}
+	public void setInvitationTemplate(String invitationTemplate)
+	{
+		this.invitationTemplate = invitationTemplate;
+	}
+	
 	@Override
 	public int hashCode()
 	{
@@ -66,15 +75,15 @@ public class BaseFormNotifications
 		int result = 1;
 		result = prime * result
 				+ ((acceptedTemplate == null) ? 0 : acceptedTemplate.hashCode());
-		result = prime
-				* result
-				+ ((adminsNotificationGroup == null) ? 0 : adminsNotificationGroup
-						.hashCode());
-		result = prime * result + ((channel == null) ? 0 : channel.hashCode());
+		result = prime * result + ((adminsNotificationGroup == null) ? 0
+				: adminsNotificationGroup.hashCode());
 		result = prime * result
 				+ ((rejectedTemplate == null) ? 0 : rejectedTemplate.hashCode());
+		result = prime * result + (sendUserNotificationCopyToAdmin ? 1231 : 1237);
 		result = prime * result
 				+ ((updatedTemplate == null) ? 0 : updatedTemplate.hashCode());
+		result = prime * result
+				+ ((invitationTemplate == null) ? 0 : invitationTemplate.hashCode());
 		return result;
 	}
 	@Override
@@ -99,17 +108,13 @@ public class BaseFormNotifications
 				return false;
 		} else if (!adminsNotificationGroup.equals(other.adminsNotificationGroup))
 			return false;
-		if (channel == null)
-		{
-			if (other.channel != null)
-				return false;
-		} else if (!channel.equals(other.channel))
-			return false;
 		if (rejectedTemplate == null)
 		{
 			if (other.rejectedTemplate != null)
 				return false;
 		} else if (!rejectedTemplate.equals(other.rejectedTemplate))
+			return false;
+		if (sendUserNotificationCopyToAdmin != other.sendUserNotificationCopyToAdmin)
 			return false;
 		if (updatedTemplate == null)
 		{
@@ -117,6 +122,13 @@ public class BaseFormNotifications
 				return false;
 		} else if (!updatedTemplate.equals(other.updatedTemplate))
 			return false;
+		if (invitationTemplate == null)
+		{
+			if (other.invitationTemplate != null)
+				return false;
+		} else if (!invitationTemplate.equals(other.invitationTemplate))
+			return false;
+		
 		return true;
 	}
 }

@@ -7,20 +7,20 @@ package pl.edu.icm.unity.types.translation;
 import java.util.ArrayList;
 import java.util.List;
 
-import pl.edu.icm.unity.Constants;
-import pl.edu.icm.unity.exceptions.InternalException;
-import pl.edu.icm.unity.types.DescribedObjectROImpl;
-
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonValue;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
+import pl.edu.icm.unity.Constants;
+import pl.edu.icm.unity.exceptions.InternalException;
+import pl.edu.icm.unity.types.DescribedObjectImpl;
+
 /**
  * Definition of a translation profile.
  * @author Krzysztof Benedyczak
  */
-public class TranslationProfile extends DescribedObjectROImpl
+public class TranslationProfile extends DescribedObjectImpl
 {
 	private ProfileType profileType;
 	private List<TranslationRule> rules;
@@ -181,7 +181,7 @@ public class TranslationProfile extends DescribedObjectROImpl
 	public int hashCode()
 	{
 		final int prime = 31;
-		int result = 1;
+		int result = super.hashCode();
 		result = prime * result + ((profileType == null) ? 0 : profileType.hashCode());
 		result = prime * result + ((rules == null) ? 0 : rules.hashCode());
 		result = prime * result + ((profileMode == null) ? 0 : profileMode.hashCode());
@@ -208,14 +208,13 @@ public class TranslationProfile extends DescribedObjectROImpl
 			return false;
 		if (profileMode != other.profileMode)
 			return false;
-			
-		return true;
+		
+		return super.equals(obj);
 	}
 	
 	public TranslationProfile clone()
 	{
-		TranslationProfile clone = new TranslationProfile(name, description, profileType,
-				profileMode, rules);
-		return clone;
+		ObjectNode p = toJsonObject();
+		return new TranslationProfile(p);	
 	}
 }

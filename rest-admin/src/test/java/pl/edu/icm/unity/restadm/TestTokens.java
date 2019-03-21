@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014 ICM Uniwersytet Warszawski All rights reserved.
+ * Copyright (c) 2017 Bixbit - Krzysztof Benedyczak All rights reserved.
  * See LICENCE.txt file for licensing information.
  */
 
@@ -29,7 +29,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 
 import pl.edu.icm.unity.engine.api.token.TokensManagement;
-import pl.edu.icm.unity.engine.authz.AuthorizationManagerImpl;
+import pl.edu.icm.unity.engine.authz.InternalAuthorizationManagerImpl;
 import pl.edu.icm.unity.types.basic.EntityParam;
 import pl.edu.icm.unity.types.basic.Identity;
 
@@ -47,11 +47,11 @@ public class TestTokens extends RESTAdminTestBase
 	@Before
 	public void addTokens() throws Exception
 	{
-		Identity id1 = createUsernameUser("u1", AuthorizationManagerImpl.USER_ROLE,
+		Identity id1 = createUsernameUser("u1", InternalAuthorizationManagerImpl.USER_ROLE,
 				DEF_PASSWORD, CRED_REQ_PASS);
-		Identity id2 = createUsernameUser("u2", AuthorizationManagerImpl.USER_ROLE,
+		Identity id2 = createUsernameUser("u2", InternalAuthorizationManagerImpl.USER_ROLE,
 				DEF_PASSWORD, CRED_REQ_PASS);
-		createUsernameUser("admin1", AuthorizationManagerImpl.SYSTEM_MANAGER_ROLE,
+		createUsernameUser("admin1", InternalAuthorizationManagerImpl.SYSTEM_MANAGER_ROLE,
 				DEF_PASSWORD, CRED_REQ_PASS);
 
 		Date now = new Date();
@@ -94,10 +94,10 @@ public class TestTokens extends RESTAdminTestBase
 	@Test
 	public void shouldReturnOnlyOwnedTokenWithType() throws Exception
 	{
-		HttpContext u1 = getClientContext(client, host, "u1", DEF_PASSWORD);
+		HttpContext u1 = getClientContext(host, "u1", DEF_PASSWORD);
 		List<JsonNode> tokens = getTokensFromRESTAPI(u1, "type1");
 		assertThat(tokens.size(), is(1));
-		HttpContext u2 = getClientContext(client, host, "u2", DEF_PASSWORD);
+		HttpContext u2 = getClientContext(host, "u2", DEF_PASSWORD);
 		tokens = getTokensFromRESTAPI(u2, "type1");
 		assertThat(tokens.size(), is(2));
 		tokens = getTokensFromRESTAPI(u2, "type2");
@@ -108,7 +108,7 @@ public class TestTokens extends RESTAdminTestBase
 	public void shouldRemoveToken() throws Exception
 	{
 		HttpDelete del = new HttpDelete("/restadm/v1/token/type2/v4");
-		HttpContext u2 = getClientContext(client, host, "u2", DEF_PASSWORD);
+		HttpContext u2 = getClientContext(host, "u2", DEF_PASSWORD);
 		HttpResponse responseDel = client.execute(host, del, u2);
 
 		assertThat(responseDel.getStatusLine().getStatusCode(), is(Status.NO_CONTENT.getStatusCode()));
@@ -120,7 +120,7 @@ public class TestTokens extends RESTAdminTestBase
 	public void shouldDeniedRemoveNotOwnedToken() throws Exception
 	{
 		HttpDelete del = new HttpDelete("/restadm/v1/token/type2/v4");
-		HttpContext u1 = getClientContext(client, host, "u1", DEF_PASSWORD);
+		HttpContext u1 = getClientContext(host, "u1", DEF_PASSWORD);
 		HttpResponse responseDel = client.execute(host, del, u1);
 
 		assertThat(responseDel.getStatusLine().getStatusCode(), is(Status.BAD_REQUEST.getStatusCode()));
@@ -130,7 +130,7 @@ public class TestTokens extends RESTAdminTestBase
 	public void shouldReturnErrorWhenRemoveMissingToken() throws Exception
 	{
 		HttpDelete del = new HttpDelete("/restadm/v1/token/type2/v5");
-		HttpContext u1 = getClientContext(client, host, "u1", DEF_PASSWORD);
+		HttpContext u1 = getClientContext(host, "u1", DEF_PASSWORD);
 		HttpResponse responseDel = client.execute(host, del, u1);
 		
 		assertThat(responseDel.getStatusLine().getStatusCode(), is(Status.BAD_REQUEST.getStatusCode()));

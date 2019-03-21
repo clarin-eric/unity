@@ -8,18 +8,18 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 
-import com.vaadin.v7.ui.ListSelect;
-import com.vaadin.v7.ui.TwinColSelect;
+import com.google.common.collect.Sets;
+import com.vaadin.ui.TwinColSelect;
 
 import pl.edu.icm.unity.engine.api.GroupsManagement;
 
 
 /**
- * {@link ListSelect} allowing to choose a set of groups. This component can automatically populate the list 
+ * {@link TwinColSelect} allowing to choose a set of groups. This component can automatically populate the list 
  * with subgroups of a given group, both immediate and recursive.
  * @author K. Benedyczak
  */
-public class GroupsSelectionList extends TwinColSelect
+public class GroupsSelectionList extends TwinColSelect<String>
 {
 	private Collection<String> groups;
 	private GroupsManagement groupsMan;
@@ -39,15 +39,14 @@ public class GroupsSelectionList extends TwinColSelect
 		initContent();
 	}
 	
-	@SuppressWarnings("unchecked")
 	public Collection<String> getSelectedGroups()
 	{
-		return (Collection<String>) getValue();
+		return getValue();
 	}
 	
 	public void setSelectedGroups(Collection<String> groups)
 	{
-		setValue(groups);
+		setValue(Sets.newHashSet(groups));
 	}
 
 	public List<String> getAllGroups()
@@ -57,11 +56,9 @@ public class GroupsSelectionList extends TwinColSelect
 
 	public void setInput(String rootGroup, boolean inclusive)
 	{
-		removeAllItems();
 		processedGroups = GroupSelectionUtils.establishGroups(
 				rootGroup, inclusive, groupsMan, groups);
-		for (String group: processedGroups)
-			addItem(group);
+		setItems(processedGroups);
 	}
 
 	private void initContent()

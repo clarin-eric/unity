@@ -4,55 +4,46 @@
  */
 package pl.edu.icm.unity.webui.common.credentials;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 import org.apache.logging.log4j.Logger;
 
 import com.vaadin.ui.Button;
-import com.vaadin.ui.Button.ClickEvent;
-import com.vaadin.ui.Button.ClickListener;
+import com.vaadin.ui.CheckBox;
 import com.vaadin.ui.Component;
 import com.vaadin.ui.FormLayout;
 import com.vaadin.ui.HorizontalLayout;
 import com.vaadin.ui.Label;
-import com.vaadin.ui.Panel;
 import com.vaadin.ui.VerticalLayout;
-import com.vaadin.v7.data.Property.ValueChangeEvent;
-import com.vaadin.v7.data.Property.ValueChangeListener;
 
 import pl.edu.icm.unity.base.utils.Log;
+import pl.edu.icm.unity.engine.api.AuthenticationFlowManagement;
 import pl.edu.icm.unity.engine.api.CredentialManagement;
 import pl.edu.icm.unity.engine.api.CredentialRequirementManagement;
 import pl.edu.icm.unity.engine.api.EntityCredentialManagement;
 import pl.edu.icm.unity.engine.api.EntityManagement;
 import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
+import pl.edu.icm.unity.engine.api.token.TokensManagement;
 import pl.edu.icm.unity.exceptions.EngineException;
-import pl.edu.icm.unity.exceptions.IllegalCredentialException;
-import pl.edu.icm.unity.exceptions.IllegalPreviousCredentialException;
 import pl.edu.icm.unity.exceptions.InternalException;
-import pl.edu.icm.unity.types.I18nString;
 import pl.edu.icm.unity.types.authn.CredentialDefinition;
 import pl.edu.icm.unity.types.authn.CredentialInfo;
-import pl.edu.icm.unity.types.authn.CredentialPublicInformation;
 import pl.edu.icm.unity.types.authn.CredentialRequirements;
 import pl.edu.icm.unity.types.authn.LocalCredentialState;
 import pl.edu.icm.unity.types.basic.Entity;
 import pl.edu.icm.unity.types.basic.EntityParam;
-import pl.edu.icm.unity.webui.common.CompactFormLayout;
-import pl.edu.icm.unity.webui.common.ComponentsContainer;
+import pl.edu.icm.unity.webui.authn.additional.AdditionalAuthnHandler;
 import pl.edu.icm.unity.webui.common.Images;
-import pl.edu.icm.unity.webui.common.MapComboBox;
-import pl.edu.icm.unity.webui.common.NotificationPopup;
 import pl.edu.icm.unity.webui.common.Styles;
-import pl.edu.icm.unity.webui.common.safehtml.HtmlConfigurableLabel;
 import pl.edu.icm.unity.webui.common.safehtml.HtmlTag;
-import pl.edu.icm.unity.webui.common.safehtml.SafePanel;
 
 /**
- * Allows to change a credential.
+ * Allows to change all entity credentials.
  * @author K. Benedyczak
  */
 public class CredentialsPanel extends VerticalLayout
@@ -63,25 +54,18 @@ public class CredentialsPanel extends VerticalLayout
 	private EntityCredentialManagement ecredMan;
 	private EntityManagement entityMan;
 	private CredentialEditorRegistry credEditorReg;
+	private AuthenticationFlowManagement flowMan;	
+	private TokensManagement tokenMan;
 	private UnityMessageSource msg;
-	private boolean changed = false;
 	private Entity entity;
+	private final AdditionalAuthnHandler additionalAuthnHandler;
 	private final long entityId;
 	private final boolean simpleMode;
-	private boolean askAboutCurrent;
 	
 	private Map<String, CredentialDefinition> credentials;
-	
-	private SafePanel statuses;
-	private MapComboBox<CredentialDefinition> credential;
-	private Label status;
-	private HtmlConfigurableLabel description;
-	private SafePanel credentialStateInfo;
-	private SafePanel editor;
-	private Button update;
-	private Button clear;
-	private Button invalidate;
-	private CredentialEditor credEditor;
+	private List<SingleCredentialPanel> panels;
+	private CheckBox userOptInCheckBox;
+
 	
 	/**
 	 * 
@@ -93,12 +77,14 @@ public class CredentialsPanel extends VerticalLayout
 	 * @param simpleMode if true then admin-only action buttons (credential reset/outdate) are not shown.
 	 * @throws Exception
 	 */
-	public CredentialsPanel(UnityMessageSource msg, long entityId, CredentialManagement credMan, 
+	public CredentialsPanel(AdditionalAuthnHandler additionalAuthnHandler, UnityMessageSource msg, long entityId, CredentialManagement credMan, 
 			EntityCredentialManagement ecredMan, EntityManagement entityMan,
 			CredentialRequirementManagement credReqMan,
-			CredentialEditorRegistry credEditorReg, boolean simpleMode) 
+			CredentialEditorRegistry credEditorReg, AuthenticationFlowManagement flowMan,TokensManagement tokenMan,
+			boolean simpleMode) 
 					throws Exception
 	{
+		this.additionalAuthnHandler = additionalAuthnHandler;
 		this.msg = msg;
 		this.credMan = credMan;
 		this.ecredMan = ecredMan;
@@ -107,268 +93,171 @@ public class CredentialsPanel extends VerticalLayout
 		this.credReqMan = credReqMan;
 		this.credEditorReg = credEditorReg;
 		this.simpleMode = simpleMode;
+		this.flowMan = flowMan;
+		this.tokenMan = tokenMan;
 		init();
 	}
-
+	
+	
 	private void init() throws Exception
 	{
-		loadCredentials();
+		userOptInCheckBox = new CheckBox(msg.getMessage("CredentialChangeDialog.userMFAOptin"));
+		userOptInCheckBox.setDescription(msg.getMessage("CredentialChangeDialog.userMFAOptinDesc"));
+		FormLayout wrapper = new FormLayout();
+		wrapper.setSpacing(false);
+		wrapper.addComponent(userOptInCheckBox);
+		addComponent(wrapper);
+		addComponent(HtmlTag.horizontalLine());
 		
+		
+		userOptInCheckBox.addValueChangeListener(e -> {
+			setUserMFAOptin(e.getValue());
+		});
+		
+		userOptInCheckBox.setValue(getUserOptInAttribute());
+		
+		loadCredentials();
 		if (credentials.size() == 0)
 		{
-			addComponent(new Label(msg.getMessage("CredentialChangeDialog.noCredentials")));
+			addComponent(new Label(
+					msg.getMessage("CredentialChangeDialog.noCredentials")));
 			return;
 		}
+		panels = new ArrayList<>();	
+		Callback callback = () -> updateUserOptInCheckbox();
 		
-		statuses = new SafePanel(msg.getMessage("CredentialChangeDialog.statusAll"));
-		statuses.addStyleName(Styles.vBorderLess.toString());
-		
-		Panel credentialPanel = new SafePanel();
-		credentialPanel.addStyleName(Styles.vBorderLess.toString());
-		
-		String selected = credentials.keySet().iterator().next();
-		credential = new MapComboBox<>(msg.getMessage("CredentialChangeDialog.credential"),
-				credentials, selected, new MapComboBox.LabelResolver<CredentialDefinition>()
-				{
-					@Override
-					public String getDisplayedName(String key, CredentialDefinition value)
-					{
-						return value.getDisplayedName().getValue(msg);
-					}
-				});
-		credential.setImmediate(true);
-		credential.addValueChangeListener(new ValueChangeListener()
+		for (CredentialDefinition credDef : credentials.values())
 		{
-			@Override
-			public void valueChange(ValueChangeEvent event)
+			SingleCredentialPanel panel = new SingleCredentialPanel(additionalAuthnHandler, msg, entityId,
+					ecredMan, credMan, entityMan, credEditorReg, credDef, simpleMode,
+					true, callback);
+			if (!panel.isEmptyEditor())
 			{
-				updateSelectedCredential();
+				panels.add(panel);
 			}
-		});
-		description = new HtmlConfigurableLabel();
-		description.setCaption(msg.getMessage("CredentialChangeDialog.description"));
-		status = new Label();
-		status.setCaption(msg.getMessage("CredentialChangeDialog.status"));
-		credentialStateInfo = new SafePanel(msg.getMessage("CredentialChangeDialog.credentialStateInfo"));
-		editor = new SafePanel(msg.getMessage("CredentialChangeDialog.value"));
-		
-		HorizontalLayout buttonsBar = new HorizontalLayout();
-		buttonsBar.setSpacing(true);
-		buttonsBar.setMargin(false);
-		clear = new Button(msg.getMessage("CredentialChangeDialog.clear"));
-		clear.addClickListener(new ClickListener()
-		{
-			@Override
-			public void buttonClick(ClickEvent event)
-			{
-				changeCredentialStatus(LocalCredentialState.notSet);
-			}
-		});
-		if (!simpleMode)
-			buttonsBar.addComponent(clear);
-		invalidate = new Button(msg.getMessage("CredentialChangeDialog.invalidate"));
-		invalidate.addClickListener(new ClickListener()
-		{
-			@Override
-			public void buttonClick(ClickEvent event)
-			{
-				changeCredentialStatus(LocalCredentialState.outdated);
-			}
-		});
-		if (!simpleMode)
-			buttonsBar.addComponent(invalidate);
-		update = new Button(msg.getMessage("CredentialChangeDialog.update"));
-		update.addClickListener(new ClickListener()
-		{
-			@Override
-			public void buttonClick(ClickEvent event)
-			{
-				updateCredential();
-			}
-		});
-		buttonsBar.addComponent(update);
-
-		FormLayout fl = new CompactFormLayout(description, status, credentialStateInfo, editor, buttonsBar);
-		fl.setMargin(true);
-		credentialPanel.setContent(fl);
-
-		addComponents(statuses);
-		
-		if (credentials.size() > 1)
-		{
-			addComponent(credential);
 		}
-		addComponent(credentialPanel);
-		setSpacing(true);
-		setMargin(false);
-		updateStatus();
-		updateSelectedCredential();
+		
+		int last = panels.size();
+		int credSize = panels.size();
+		for (SingleCredentialPanel panel: panels)
+		{
+			if (last > 0 && last < credSize)
+				addComponent(HtmlTag.horizontalLine());
+			addComponent(panel);
+			last--;
+		}
+		updateUserOptInCheckbox();
+		
+		addComponent(HtmlTag.horizontalLine());
+		addComponent(getTrustedDevicesComponent());
+
+		setSizeFull();
 	}
 
-	public boolean isChanged()
+	
+	private Component getTrustedDevicesComponent()
+	{	
+		TrustedDevicesComponent trustedDevicesComponent = new TrustedDevicesComponent(tokenMan, msg, entityId);
+		trustedDevicesComponent.setVisible(false);		
+		VerticalLayout trustedDevicesWrapper = new VerticalLayout();
+		trustedDevicesWrapper.setMargin(false);
+		trustedDevicesWrapper.setSpacing(true);
+		
+		Button removeTrustedMachines = new Button(msg.getMessage("CredentialChangeDialog.removeTrustedDevices"));
+		removeTrustedMachines.addClickListener(e -> trustedDevicesComponent.removeAll());
+		
+		Button showHideTrustedMachines = new Button();
+		showHideTrustedMachines.setDescription(msg.getMessage("CredentialChangeDialog.showTrustedDevices"));
+		showHideTrustedMachines.addClickListener(e -> {
+			if (trustedDevicesComponent.isVisible())
+			{
+				trustedDevicesComponent.setVisible(false);
+				showHideTrustedMachines.setDescription(msg.getMessage("CredentialChangeDialog.showTrustedDevices"));
+				showHideTrustedMachines.setIcon(Images.downArrow.getResource());
+			}else
+			{
+				trustedDevicesComponent.setVisible(true);
+				showHideTrustedMachines.setDescription(msg.getMessage("CredentialChangeDialog.hideTrustedDevices"));
+				showHideTrustedMachines.setIcon(Images.upArrow.getResource());
+			}
+		});
+		showHideTrustedMachines.setIcon(Images.downArrow.getResource());
+		showHideTrustedMachines.setStyleName(Styles.vButtonLink.toString());
+		showHideTrustedMachines.addStyleName(Styles.vButtonBorderless.toString());
+		Label showInfo = new Label(msg.getMessage("TrustedDevicesComponent.caption"));
+		HorizontalLayout showHide = new HorizontalLayout();
+		showHide.setMargin(false);
+		showHide.addComponents(showInfo, showHideTrustedMachines);
+		
+		
+		trustedDevicesWrapper.addComponents(removeTrustedMachines, showHide, trustedDevicesComponent);
+		return trustedDevicesWrapper;
+	}
+	
+	private void updateUserOptInCheckbox()
 	{
-		return changed;
+		int setCredentialSize = 0;
+
+		for (SingleCredentialPanel panel : panels)
+		{
+			if (!panel.getCredentialState().equals(LocalCredentialState.notSet))
+			{	
+				setCredentialSize++;
+			
+			}
+		}
+
+		if (setCredentialSize < 2)
+		{
+			userOptInCheckBox.setValue(false);
+			userOptInCheckBox.setEnabled(false);
+		
+		} else
+		{
+			userOptInCheckBox.setEnabled(true);
+		}
+	}
+
+	private void setUserMFAOptin(Boolean value)
+	{
+		try
+		{
+			flowMan.setUserMFAOptIn(entityId, value);
+		} catch (EngineException e)
+		{
+			log.debug("Can not set user MFA optin attribute", e);
+			throw new InternalException(msg.getMessage(
+					"CredentialChangeDialog.cantSetUserMFAOptin"), e);
+		}
+	}
+
+	private boolean getUserOptInAttribute()
+	{
+		try
+		{
+			return flowMan.getUserMFAOptIn(entityId);
+		} catch (EngineException e)
+		{
+			log.debug("Can not get user MFA optin attribute", e);
+			throw new InternalException(msg.getMessage(
+					"CredentialChangeDialog.cantGetUserMFAOptin"), e);
+		}
+	}
+	
+
+	public boolean isChanged()
+	{	
+		for (SingleCredentialPanel panel : panels)
+			if (panel.isChanged())
+				return true;
+		
+		return false;
 	}
 	
 	public boolean isCredentialRequirementEmpty()
 	{
 		return credentials.isEmpty();
 	}	
-	
-	private void updateSelectedCredential()
-	{
-		CredentialDefinition chosen = credential.getSelectedValue();
-		description.setValue(chosen.getDescription().getValue(msg));
-		Map<String, CredentialPublicInformation> s = entity.getCredentialInfo().getCredentialsState();
-		CredentialPublicInformation credPublicInfo = s.get(chosen.getName());
-		status.setValue(msg.getMessage("CredentialStatus."+credPublicInfo.getState().toString()));
-		credEditor = credEditorReg.getEditor(chosen.getTypeId());
-		FormLayout credLayout = new CompactFormLayout();
-		credLayout.setMargin(true);
-		
-		askAboutCurrent = isCurrentCredentialVerificationRequired(chosen);
-		
-		ComponentsContainer credEditorComp = credEditor.getEditor(askAboutCurrent, 
-				chosen.getConfiguration(), true); 
-		credLayout.addComponents(credEditorComp.getComponents());
-		editor.setContent(credLayout);
-		Component viewer = credEditor.getViewer(credPublicInfo.getExtraInformation());
-		if (viewer == null)
-		{
-			credentialStateInfo.setVisible(false);
-		} else
-		{
-			credentialStateInfo.setContent(viewer);
-			credentialStateInfo.setVisible(true);
-		}
-		if (credPublicInfo.getState() == LocalCredentialState.notSet)
-		{
-			clear.setEnabled(false);
-			invalidate.setEnabled(false);
-		} else if (credPublicInfo.getState() == LocalCredentialState.outdated)
-		{
-			clear.setEnabled(true);
-			invalidate.setEnabled(false);
-		} else
-		{
-			clear.setEnabled(true);
-			invalidate.setEnabled(true);
-		}
-	}
-	
-	private boolean isCurrentCredentialVerificationRequired(CredentialDefinition chosen)
-	{
-		EntityParam entityP = new EntityParam(entity.getId());
-		try
-		{
-			return ecredMan.isCurrentCredentialRequiredForChange(entityP, chosen.getName());
-		} catch (EngineException e)
-		{
-			log.debug("Got exception when asking about possibility to "
-					+ "change the credential without providing the existing one."
-					+ " Most probably the subsequent credential change will also fail.", e);
-			return true;
-		}
-	}
-	
-	private void updateCredential()
-	{
-		String secrets, currentSecrets = null;
-		try
-		{
-			if (askAboutCurrent)
-				currentSecrets = credEditor.getCurrentValue();
-			secrets = credEditor.getValue();
-		} catch (IllegalCredentialException e)
-		{
-			return;
-		}
-		CredentialDefinition credDef = credential.getSelectedValue();
-		EntityParam entityP = new EntityParam(entity.getId());
-		try
-		{
-			if (askAboutCurrent)
-				ecredMan.setEntityCredential(entityP, credDef.getName(), secrets, currentSecrets);
-			else
-				ecredMan.setEntityCredential(entityP, credDef.getName(), secrets);
-		} catch (IllegalPreviousCredentialException e)
-		{
-			NotificationPopup.showError(msg, msg.getMessage("CredentialChangeDialog.credentialUpdateError"), e);
-			credEditor.setCredentialError(null);
-			credEditor.setPreviousCredentialError(e.getMessage());
-			return;
-		}  catch (IllegalCredentialException e)
-		{
-			NotificationPopup.showError(msg, msg.getMessage("CredentialChangeDialog.credentialUpdateError"), e);
-			credEditor.setPreviousCredentialError(null);
-			credEditor.setCredentialError(e);
-			return;
-		} catch (Exception e)
-		{
-			NotificationPopup.showError(msg, msg.getMessage("CredentialChangeDialog.credentialUpdateError"), e);
-			return;
-		}
-		changed = true;
-		loadEntity(entityP);
-		updateStatus();
-	}
-
-	private void changeCredentialStatus(LocalCredentialState desiredState)
-	{
-		CredentialDefinition credDef = credential.getSelectedValue();
-		EntityParam entityP = new EntityParam(entity.getId());
-		try
-		{
-			ecredMan.setEntityCredentialStatus(entityP, credDef.getName(), desiredState);
-		} catch (Exception e)
-		{
-			NotificationPopup.showError(msg, msg.getMessage("CredentialChangeDialog.credentialUpdateError"), e);
-			return;
-		}
-		changed = true;
-		loadEntity(entityP);
-		updateStatus();
-	}
-
-	
-	private void loadEntity(EntityParam entityP)
-	{
-		try
-		{
-			entity = entityMan.getEntity(entityP);
-		} catch (Exception e)
-		{
-			NotificationPopup.showError(msg, msg.getMessage("CredentialChangeDialog.entityRefreshError"), e);
-		}
-	}
-	
-	private void updateStatus()
-	{
-		FormLayout contents = new CompactFormLayout();
-		contents.setMargin(true);
-		contents.setSpacing(true);
-		
-		Map<String, CredentialPublicInformation> state = entity.getCredentialInfo().getCredentialsState();
-		for (Map.Entry<String, CredentialPublicInformation> s: state.entrySet())
-		{
-			I18nString displayedName = credentials.get(s.getKey()).getDisplayedName();
-			Label label = new Label(displayedName.getValue(msg));
-			if (s.getValue().getState() == LocalCredentialState.correct)
-				label.setIcon(Images.ok.getResource());
-			else if (s.getValue().getState() == LocalCredentialState.outdated)
-				label.setIcon(Images.warn.getResource());
-			else
-				label.setIcon(Images.error.getResource());
-			label.setDescription(msg.getMessage("CredentialStatus."+
-				s.getValue().getState().toString()));
-			contents.addComponents(label);
-		}
-		
-		contents.addComponent(HtmlTag.horizontalLine());
-		
-		statuses.setContent(contents);
-		updateSelectedCredential();
-	}
 	
 	private void loadCredentials() throws Exception
 	{
@@ -419,4 +308,10 @@ public class CredentialsPanel extends VerticalLayout
 				credentials.put(credential.getName(), credential);
 		}
 	}
+	
+	public interface Callback 
+	{
+		public void refresh();
+	}
+	
 }

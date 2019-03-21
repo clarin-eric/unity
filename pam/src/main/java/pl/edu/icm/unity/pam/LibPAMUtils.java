@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017 ICM Uniwersytet Warszawski All rights reserved.
+ * Copyright (c) 2017 Bixbit - Krzysztof Benedyczak All rights reserved.
  * See LICENCE.txt file for licensing information.
  */
 package pl.edu.icm.unity.pam;
@@ -37,7 +37,7 @@ public class LibPAMUtils
 		if (unixUser.getShell() != null)
 			attributes.add(new RemoteAttribute("shell", unixUser.getShell()));
 		ret.setAttributes(attributes);
-		
+		ret.setRawAttributes(ret.getAttributes());
 		ret.setGroups(unixUser.getGroups().stream()
 				.map(RemoteGroupMembership::new)
 				.collect(Collectors.toList()));

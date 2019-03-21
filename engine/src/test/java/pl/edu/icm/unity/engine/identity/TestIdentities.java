@@ -6,6 +6,8 @@ package pl.edu.icm.unity.engine.identity;
 
 import static com.googlecode.catchexception.CatchException.catchException;
 import static com.googlecode.catchexception.CatchException.caughtException;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.CoreMatchers.isA;
 import static org.junit.Assert.assertEquals;
@@ -31,7 +33,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import com.google.common.collect.Sets;
 
 import pl.edu.icm.unity.engine.DBIntegrationTestBase;
-import pl.edu.icm.unity.engine.authz.AuthorizationManagerImpl;
+import pl.edu.icm.unity.engine.authz.InternalAuthorizationManagerImpl;
 import pl.edu.icm.unity.exceptions.AuthorizationException;
 import pl.edu.icm.unity.exceptions.IllegalAttributeTypeException;
 import pl.edu.icm.unity.exceptions.IllegalGroupValueException;
@@ -66,6 +68,41 @@ public class TestIdentities extends DBIntegrationTestBase
 	@Autowired
 	private EntitiesScheduledUpdater entitiesUpdater;
 	private EntityParam entityParam;
+
+	
+	@Test
+	public void shouldUpdateIdentityConfirmation() throws Exception
+	{
+		setupMockAuthn();
+		IdentityParam idParam = new IdentityParam(EmailIdentity.ID, "test@example.com");
+		Identity id = idsMan.addEntity(idParam, "crMock", EntityState.valid, false);
+
+		//verify
+		Entity retrieved = idsMan.getEntity(new EntityParam(idParam));
+		assertThat(getByType(retrieved, EmailIdentity.ID).getConfirmationInfo().isConfirmed(), is(false));
+		
+		Identity updated = id.clone();
+		updated.setConfirmationInfo(new ConfirmationInfo(true));
+		idsMan.updateIdentity(idParam, updated);
+		
+		retrieved = idsMan.getEntity(new EntityParam(idParam));
+		assertThat(getByType(retrieved, EmailIdentity.ID).getConfirmationInfo().isConfirmed(), is(true));
+	}
+
+	@Test
+	public void shouldDisallowUpdatingIdentityComparableValue() throws Exception
+	{
+		setupMockAuthn();
+		IdentityParam idParam = new IdentityParam(EmailIdentity.ID, "test@example.com");
+		Identity id = idsMan.addEntity(idParam, "crMock", EntityState.valid, false);
+		
+		Identity updated = id.clone();
+		updated.setValue("other@example.com");
+		
+		Throwable error = catchThrowable(() -> idsMan.updateIdentity(idParam, updated));
+		
+		assertThat(error).isInstanceOf(IllegalArgumentException.class);
+	}
 	
 	@Test
 	public void scheduledDisableWork() throws Exception
@@ -125,10 +162,10 @@ public class TestIdentities extends DBIntegrationTestBase
 	public void scheduledRemovalWorksForUser() throws Exception
 	{
 		setupPasswordAuthn();
-		Identity id = createUsernameUserWithRole(AuthorizationManagerImpl.USER_ROLE);
+		Identity id = createUsernameUserWithRole(InternalAuthorizationManagerImpl.USER_ROLE);
 		EntityParam ep1 = new EntityParam(id.getEntityId());
 		
-		setupUserContext(DEF_USER, false);
+		setupUserContext(DEF_USER, null);
 		
 		idsMan.scheduleRemovalByUser(ep1, new Date(System.currentTimeMillis()+200));
 		idsMan.getEntity(ep1);
@@ -149,10 +186,10 @@ public class TestIdentities extends DBIntegrationTestBase
 	public void scheduledRemovalWorksForUserImmediately() throws Exception
 	{
 		setupPasswordAuthn();
-		Identity id = createUsernameUserWithRole(AuthorizationManagerImpl.USER_ROLE);
+		Identity id = createUsernameUserWithRole(InternalAuthorizationManagerImpl.USER_ROLE);
 		EntityParam ep1 = new EntityParam(id.getEntityId());
 		
-		setupUserContext(DEF_USER, false);
+		setupUserContext(DEF_USER, null);
 		
 		idsMan.scheduleRemovalByUser(ep1, new Date(System.currentTimeMillis()));
 		try
@@ -169,12 +206,12 @@ public class TestIdentities extends DBIntegrationTestBase
 	public void scheduledRemovalGraceTimeWorksForUser() throws Exception
 	{
 		setupPasswordAuthn();
-		Identity id = createUsernameUserWithRole(AuthorizationManagerImpl.USER_ROLE);
+		Identity id = createUsernameUserWithRole(InternalAuthorizationManagerImpl.USER_ROLE);
 		EntityParam ep1 = new EntityParam(id.getEntityId());
 
-		setupUserContext(DEF_USER, false);
+		setupUserContext(DEF_USER, null);
 		idsMan.scheduleRemovalByUser(ep1, new Date(System.currentTimeMillis()+500));
-		setupUserContext(DEF_USER, false);
+		setupUserContext(DEF_USER, null);
 		entitiesUpdater.updateEntities();
 		
 		Entity entity = idsMan.getEntity(ep1);
@@ -185,7 +222,7 @@ public class TestIdentities extends DBIntegrationTestBase
 	public void setIdentitiesFailsOnIdentitiesOfWrongType() throws Exception
 	{
 		setupPasswordAuthn();
-		Identity id = createUsernameUserWithRole(AuthorizationManagerImpl.USER_ROLE);
+		Identity id = createUsernameUserWithRole(InternalAuthorizationManagerImpl.USER_ROLE);
 		try
 		{
 			idsMan.setIdentities(new EntityParam(id.getEntityId()), 
@@ -201,7 +238,7 @@ public class TestIdentities extends DBIntegrationTestBase
 	public void setIdentitiesUpdatesIdentities() throws Exception
 	{
 		setupPasswordAuthn();
-		Identity id = createUsernameUserWithRole(AuthorizationManagerImpl.USER_ROLE);
+		Identity id = createUsernameUserWithRole(InternalAuthorizationManagerImpl.USER_ROLE);
 		IdentityParam dnId = new IdentityParam(X500Identity.ID,  "CN=someCN");
 		idsMan.addIdentity(dnId, new EntityParam(id), false);
 		IdentityParam emailId = new IdentityParam(EmailIdentity.ID,  "email@example.org");
@@ -234,7 +271,7 @@ public class TestIdentities extends DBIntegrationTestBase
 	public void setIdentitiesRespectTypeLimits() throws Exception
 	{
 		setupPasswordAuthn();
-		Identity id = createUsernameUserWithRole(AuthorizationManagerImpl.USER_ROLE);
+		Identity id = createUsernameUserWithRole(InternalAuthorizationManagerImpl.USER_ROLE);
 		
 		IdentityType idType = new IdentityType(EmailIdentity.ID, EmailIdentity.ID);
 		idType.setSelfModificable(true);
@@ -252,7 +289,7 @@ public class TestIdentities extends DBIntegrationTestBase
 
 		idsMan.addIdentity(emailId, entityParam, false);
 
-		setupUserContext(DEF_USER, false);
+		setupUserContext(DEF_USER, null);
 		
 		idsMan.setIdentities(entityParam, Sets.newHashSet(EmailIdentity.ID), 
 				Sets.newHashSet(emailId, emailId2));
@@ -303,7 +340,7 @@ public class TestIdentities extends DBIntegrationTestBase
 	public void userCanImproveLimitsSituation() throws Exception
 	{
 		setupPasswordAuthn();
-		Identity id = createUsernameUserWithRole(AuthorizationManagerImpl.USER_ROLE);
+		Identity id = createUsernameUserWithRole(InternalAuthorizationManagerImpl.USER_ROLE);
 		
 		IdentityType idType = new IdentityType(EmailIdentity.ID, EmailIdentity.ID);
 		idType.setSelfModificable(true);
@@ -329,7 +366,7 @@ public class TestIdentities extends DBIntegrationTestBase
 		idsMan.addIdentity(emailId4, entityParam, false);
 		idsMan.addIdentity(emailId5, entityParam, false);
 
-		setupUserContext(DEF_USER, false);
+		setupUserContext(DEF_USER, null);
 
 		//still above limit, but removing works
 		idsMan.setIdentities(entityParam, Sets.newHashSet(EmailIdentity.ID), 
@@ -340,7 +377,7 @@ public class TestIdentities extends DBIntegrationTestBase
 		idsMan.setIdentities(entityParam, Sets.newHashSet(EmailIdentity.ID), 
 				new HashSet<IdentityParam>());
 
-		setupUserContext(DEF_USER, false);
+		setupUserContext(DEF_USER, null);
 
 		//still under limit, but adding and changing works
 		idsMan.setIdentities(entityParam, Sets.newHashSet(EmailIdentity.ID), 
@@ -355,7 +392,7 @@ public class TestIdentities extends DBIntegrationTestBase
 	public void typeLimitsAreIgnoredForAdmin() throws Exception
 	{
 		setupPasswordAuthn();
-		Identity id = createUsernameUserWithRole(AuthorizationManagerImpl.USER_ROLE);
+		Identity id = createUsernameUserWithRole(InternalAuthorizationManagerImpl.USER_ROLE);
 		
 		IdentityType idType = new IdentityType(EmailIdentity.ID, EmailIdentity.ID);
 		idType.setSelfModificable(true);
@@ -383,7 +420,7 @@ public class TestIdentities extends DBIntegrationTestBase
 	public void selfModifiableIdentityCanBeControlledByUser() throws Exception
 	{
 		setupPasswordAuthn();
-		Identity id = createUsernameUserWithRole(AuthorizationManagerImpl.USER_ROLE);
+		Identity id = createUsernameUserWithRole(InternalAuthorizationManagerImpl.USER_ROLE);
 		EntityParam ep1 = new EntityParam(id.getEntityId());
 		IdentityType idType = new IdentityType(EmailIdentity.ID, EmailIdentity.ID);
 		idType.setSelfModificable(true);
@@ -395,7 +432,7 @@ public class TestIdentities extends DBIntegrationTestBase
 			else
 				assertFalse(idTypeI.isSelfModificable());
 		
-		setupUserContext(DEF_USER, false);
+		setupUserContext(DEF_USER, null);
 		
 		idsMan.addIdentity(new IdentityParam(EmailIdentity.ID, "email1@custom.net"), ep1, false);
 		idsMan.addIdentity(new IdentityParam(EmailIdentity.ID, "email2@custom.net"), ep1, false);
@@ -421,7 +458,7 @@ public class TestIdentities extends DBIntegrationTestBase
 	public void minMaxIsEnforced() throws Exception
 	{
 		setupPasswordAuthn();
-		Identity id = createUsernameUserWithRole(AuthorizationManagerImpl.USER_ROLE);
+		Identity id = createUsernameUserWithRole(InternalAuthorizationManagerImpl.USER_ROLE);
 		EntityParam ep1 = new EntityParam(id.getEntityId());
 		IdentityType idType = new IdentityType(EmailIdentity.ID, EmailIdentity.ID);
 		idType.setSelfModificable(true);
@@ -439,7 +476,7 @@ public class TestIdentities extends DBIntegrationTestBase
 		identityParam.setConfirmationInfo(new ConfirmationInfo(true));
 		idsMan.addIdentity(identityParam, ep1, false);
 		
-		setupUserContext(DEF_USER, false);
+		setupUserContext(DEF_USER, null);
 		
 		idsMan.addIdentity(new IdentityParam(EmailIdentity.ID, "email1@custom.net"), ep1, false);
 		idsMan.addIdentity(new IdentityParam(EmailIdentity.ID, "email2@custom.net"), ep1, false);
@@ -610,21 +647,6 @@ public class TestIdentities extends DBIntegrationTestBase
 	}
 
 	@Test
-	public void dynamicIdentitiesNotAddedWhenNotRequested() throws Exception
-	{
-		setupMockAuthn();
-		setupAdmin();
-		IdentityParam idParam = new IdentityParam(X500Identity.ID, "CN=golbi");
-		Identity id = idsMan.addEntity(idParam, "crMock", EntityState.valid, false);
-		EntityParam entityParam = new EntityParam(id.getEntityId());
-		
-		Entity e1 = idsMan.getEntity(entityParam, null, false, "/");
-	
-		assertEquals(1, e1.getIdentities().size());
-		assertEquals(X500Identity.ID, e1.getIdentities().get(0).getTypeId());
-	}
-
-	@Test
 	public void onlyPersistentAddedWhenAllowedWithoutTarget() throws Exception
 	{
 		setupMockAuthn();
@@ -632,6 +654,7 @@ public class TestIdentities extends DBIntegrationTestBase
 		IdentityParam idParam = new IdentityParam(X500Identity.ID, "CN=golbi");
 		Identity id = idsMan.addEntity(idParam, "crMock", EntityState.valid, false);
 		EntityParam entityParam = new EntityParam(id.getEntityId());
+		idsMan.resetIdentity(entityParam, PersistentIdentity.ID, null, null);
 		
 		Entity e2 = idsMan.getEntity(entityParam, null, true, "/");
 		
@@ -640,6 +663,23 @@ public class TestIdentities extends DBIntegrationTestBase
 		assertTrue(getByType(e2, PersistentIdentity.ID).getValue().length() > 0);
 	}
 
+	@Test
+	public void shouldCreatePersistentIdentityWithEntity() throws Exception
+	{
+		setupMockAuthn();
+		setupAdmin();
+		IdentityParam idParam = new IdentityParam(X500Identity.ID, "CN=golbi");
+		Identity id = idsMan.addEntity(idParam, "crMock", EntityState.valid, false);
+		EntityParam entityParam = new EntityParam(id.getEntityId());
+		
+		Entity e2 = idsMan.getEntity(entityParam, null, false, "/");
+		
+		assertEquals(2, e2.getIdentities().size());
+		assertNotNull(getByType(e2, X500Identity.ID));
+		assertTrue(getByType(e2, PersistentIdentity.ID).getValue().length() > 0);
+	}
+
+	
 	@Test
 	public void allAddedWhenAllowedWithTarget() throws Exception
 	{
@@ -737,7 +777,7 @@ public class TestIdentities extends DBIntegrationTestBase
 		
 		Entity ret = idsMan.getEntity(new EntityParam(id.getEntityId()), null, false, "/");
 		
-		assertThat(ret.getIdentities().size(), is(2));
+		assertThat(ret.getIdentities().size(), is(3));
 		assertThat(getIdentityByType(ret.getIdentities(), UsernameIdentity.ID).getValue(), is("id"));
 		assertThat(getIdentityByType(ret.getIdentities(), IdentifierIdentity.ID).getValue(), is("id"));
 	}
@@ -840,11 +880,12 @@ public class TestIdentities extends DBIntegrationTestBase
 	}
 	
 	@Test
-	public void removeingLastIdentityIsProhibited() throws Exception
+	public void removingLastIdentityIsProhibited() throws Exception
 	{
 		setupMockAuthn();
 		IdentityParam idParam = new IdentityParam(X500Identity.ID, "CN=golbi");
 		Identity id = idsMan.addEntity(idParam, "crMock", EntityState.valid, false);
+		idsMan.resetIdentity(new EntityParam(id.getEntityId()), PersistentIdentity.ID, null, null);
 		
 		catchException(idsMan).removeIdentity(id);
 
