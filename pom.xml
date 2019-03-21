@@ -65,6 +65,7 @@
 		<module>saml</module>
 		<module>unicore</module>
 		<module>ldap</module>
+                <module>ldap-endpoint</module>
 		<module>oauth</module>
 		<module>pam</module>
 		<module>integration-tests</module>
