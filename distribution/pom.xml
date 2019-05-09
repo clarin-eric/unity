@@ -56,6 +56,11 @@
 			<artifactId>unity-server-ldap</artifactId>
 			<version>${project.version}</version>
 		</dependency>
+                <dependency>
+			<groupId>pl.edu.icm.unity</groupId>
+			<artifactId>unity-server-ldap-endpoint</artifactId>
+			<version>${project.version}</version>
+		</dependency>
 		<dependency>
 			<groupId>pl.edu.icm.unity</groupId>
 			<artifactId>unity-server-oauth</artifactId>
@@ -195,6 +200,14 @@
 		<dependency>
 			<groupId>pl.edu.icm.unity</groupId>
 			<artifactId>unity-server-ldap</artifactId>
+			<version>${project.version}</version>
+			<type>zip</type>
+			<classifier>i18n</classifier>
+			<scope>test</scope>
+		</dependency>
+                <dependency>
+			<groupId>pl.edu.icm.unity</groupId>
+			<artifactId>unity-server-ldap-endpoint</artifactId>
 			<version>${project.version}</version>
 			<type>zip</type>
 			<classifier>i18n</classifier>
