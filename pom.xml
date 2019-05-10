@@ -68,11 +68,11 @@
                 <module>ldap-endpoint</module>
 		<module>oauth</module>
 		<module>pam</module>
-		<module>integration-tests</module>
+		<!--module>integration-tests</module-->
 		<module>distribution</module>
 		<module>documentation</module>
 		<module>composite-password</module>
-  </modules>
+        </modules>
 
 	<developers>
 		<developer>
