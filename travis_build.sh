@@ -9,6 +9,7 @@ function bell() {
 bell &
 
 mvn install --show-version --log-file build.log --batch-mode
-tail -n 1000 build.log
+EXIT=$?
+echo "Printing tail of build output: " && tail -n 1000 build.log
 
-exit $?
+exit ${EXIT}
