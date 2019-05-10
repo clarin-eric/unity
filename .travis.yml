@@ -8,7 +8,7 @@ before_install:
 - echo "MAVEN_OPTS='-Xmx2g -XX:MaxPermSize=512m'" > ~/.mavenrc
 script:
 - bash -c 'if [ "${TRAVIS_TAG}" ]; then mvn versions:set -DnewVersion=${TRAVIS_TAG} versions:commit; fi'
-- bash -c 'travis_wait 30 mvn install -DskipTests=true -Dmaven.javadoc.skip=true -B -V >> build.log; tail -n 1000  build.log'
+- travis_wait 30 bash -c 'mvn install --show-version --log-file build.log --batch-mode; tail -n 1000 build.log'
 
 deploy:
   provider: releases
