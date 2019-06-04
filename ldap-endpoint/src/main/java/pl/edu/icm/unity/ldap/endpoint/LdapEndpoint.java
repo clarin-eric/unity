@@ -139,7 +139,7 @@ public class LdapEndpoint extends AbstractEndpoint
                     for(String name : pkiManagement.getCertificateNames()) {
                         LOG.info("Found certificate with name: "+name);
                     }
-                    cert = pkiManagement.getCertificate("MAIN");
+                    X509Certificate cert = pkiManagement.getCertificate("MAIN");
                 } catch(EngineException ex) {
                          LOG.error("Failed to enumerate certificate names");
                 }
