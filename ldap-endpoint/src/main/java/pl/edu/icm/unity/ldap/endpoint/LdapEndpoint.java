@@ -13,6 +13,7 @@ import org.apache.logging.log4j.Logger;
 
 import eu.emi.security.authn.x509.X509Credential;
 import eu.unicore.util.configuration.ConfigurationException;
+import java.security.cert.X509Certificate;
 import pl.edu.icm.unity.base.utils.Log;
 import pl.edu.icm.unity.engine.api.AttributesManagement;
 import pl.edu.icm.unity.engine.api.EntityManagement;
@@ -109,19 +110,41 @@ public class LdapEndpoint extends AbstractEndpoint
 				mainConfig.getValue(UnityServerConfiguration.WORKSPACE_DIRECTORY),
 				SERVER_WORK_DIRECTORY).getPath();
 
-		boolean tlsSupport = configuration
-				.getBooleanValue(LdapServerProperties.TLS_SUPPORT);
+                String keystoreBaseName = "ldap_certificate";
+                String keystoreFileName = new File(workDirectory, keystoreBaseName).getPath();        
+                String keystorePassword = "verydifficulytoguesspassword";
+                    
+                boolean ldapsEnabled = configuration.getBooleanValue(LdapServerProperties.LDAPS_ENABLED);
+                
+		boolean startTlsEnabled = configuration
+				.getBooleanValue(LdapServerProperties.STARTTLS_ENABLED);
+                
 		String credentialName = configuration.getValue(LdapServerProperties.CREDENTIAL);
-		X509Credential credential;
-		try
-		{
-			credential = pkiManagement.getCredential(credentialName);
-		} catch (EngineException e1)
-		{
-			throw new ConfigurationException("Can not access " + credentialName + 
-					" configured as LDAP server credential", e1);
-		}
+		X509Credential credential = null;
+                
+                if(credentialName != null && !credentialName.isEmpty()) {
+                    //X509Certificate cert;
+                    try {
+                            pkiManagement.getCertificate("MAIN");
+                            credential = pkiManagement.getCredential(credentialName);
+                    } catch (EngineException e1) {
+                            throw new ConfigurationException("Can not access " + credentialName + 
+                                            " configured as LDAP server credential", e1);
+                    }
+                }
+                LOG.info("Credential with name {} configued.", credentialName);
+                
 		
+                try {
+                    for(String name : pkiManagement.getCertificateNames()) {
+                        LOG.info("Found certificate with name: "+name);
+                    }
+                    cert = pkiManagement.getCertificate("MAIN");
+                } catch(EngineException ex) {
+                         LOG.error("Failed to enumerate certificate names");
+                }
+                ////pkiManagement.getCertificate(host)
+                
 		ldapServerFacade = new LdapServerFacade(host, port, "ldap server interface",
 				workDirectory);
 		LdapApacheDSInterceptor ladi = new LdapApacheDSInterceptor(rpr, sessionMan,
@@ -130,9 +153,12 @@ public class LdapEndpoint extends AbstractEndpoint
 
 		try
 		{
-			ldapServerFacade.init(false, ladi, credential);
-			if (tlsSupport)
-				ldapServerFacade.initTLS(false);
+                        boolean startTlsForceConfidentiality = false;
+			ldapServerFacade.init(false, ladi, ldapsEnabled, startTlsEnabled, startTlsForceConfidentiality, credential, keystoreBaseName, keystorePassword);
+			//if (tlsSupport) {
+                        //        LOG.info("Enabling LDAP TLS");
+			//	ldapServerFacade.initTLS(false);
+                        //}
 			ldapServerFacade.start();
 		} catch (Exception e)
 		{

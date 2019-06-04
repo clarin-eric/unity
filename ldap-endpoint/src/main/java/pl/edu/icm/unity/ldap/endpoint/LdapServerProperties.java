@@ -31,10 +31,11 @@ public class LdapServerProperties extends PropertiesHelper
 	public final static Map<String, PropertyMD> META = new HashMap<>();
 	
 	public static final String HOST = "host";
-	public static final String LDAP_PORT = "ldapPort";
-	public static final String LDAPS_PORT = "ldapsPort";
-	public static final String TLS_SUPPORT = "tls";
+	public static final String LDAP_PORT = "ldapPort";        
+        public static final String LDAPS_ENABLED = "ldaps";
+	public static final String STARTTLS_ENABLED = "starttls";
 	public static final String CREDENTIAL = "credential";
+        
 	public static final String GROUP_MEMBER = "groupMember";
 	public static final String GROUP_MEMBER_DN_REGEXP = "groupMemberDnRegexp";
 	public static final String GROUP_OF_NAMES_RETURN_FORMAT = "groupOfNamesReturnFormat";
@@ -53,13 +54,13 @@ public class LdapServerProperties extends PropertiesHelper
 			.setDescription("LDAP server host settings"));
 		META.put(LDAP_PORT, new PropertyMD().setCategory(main)
 			.setDescription("LDAP server port settings"));
-		META.put(LDAPS_PORT, new PropertyMD().setCategory(main)
-			.setDescription("LDAPs server port settings"));
+		META.put(LDAPS_ENABLED, new PropertyMD().setCategory(main)
+			.setDescription("Enable LDAP over SSL (LDAPs)").setDefault("false"));
 
-		META.put(TLS_SUPPORT, new PropertyMD().setCategory(main)
-			.setDescription("LDAP tls support"));
-		META.put(CREDENTIAL, new PropertyMD().setCategory(main).setMandatory()
-			.setDescription("Name of Unity credential that will be used as LDAP server's own identity"));
+		META.put(STARTTLS_ENABLED, new PropertyMD().setCategory(main)
+			.setDescription("LDAP STARTTLS support").setDefault("false"));
+		META.put(CREDENTIAL, new PropertyMD().setCategory(main)
+                        .setDescription("Name of Unity credential that will be used as LDAP server's own identity"));
 
 		META.put(GROUP_MEMBER_DN_REGEXP, new PropertyMD().setCategory(main)
 			.setDescription("Regular expression that should match the DN of a member compare request." +

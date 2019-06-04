@@ -281,6 +281,7 @@ class LdapApacheDSInterceptor extends BaseInterceptor
 	@Override
 	public boolean compare(CompareOperationContext compareContext) throws LdapException
 	{
+                log.info("Compare: name="+compareContext.getName()+", value="+compareContext.getValue().getString()+", DN="+compareContext.getDn().toString()+", attribute type name="+compareContext.getAttributeType().getName());
 		CoreSessionExt session = (CoreSessionExt) compareContext.getSession();
 		setUnityInvocationContext(session.getSession());
 		try
@@ -288,7 +289,7 @@ class LdapApacheDSInterceptor extends BaseInterceptor
 			AttributeType at = compareContext.getAttributeType();
 			if (null == at)
 			{
-				log.warn("compare got invalid AttributeType");
+				log.warn("Compare: error=compare got invalid AttributeType, result=false");
 				return false;
 			}
 
@@ -296,9 +297,9 @@ class LdapApacheDSInterceptor extends BaseInterceptor
 					.getValue(LdapServerProperties.GROUP_MEMBER);
 
 			// we know how to do group members only
-			if (!at.getName().equals(group_member))
+			if (!(at.getName().equals(group_member) || at.getName().equals("uniqueMember")))
 			{
-				log.warn(String.format("comparing with unsupported attribute [%s]",
+				log.warn(String.format("Compare: error=comparing with unsupported attribute [%s]",
 						at.getName()));
 				notSupported();
 			}
@@ -310,7 +311,7 @@ class LdapApacheDSInterceptor extends BaseInterceptor
 			Matcher m = dn_meber_regexp.matcher(compareContext.getDn().toString());
 			if (!m.find())
 			{
-				log.warn("comparing with unsupported DN");
+				log.warn("Compare: error=comparing with unsupported DN");
 				notSupported();
 			}
 
@@ -343,9 +344,11 @@ class LdapApacheDSInterceptor extends BaseInterceptor
 				long userEntityId = userMapper.resolveUser(user, realm.getName());
 				Map<String, GroupMembership> grps = identitiesMan
 						.getGroups(new EntityParam(userEntityId));
+                                log.info("Compare: result=" + grps.containsKey(group));
 				return grps.containsKey(group);
 			} catch (EngineException e)
 			{
+                                log.warn("Compare: error=Error when comparing: " + e.getMessage());
 				throw new LdapOtherException("Error when comparing", e);
 			}
 		} finally

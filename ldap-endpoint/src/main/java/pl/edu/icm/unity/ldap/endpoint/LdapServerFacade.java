@@ -35,6 +35,8 @@ import java.io.*;
 import java.util.List;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
+import org.apache.logging.log4j.Logger;
+import pl.edu.icm.unity.base.utils.Log;
 
 /**
  * Note: default settings contain one system user with "cn=system
@@ -42,6 +44,9 @@ import java.util.zip.ZipInputStream;
  */
 public class LdapServerFacade
 {
+        private static final Logger LOG = Log.getLogger(Log.U_SERVER_LDAP_ENDPOINT,
+			LdapServerFacade.class);
+        
 	private LdapServer impl;
 
 	private DirectoryService ds;
@@ -91,13 +96,44 @@ public class LdapServerFacade
 	 *                - should we reuse the LDAP initialisation data
 	 * @param interceptor
 	 *                - unity's LDAP interceptor
+         * @param credential
+         * @param startTlsSupport
+         * @throws java.lang.Exception
 	 */
-	public void init(boolean deleteWorkDir, BaseInterceptor interceptor, X509Credential credential) throws Exception
+	public void init(boolean deleteWorkDir, BaseInterceptor interceptor, boolean ldapsEnabled, boolean startTlsEnabled, boolean startTlsForceConfidentiality, X509Credential credential, String keystoreFileName, String keystorePassword) throws Exception
 	{
+            /*
+            if(credential != null) {
+                credential.getCertificate();                    
+                credential.getCertificateChain();
+            }
+            */
 		impl = new UnityLdapServer(credential);
-		impl.setServiceName(name);
-		impl.setTransports(new TcpTransport(host, port));
-
+		impl.setServiceName(name);               
+                TcpTransport transport = new TcpTransport(host, port);
+                
+                if(ldapsEnabled || startTlsEnabled) {
+                     if(keystoreFileName != null && !keystoreFileName.isEmpty() && keystorePassword != null && !keystorePassword.isEmpty()) {
+                        impl.setKeystoreFile(LdapServerKeys.getKeystore(keystoreFileName, keystorePassword).getAbsolutePath());
+                        impl.setCertificatePassword(keystorePassword);
+                    }
+                }
+                
+                if(ldapsEnabled) { //LDAP over SSL
+                    transport.setEnableSSL(true);                  
+                } else if (startTlsEnabled) { //Plain LDAP with STARTTLS support                    
+                    StartTlsHandler handler = new StartTlsHandler();
+                    impl.addExtendedOperationHandler(handler);
+                    impl.setConfidentialityRequired(startTlsForceConfidentiality);
+                } 
+                
+                LOG.info("Enabling {} on port: {}", ldapsEnabled ? "LDAPS" : "LDAP", port);
+                if(!ldapsEnabled) {
+                    LOG.info("Starttls={}, force confidentiality=", startTlsEnabled, startTlsForceConfidentiality);
+                }
+                 
+		impl.setTransports(transport);
+                
 		ds = new DefaultDirectoryService();
 		ds.getChangeLog().setEnabled(false);
 		// ?

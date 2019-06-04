@@ -31,7 +31,7 @@ public class LdapServerFacadeMockFactory
 		LdapApacheDSInterceptor ladi = new LdapApacheDSInterceptor(null, null, null, null,
 				null, props, null, null, "authenticator");
 		LdapServerFacade facade = create();
-		facade.init(true, ladi, null);
+		facade.init(true, ladi, false, false, false, null, "", "");
 		return facade;
 	}
 
@@ -41,7 +41,7 @@ public class LdapServerFacadeMockFactory
 		LdapApacheDSInterceptor ladi = new LdapApacheDSInterceptor(null, null, null, null,
 				null, props, null, null, "authenticator");
 		LdapServerFacade facade = create();
-		facade.init(true, ladi, null);
+		facade.init(true, ladi, false, false, false, null, "", "");
 		return facade;
 	}
 }
