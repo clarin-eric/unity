@@ -155,6 +155,7 @@ public class LdapEndpoint extends AbstractEndpoint
 		{
                         boolean startTlsForceConfidentiality = false;
 			ldapServerFacade.init(false, ladi, ldapsEnabled, startTlsEnabled, startTlsForceConfidentiality, credential, keystoreBaseName, keystorePassword);
+                        ladi.init(ldapServerFacade.getDs());
 			//if (tlsSupport) {
                         //        LOG.info("Enabling LDAP TLS");
 			//	ldapServerFacade.initTLS(false);

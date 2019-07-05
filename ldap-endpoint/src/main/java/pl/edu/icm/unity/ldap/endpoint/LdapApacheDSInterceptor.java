@@ -114,6 +114,7 @@ class LdapApacheDSInterceptor extends BaseInterceptor
 	public void init(DirectoryService directoryService) throws LdapException
 	{
 		super.init(directoryService);
+                this.schemaManager = directoryService.getSchemaManager();
                 this.ldapSearch.init(directoryService.getSchemaManager());
 	}
 
