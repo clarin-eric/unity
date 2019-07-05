@@ -144,7 +144,7 @@ public class LdapServerFacade
 
 		// load the required data
 		loadData();
-
+                
 		// see https://issues.apache.org/jira/browse/DIRSERVER-1954
 		if (shouldStartClose)
 		{
@@ -152,8 +152,10 @@ public class LdapServerFacade
 			ds.shutdown();
 		}
 		impl.setDirectoryService(ds);
-
-		// "inject" unity's code
+                
+                interceptor.init(ds);
+                
+		// "inject" unity's code                
 		setUnityInterceptor(interceptor);
 	}
 

@@ -49,7 +49,7 @@ class LdapSearch
 	private final AuthenticationRealm realm;
 	private final UserMapper userMapper;
 	private final DnFactory dnFactory;
-	private final SchemaManager schemaManager;
+	private SchemaManager schemaManager;
 	private final AttributesManagement attributesMan;
 	private final LdapAttributeUtils attributeUtils;
 	
@@ -68,6 +68,10 @@ class LdapSearch
 		this.attributeUtils = attributeUtils;
 	}
 
+        public void init(SchemaManager schemaManager) {
+            this.schemaManager = schemaManager;
+        }
+        
 	List<Entry> searchEntries(SearchOperationContext searchContext, ExprNode node) 
 			throws LdapException
 	{

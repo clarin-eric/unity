@@ -114,6 +114,7 @@ class LdapApacheDSInterceptor extends BaseInterceptor
 	public void init(DirectoryService directoryService) throws LdapException
 	{
 		super.init(directoryService);
+                this.ldapSearch.init(directoryService.getSchemaManager());
 	}
 
 	//FIXME what for is lookup? Do we need to support it?
