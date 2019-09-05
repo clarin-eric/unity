@@ -26,7 +26,7 @@
 		<vaadin.version>8.6.0</vaadin.version>
 		<groovy-all.version>2.4.8</groovy-all.version>
 		<cxf.version>3.1.10</cxf.version>
-		<apacheds.version>2.0.0-M24</apacheds.version>
+		<apacheds.version>2.0.0-AM25</apacheds.version>
 		<bc.version>1.60</bc.version>
 		<selenium.version>3.14.0</selenium.version>
 
@@ -609,7 +609,7 @@
 			<dependency>
 				<groupId>org.apache.directory.api</groupId>
 				<artifactId>api-all</artifactId>
-				<version>1.0.1</version>
+				<version>1.0.3</version>
 			</dependency>
 			<dependency>
 				<groupId>org.apache.directory.server</groupId>
