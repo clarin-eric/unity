@@ -283,7 +283,7 @@ class LdapApacheDSInterceptor extends BaseInterceptor
 	@Override
 	public boolean compare(CompareOperationContext compareContext) throws LdapException
 	{
-                log.info("Compare: name="+compareContext.getName()+", value="+compareContext.getValue().getString()+", DN="+compareContext.getDn().toString()+", attribute type name="+compareContext.getAttributeType().getName());
+                log.info("Compare: name="+compareContext.getName()+", value="+compareContext.getValue().toString()+", DN="+compareContext.getDn().toString()+", attribute type name="+compareContext.getAttributeType().getName());
 		CoreSessionExt session = (CoreSessionExt) compareContext.getSession();
 		setUnityInvocationContext(session.getSession());
 		try

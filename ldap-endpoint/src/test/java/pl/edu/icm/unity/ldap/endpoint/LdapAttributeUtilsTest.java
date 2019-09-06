@@ -110,9 +110,9 @@ public class LdapAttributeUtilsTest
 				unityUserAttrs, entry);
 		
 		assertThat(entry.getAttributes().size(), is(equalTo(1)));
-		Value<?> v = entry.getAttributes().iterator().next().get();
+		Value v = entry.getAttributes().iterator().next().get();
 		assertThat(v, is(not(nullValue())));
-		assertThat(v.getString(), is(equalTo("not disclosing")));
+		assertThat(v.toString(), is(equalTo("not disclosing")));
 	}
 	
 	@Test
@@ -127,9 +127,9 @@ public class LdapAttributeUtilsTest
 				unityUserAttrs, entry);
 		
 		assertThat(entry.getAttributes().size(), is(equalTo(1)));
-		Value<?> v = entry.getAttributes().iterator().next().get();
+		Value v = entry.getAttributes().iterator().next().get();
 		assertThat(v, is(not(nullValue())));
-		assertThat(v.getString(), is(equalTo("cn=user,cn=clarin")));
+		assertThat(v.toString(), is(equalTo("cn=user,cn=clarin")));
 	}
 
 	@Test
@@ -144,9 +144,9 @@ public class LdapAttributeUtilsTest
 				unityUserAttrs, entry);
 		
 		assertThat(entry.getAttributes().size(), is(equalTo(1)));
-		Value<?> v = entry.getAttributes().iterator().next().get();
+		Value v = entry.getAttributes().iterator().next().get();
 		assertThat(v, is(not(nullValue())));
-		assertThat(v.getString(), is(equalTo("test@clarin.eu")));
+		assertThat(v.toString(), is(equalTo("test@clarin.eu")));
 	}
 	
 	@Test
@@ -161,9 +161,9 @@ public class LdapAttributeUtilsTest
 				unityUserAttrs, entry);
 		
 		assertThat(entry.getAttributes().size(), is(equalTo(1)));
-		Value<?> v = entry.getAttributes().iterator().next().get();
+		Value v = entry.getAttributes().iterator().next().get();
 		assertThat(v, is(not(nullValue())));
-		assertThat(v.getString(), is(equalTo("Test user")));
+		assertThat(v.toString(), is(equalTo("Test user")));
 	}
 	
 	private Entity createTestEntity()

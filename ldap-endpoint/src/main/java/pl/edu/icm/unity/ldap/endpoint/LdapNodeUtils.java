@@ -209,7 +209,7 @@ public class LdapNodeUtils
 			}
 			if (key_name.equals(query))
 			{
-				return ava.getValue().getString();
+				return ava.getValue().toString();
 			}
 		}
 		return null;
