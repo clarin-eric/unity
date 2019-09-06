@@ -70,6 +70,7 @@ public class WorkflowCompletedComponent extends CustomComponent
 		{
 			Label extraInfoL = new Label(config.extraInformation);
 			extraInfoL.addStyleName(config.success ? "u-final-ext-info" : "u-final-ext-error");
+                        extraInfoL.setCaptionAsHtml(true);
 			main.addComponent(extraInfoL);
 			main.setComponentAlignment(extraInfoL, Alignment.MIDDLE_CENTER);
 		}
