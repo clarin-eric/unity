@@ -10,6 +10,7 @@ import org.apache.logging.log4j.util.Strings;
 
 import com.vaadin.event.ShortcutAction.KeyCode;
 import com.vaadin.server.Resource;
+import com.vaadin.shared.ui.ContentMode;
 import com.vaadin.ui.Alignment;
 import com.vaadin.ui.Button;
 import com.vaadin.ui.CustomComponent;
@@ -21,6 +22,7 @@ import com.vaadin.ui.VerticalLayout;
 import pl.edu.icm.unity.engine.api.finalization.WorkflowFinalizationConfiguration;
 import pl.edu.icm.unity.webui.common.ImageUtils;
 import pl.edu.icm.unity.webui.common.Styles;
+import pl.edu.icm.unity.webui.common.safehtml.HtmlConfigurableLabel;
 
 
 /**
@@ -68,9 +70,8 @@ public class WorkflowCompletedComponent extends CustomComponent
 		
 		if (!Strings.isEmpty(config.extraInformation))
 		{
-			Label extraInfoL = new Label(config.extraInformation);
-			extraInfoL.addStyleName(config.success ? "u-final-ext-info" : "u-final-ext-error");
-                        extraInfoL.setCaptionAsHtml(true);
+			Label extraInfoL = new HtmlConfigurableLabel(config.extraInformation);// new Label(config.extraInformation, ContentMode.HTML);
+			extraInfoL.addStyleName(config.success ? "u-final-ext-info" : "u-final-ext-error");                       
 			main.addComponent(extraInfoL);
 			main.setComponentAlignment(extraInfoL, Alignment.MIDDLE_CENTER);
 		}
