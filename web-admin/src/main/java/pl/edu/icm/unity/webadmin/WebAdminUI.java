@@ -100,7 +100,7 @@ public class WebAdminUI extends UnityEndpointUIBase implements UnityWebUI
 						switchView(admin ? tabPanel : userAccount,
 								!admin);
 					}
-				});
+				}, config.getValue(HomeEndpointProperties.SUPPORT_PAGE));
 
 		
 		createMainTabPanel();

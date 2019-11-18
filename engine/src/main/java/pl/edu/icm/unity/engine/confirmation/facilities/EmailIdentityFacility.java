@@ -91,12 +91,15 @@ public class EmailIdentityFacility extends UserEmailFacility<EmailIdentityConfir
 		String info = msg.getMessage(confirmed ? 
 				"ConfirmationStatus.successDetail" : "ConfirmationStatus.emailChanged", idState.getValue());
 		String redirectURL = confirmed ? getSuccessRedirect(idState) : getErrorRedirect(idState);
+                String redirectCaption = msg.getMessage("RegistrationFormsChooserComponent.defaultRedirectCaption");
+				
 		return WorkflowFinalizationConfiguration.builder()
 				.setAutoRedirect(autoRedirect)
 				.setSuccess(confirmed)
 				.setMainInformation(title)
 				.setExtraInformation(info)
 				.setRedirectURL(redirectURL)
+                                .setRedirectButtonText(redirectCaption)
 				.build();
 	}
 

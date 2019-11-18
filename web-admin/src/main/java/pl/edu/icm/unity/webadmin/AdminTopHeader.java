@@ -16,7 +16,6 @@ import pl.edu.icm.unity.webui.common.Images;
 import pl.edu.icm.unity.webui.common.Styles;
 import pl.edu.icm.unity.webui.common.TopHeader;
 
-
 /**
  * Top header for admin UI. Allows to switch to (and from) user home UI view.
  * @author K. Benedyczak
@@ -26,12 +25,14 @@ public class AdminTopHeader extends TopHeader
 	private boolean adminView = true;
 	private Button switchView;
 	private ViewSwitchCallback callback;
-	
+	private final String supportLink;
+        
 	public AdminTopHeader(String title, StandardWebAuthenticationProcessor authnProcessor, UnityMessageSource msg, 
-			ViewSwitchCallback callback)
+			ViewSwitchCallback callback, String supportLink)
 	{
 		super(title, authnProcessor, msg);
 		this.callback = callback;
+                this.supportLink = supportLink;
 	}
 
 	@Override
@@ -59,7 +60,7 @@ public class AdminTopHeader extends TopHeader
 			@Override
 			public void buttonClick(ClickEvent event)
 			{
-				Page.getCurrent().open("http://unity-idm.eu/site/support", "_blank", false);
+				Page.getCurrent().open(supportLink, "_blank", false);
 			}
 		});
 		support.setDescription(msg.getMessage("AdminTopHeader.toSupport"));

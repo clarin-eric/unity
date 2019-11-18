@@ -56,11 +56,12 @@ class PasswordResetStep1Captcha extends CredentialResetLayout
 		username.focus();
 		narrowCol.addComponent(username);
 		
+                /*
 		captcha = new CaptchaComponent(msg, compactLayout);
 		Component captchaComp = captcha.getAsFullWidthComponent();
 		captchaComp.addStyleName("u-credreset-captcha");
 		narrowCol.addComponent(captchaComp);
-		
+		*/
 		Component buttons = getButtonsBar(msg.getMessage("CredentialReset.requestPasswordReset"), 
 				this::onConfirm, msg.getMessage("cancel"), cancelCallback);
 		
@@ -83,6 +84,7 @@ class PasswordResetStep1Captcha extends CredentialResetLayout
 			return;
 		}
 		username.setComponentError(null);
+                /*
 		try
 		{
 			captcha.verify();
@@ -90,7 +92,7 @@ class PasswordResetStep1Captcha extends CredentialResetLayout
 		{
 			return;
 		}
-
+                */
 		proceedCallback.accept(user);
 	}
 }

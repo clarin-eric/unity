@@ -52,6 +52,7 @@ public class HomeEndpointProperties extends PropertiesHelper
 	public static final String GWA_EDITABLE = "editable";
 	public static final String REMOVAL_MODE = "selfRemovalMode";
 	public static final String DISABLE_REMOVAL_SCHEDULE = "disableSelfRemovalScheduling";
+        public static final String SUPPORT_PAGE = "supportpage";
 	
 	static
 	{
@@ -83,6 +84,10 @@ public class HomeEndpointProperties extends PropertiesHelper
 				setDescription("If true then the group is shown next to the attribute."));
 		META.put(ENQUIRIES, new PropertyMD().setList(false).
 				setDescription("List of enquiries to be presented on User Home UI."));	
+                META.put(SUPPORT_PAGE, new PropertyMD("http://unity-idm.eu/site/support").
+                                setDescription("Link to support page"));
+                
+                
 	}
 	
 	public HomeEndpointProperties(Properties properties) throws ConfigurationException

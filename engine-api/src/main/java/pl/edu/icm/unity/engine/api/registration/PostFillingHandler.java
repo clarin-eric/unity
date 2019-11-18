@@ -131,6 +131,10 @@ public class PostFillingHandler
 
 	private String getInfo(RegistrationWrapUpConfig.TriggeringState state, RegistrationWrapUpConfig config)
 	{
+                if ( state == RegistrationWrapUpConfig.TriggeringState.SUBMITTED) {
+                    String msgKey = "requestSubmittedDetail";
+                    return new I18nString(msgPrefix + msgKey, msg).getValue(msg);
+                }
 		return config.getInfo() == null || config.getInfo().isEmpty() ? getDefaultInfo(state) : config.getInfo().getValue(msg);
 	}
 	
