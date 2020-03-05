@@ -20,6 +20,7 @@ import pl.edu.icm.unity.base.utils.Log;
 import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
 import pl.edu.icm.unity.engine.api.project.ProjectRequest;
 import pl.edu.icm.unity.engine.api.project.ProjectRequestManagement;
+import pl.edu.icm.unity.engine.api.project.ProjectRequestParam;
 import pl.edu.icm.unity.exceptions.EngineException;
 import pl.edu.icm.unity.webui.exceptions.ControllerException;
 
@@ -59,14 +60,27 @@ public class UpdateRequestsController
 
 	}
 
-	public Optional<String> getProjectEnquiryFormLink(String projectPath) throws ControllerException
+	public Optional<String> getProjectSingUpEnquiryFormLink(String projectPath) throws ControllerException
 	{
 		try
 		{
-			return requestMan.getProjectEnquiryFormLink(projectPath);
+			return requestMan.getProjectSignUpEnquiryFormLink(projectPath);
 		} catch (EngineException e)
 		{
-			log.debug("Can not get project enquiry form link " + projectPath, e);
+			log.debug("Can not get project signup enquiry form link " + projectPath, e);
+			throw new ServerFaultException(msg);
+		}
+
+	}
+	
+	public Optional<String> getProjectUpdateMembershipEnquiryFormLink(String projectPath) throws ControllerException
+	{
+		try
+		{
+			return requestMan.getProjectUpdateMembershipEnquiryFormLink(projectPath);
+		} catch (EngineException e)
+		{
+			log.debug("Can not get project signup enquiry form link " + projectPath, e);
 			throw new ServerFaultException(msg);
 		}
 
@@ -79,7 +93,7 @@ public class UpdateRequestsController
 		{
 			requests = requestMan.getRequests(projectPath);
 			return requests.stream()
-					.map(r -> new UpdateRequestEntry(r.id, r.operation, r.email, r.name,
+					.map(r -> new UpdateRequestEntry(r.id, r.operation, r.type, r.email, r.name,
 							delGroupHelper.getGroupsDisplayedNames(projectPath, r.groups),
 							r.requestedTime))
 					.collect(Collectors.toList());
@@ -97,8 +111,8 @@ public class UpdateRequestsController
 		{
 			for (UpdateRequestEntry request : items)
 			{
-				requestMan.accept(projectPath, request.id, request.operation);
-				accepted.add(request.email);
+				requestMan.accept(new ProjectRequestParam(projectPath, request.id, request.operation, request.type));
+				accepted.add(request.email.getValue());
 
 			}
 		} catch (Exception e)
@@ -126,8 +140,8 @@ public class UpdateRequestsController
 		{
 			for (UpdateRequestEntry request : items)
 			{
-				requestMan.decline(projectPath, request.id, request.operation);
-				declined.add(request.email);
+				requestMan.decline(new ProjectRequestParam(projectPath, request.id, request.operation, request.type));
+				declined.add(request.email.getValue());
 
 			}
 		} catch (Exception e)

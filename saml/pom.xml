@@ -126,6 +126,8 @@
 					</xmlConfigs>
 					<noUpa>true</noUpa>
 					<outputJar>target/unity-server-saml-xmlbeans-${project.version}.jar</outputJar>
+                                        <!-- https://github.com/ethercis/openehr-java-libs/issues/1 -->
+                                        <javaSource>1.8</javaSource>
 				</configuration>
 			</plugin>
 			<plugin>

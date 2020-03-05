@@ -24,12 +24,11 @@ import io.imunity.webelements.navigation.NavigationInfo.Type;
 import io.imunity.webelements.navigation.UnityView;
 import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
 import pl.edu.icm.unity.engine.api.utils.PrototypeComponent;
-import pl.edu.icm.unity.types.authn.AuthenticationRealm;
 import pl.edu.icm.unity.webui.common.NotificationPopup;
 import pl.edu.icm.unity.webui.exceptions.ControllerException;
 
 /**
- * View for edit realm
+ * Edit realm view
  * 
  * @author P.Piernik
  *
@@ -37,7 +36,6 @@ import pl.edu.icm.unity.webui.exceptions.ControllerException;
 @PrototypeComponent
 public class EditAuthenticationRealmView extends CustomComponent implements UnityView
 {
-
 	public static final String VIEW_NAME = "EditAuthenticationRealm";
 
 	private AuthenticationRealmController controller;
@@ -85,7 +83,7 @@ public class EditAuthenticationRealmView extends CustomComponent implements Unit
 	public void enter(ViewChangeEvent event)
 	{
 		realmName = NavigationHelper.getParam(event, CommonViewParam.name.toString());
-		AuthenticationRealm realm;
+		AuthenticationRealmEntry realm;
 		try
 		{
 			realm = controller.getRealm(realmName);
@@ -97,6 +95,7 @@ public class EditAuthenticationRealmView extends CustomComponent implements Unit
 		}
 
 		editor = new AuthenticationRealmEditor(msg, realm);
+		editor.editMode();
 		VerticalLayout main = new VerticalLayout();
 		main.setMargin(false);
 		main.addComponent(editor);
@@ -104,7 +103,7 @@ public class EditAuthenticationRealmView extends CustomComponent implements Unit
 		Layout hl = ConfirmViewHelper.getConfirmButtonsBar(msg.getMessage("save"),
 				msg.getMessage("close"), () -> onConfirm(), () -> onCancel());
 		main.addComponent(hl);
-		main.setComponentAlignment(hl, Alignment.BOTTOM_RIGHT);
+		main.setComponentAlignment(hl, Alignment.BOTTOM_CENTER);
 		setCompositionRoot(main);
 	}
 

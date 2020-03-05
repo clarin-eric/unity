@@ -8,7 +8,7 @@
 	<modelVersion>4.0.0</modelVersion>
 	<artifactId>unity-documentation</artifactId>
 	<packaging>jar</packaging>
-	<name>UNITY ${m.name} module</name>
+	<name>UNITY ${m.name}</name>
 	<description>Documentation of the whole Unity system</description>
 
 	<properties>
@@ -24,13 +24,17 @@
 	<distributionManagement>
 		<site>
       		<id>unity-idm.eu</id>
-      		<url>ftps://unity-idm.eu/documentation/unity-${project.version}</url>
+      		<url>ftps://ftp.unity-idm.eu/documentation/unity-${project.version}</url>
     	</site>
 	</distributionManagement>
 
 	<dependencies>
 		<!-- dependencies are used to generate documentation from the code -->
-
+		<dependency>
+			<groupId>pl.edu.icm.unity</groupId>
+			<artifactId>unity-server-engine</artifactId>
+			<version>${project.version}</version>
+		</dependency>
 		<dependency>
 			<groupId>pl.edu.icm.unity</groupId>
 			<artifactId>unity-server-engine-api</artifactId>

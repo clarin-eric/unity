@@ -47,7 +47,6 @@ import pl.edu.icm.unity.home.iddetails.UserIdentitiesPanel;
 import pl.edu.icm.unity.types.basic.Entity;
 import pl.edu.icm.unity.types.basic.EntityParam;
 import pl.edu.icm.unity.types.basic.Group;
-import pl.edu.icm.unity.types.registration.EnquiryForm;
 import pl.edu.icm.unity.webadmin.preferences.PreferencesComponent;
 import pl.edu.icm.unity.webui.association.afterlogin.ConnectIdWizardProvider;
 import pl.edu.icm.unity.webui.association.afterlogin.ConnectIdWizardProvider.WizardFinishedCallback;
@@ -64,7 +63,7 @@ import pl.edu.icm.unity.webui.common.credentials.CredentialsPanel;
 import pl.edu.icm.unity.webui.common.identities.IdentityEditorRegistry;
 import pl.edu.icm.unity.webui.common.preferences.PreferencesHandlerRegistry;
 import pl.edu.icm.unity.webui.forms.enquiry.EnquiryResponseEditorController;
-import pl.edu.icm.unity.webui.forms.enquiry.SingleStickyEnquiryUpdater;
+import pl.edu.icm.unity.webui.forms.enquiry.StickyEnquiryUpdatableComponent;
 import pl.edu.icm.unity.webui.providers.HomeUITabProvider;
 import pl.edu.icm.unity.webui.sandbox.SandboxAuthnNotifier;
 
@@ -170,8 +169,8 @@ public class UserAccountComponent extends VerticalLayout
 		if (!disabled.contains(HomeEndpointProperties.Components.preferencesTab.toString()))
 			addPreferences(tabPanel);
 		
-		if (!disabled.contains(HomeEndpointProperties.Components.enquriesTab.toString()))
-			addEnquiries(tabPanel, config.getEnabledEnquiries());
+		if (!disabled.contains(HomeEndpointProperties.Components.accountUpdateTab.toString()))
+			addAccountUpdate(tabPanel, config.getEnabledEnquiries());
 		
 		if (!disabled.contains(tabProvider.getId().toString()))
 			addExtraTab(tabPanel);
@@ -180,27 +179,21 @@ public class UserAccountComponent extends VerticalLayout
 			tabPanel.select(0);
 	}
 	
-	private void addEnquiries(BigTabPanel tabPanel, List<String> enquiries)
+	private void addAccountUpdate(BigTabPanel tabPanel, List<String> enquiries)
 	{
 		try
 		{
 			VerticalLayout main = new VerticalLayout();
 			main.setSpacing(false);
 			main.setMargin(false);
-			
-			//only first applicable
-			for (String enquiryForm : enquiries)
+			StickyEnquiryUpdatableComponent updater = new StickyEnquiryUpdatableComponent(msg, enquiryResController,
+					enquiries);
+			if (updater.isFormsAreApplicable())
 			{
-				if (enquiryResController.isStickyFormApplicable(enquiryForm))
-				{
-					EnquiryForm form = enquiryResController.getForm(enquiryForm);
-					main.addComponent(new SingleStickyEnquiryUpdater(msg, enquiryResController, form));
-					break;
-				}
+				main.addComponent(updater);
+				tabPanel.addTab("UserHomeUI.accountUpdateLabel", "UserHomeUI.accountUpdateDesc",
+						Images.records, main, t -> updater.reload());
 			}
-
-			tabPanel.addTab("UserHomeUI.enquiryLabel", "UserHomeUI.enquiryDesc", Images.records,
-					main);
 
 		} catch (Exception e)
 		{

@@ -93,24 +93,6 @@ class GroupsComponent extends CustomComponent
 				}).withHandler(this::makePrivate).hideIfInactive().build();
 	}
 
-	private void updateGroupAccess(Set<GroupNode> items, boolean isOpen)
-	{
-		if (items.isEmpty())
-			return;
-		GroupNode groupNode = items.iterator().next();
-
-		try
-		{
-
-			controller.setGroupAccessMode(projectPath, groupNode.getPath(), isOpen);
-			groupBrowser.reloadNode(groupNode);
-
-		} catch (ControllerException e)
-		{
-			NotificationPopup.showError(e);
-		}
-	}
-
 	private void makePrivate(Set<GroupNode> items)
 	{
 
@@ -138,6 +120,24 @@ class GroupsComponent extends CustomComponent
 	{
 		updateGroupAccess(items, true);
 	}
+	
+	private void updateGroupAccess(Set<GroupNode> items, boolean isPublic)
+	{
+		if (items.isEmpty())
+			return;
+		GroupNode groupNode = items.iterator().next();
+
+		try
+		{
+
+			controller.setGroupAccessMode(projectPath, groupNode.getPath(), isPublic);
+			groupBrowser.reloadNode(groupNode);
+
+		} catch (ControllerException e)
+		{
+			NotificationPopup.showError(e);
+		}
+	}
 
 	private SingleActionHandler<GroupNode> getExpandAllAction()
 	{
@@ -151,8 +151,10 @@ class GroupsComponent extends CustomComponent
 	{
 		return SingleActionHandler.builder(GroupNode.class)
 				.withCaption(msg.getMessage("GroupsComponent.collapseAllAction"))
-				.withIcon(Images.file_tree_small.getResource()).dontRequireTarget()
-				.withHandler(e -> groupBrowser.collapseAll()).build();
+				.withIcon(Images.file_tree_small.getResource()).dontRequireTarget().withHandler(e -> {
+					groupBrowser.collapseAll();
+					groupBrowser.expandRoot();
+				}).build();
 	}
 
 	private SingleActionHandler<GroupNode> getDeleteGroupAction()
@@ -226,7 +228,7 @@ class GroupsComponent extends CustomComponent
 		private BiConsumer<I18nString, Boolean> groupConsumer;
 		private I18nTextField groupNameField;
 		private GroupNode parentGroup;
-		private CheckBox isOpen;
+		private CheckBox isPublic;
 
 		public AddGroupDialog(UnityMessageSource msg, GroupNode parentGroup,
 				BiConsumer<I18nString, Boolean> groupConsumer)
@@ -253,13 +255,13 @@ class GroupsComponent extends CustomComponent
 
 			groupNameField = new I18nTextField(msg,
 					msg.getMessage("AddGroupDialog.groupName"));
-			isOpen = new CheckBox(msg.getMessage("AddGroupDialog.public"));
+			isPublic = new CheckBox(msg.getMessage("AddGroupDialog.public"));
 
-			isOpen.setEnabled(parentGroup.isOpen());
-			isOpen.setValue(parentGroup.isOpen());
+			isPublic.setEnabled(parentGroup.isOpen());
+			isPublic.setValue(parentGroup.isOpen());
 
 			FormLayout main = new CompactFormLayout();
-			main.addComponents(info, groupNameField, isOpen);
+			main.addComponents(info, groupNameField, isPublic);
 			main.setSizeFull();
 			return main;
 		}
@@ -274,7 +276,7 @@ class GroupsComponent extends CustomComponent
 				return;
 			}
 
-			groupConsumer.accept(groupNameField.getValue(), isOpen.getValue());
+			groupConsumer.accept(groupNameField.getValue(), isPublic.getValue());
 			close();
 		}
 	}

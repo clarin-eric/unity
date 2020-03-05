@@ -12,9 +12,7 @@ import org.springframework.stereotype.Component;
 
 import com.vaadin.navigator.View;
 import com.vaadin.navigator.ViewChangeListener.ViewChangeEvent;
-import com.vaadin.ui.Alignment;
 import com.vaadin.ui.CustomComponent;
-import com.vaadin.ui.VerticalLayout;
 
 import pl.edu.icm.unity.base.utils.Log;
 import pl.edu.icm.unity.engine.api.authn.remote.RemotelyAuthenticatedContext;
@@ -24,9 +22,10 @@ import pl.edu.icm.unity.engine.api.registration.PublicRegistrationURLSupport;
 import pl.edu.icm.unity.exceptions.IllegalFormContentsException;
 import pl.edu.icm.unity.exceptions.WrongArgumentException;
 import pl.edu.icm.unity.types.registration.EnquiryForm;
-import pl.edu.icm.unity.types.registration.EnquiryResponse;
 import pl.edu.icm.unity.types.registration.EnquiryForm.EnquiryType;
+import pl.edu.icm.unity.types.registration.EnquiryResponse;
 import pl.edu.icm.unity.types.registration.RegistrationContext.TriggeringMode;
+import pl.edu.icm.unity.types.registration.RegistrationWrapUpConfig.TriggeringState;
 import pl.edu.icm.unity.webui.authn.StandardWebAuthenticationProcessor;
 import pl.edu.icm.unity.webui.common.NotificationPopup;
 import pl.edu.icm.unity.webui.finalization.WorkflowCompletedComponent;
@@ -77,10 +76,13 @@ public class EnquiryWellKnownURLViewProvider implements SecuredViewProvider
 	public View getView(String viewName)
 	{
 		String formName = getFormName(viewName);
-		if (!editorController.isFormApplicable(formName) && !editorController.isStickyFormApplicable(formName))
-			return new NotApplicableView();
-
 		EnquiryForm form = editorController.getForm(formName);
+		if (!editorController.isFormApplicable(formName) && !editorController.isStickyFormApplicable(formName))
+		{
+			log.debug("Enquiry form {} is not applicable", formName);
+			return new NotApplicableView(form);
+		}
+
 		EnquiryResponseEditor editor;
 		try
 		{
@@ -91,6 +93,7 @@ public class EnquiryWellKnownURLViewProvider implements SecuredViewProvider
 			log.error("Can't load enquiry editor", e);
 			return null;
 		}
+		
 		boolean overwriteSticky = false;
 		if (form.getType().equals(EnquiryType.STICKY))
 		{
@@ -178,23 +181,23 @@ public class EnquiryWellKnownURLViewProvider implements SecuredViewProvider
 	
 	private class NotApplicableView extends CustomComponent implements View
 	{
-
+		private EnquiryForm form;
+		
+		public NotApplicableView(EnquiryForm form)
+		{
+			this.form = form;
+		}
+		
 		@Override
 		public void enter(ViewChangeEvent event)
 		{
-			WorkflowFinalizationConfiguration config = WorkflowFinalizationConfiguration.basicError(
-					msg.getMessage("EnquiryWellKnownURLViewProvider.notApplicableEnquiry"), null);
-			
-			VerticalLayout wrapper = new VerticalLayout();
-			wrapper.setSpacing(false);
-			wrapper.setMargin(false);
-			wrapper.setSizeFull();
+			WorkflowFinalizationConfiguration config = editorController.getFinalizationHandler(form)
+					.getFinalRegistrationConfigurationNonSubmit(false, null,
+							TriggeringState.NOT_APPLICABLE_ENQUIRY);
+			WorkflowCompletedComponent finalScreen = new WorkflowCompletedComponent(config, url -> {});
+			com.vaadin.ui.Component wrapper = finalScreen.getWrappedForFullSizeComponent();
 			setSizeFull();
 			setCompositionRoot(wrapper);
-
-			WorkflowCompletedComponent finalScreen = new WorkflowCompletedComponent(config, url -> {});
-			wrapper.addComponent(finalScreen);
-			wrapper.setComponentAlignment(finalScreen, Alignment.MIDDLE_CENTER);
 		}
 	}
 }

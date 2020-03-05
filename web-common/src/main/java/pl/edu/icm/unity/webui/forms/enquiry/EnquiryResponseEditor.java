@@ -29,6 +29,7 @@ public class EnquiryResponseEditor extends BaseRequestEditor<EnquiryResponse>
 {
 	private EnquiryForm enquiryForm;
 	private PrefilledSet prefilled;
+	private RegistrationLayoutsContainer layoutContainer;
 	
 	public EnquiryResponseEditor(UnityMessageSource msg, EnquiryForm form,
 			RemotelyAuthenticatedContext remotelyAuthenticated,
@@ -42,6 +43,7 @@ public class EnquiryResponseEditor extends BaseRequestEditor<EnquiryResponse>
 				attributeHandlerRegistry, atMan, credMan, groupsMan);
 		this.enquiryForm = form;
 		this.prefilled = prefilled;
+		validateMandatoryRemoteInput();
 		initUI();
 	}
 	
@@ -61,7 +63,7 @@ public class EnquiryResponseEditor extends BaseRequestEditor<EnquiryResponse>
 	
 	private void initUI() throws EngineException
 	{
-		RegistrationLayoutsContainer layoutContainer = createLayouts();
+		layoutContainer = createLayouts();
 		
 		createControls(layoutContainer, enquiryForm.getEffectiveFormLayout(msg), prefilled);
 	}
@@ -75,8 +77,11 @@ public class EnquiryResponseEditor extends BaseRequestEditor<EnquiryResponse>
 	{
 		return enquiryForm.getType() == EnquiryType.REQUESTED_OPTIONAL;
 	}
-	
-	
+
+	void focusFirst()
+	{
+		focusFirst(layoutContainer.registrationFormLayout);
+	}	
 }
 
 

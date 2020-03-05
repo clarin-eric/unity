@@ -45,4 +45,8 @@ public class PrefilledSet
 		this(null, null, null, null);
 	}
 
+	public boolean isEmpty()
+	{
+		return identities.isEmpty() &&  groupSelections.isEmpty() && attributes.isEmpty();
+	}
 }

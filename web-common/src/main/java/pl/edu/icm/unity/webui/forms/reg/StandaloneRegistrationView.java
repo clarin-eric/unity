@@ -11,8 +11,6 @@ import org.apache.logging.log4j.util.Strings;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 
-import com.vaadin.event.ShortcutAction.KeyCode;
-import com.vaadin.navigator.View;
 import com.vaadin.navigator.ViewChangeListener.ViewChangeEvent;
 import com.vaadin.server.Page;
 import com.vaadin.server.VaadinRequest;
@@ -48,8 +46,10 @@ import pl.edu.icm.unity.types.registration.RegistrationWrapUpConfig.TriggeringSt
 import pl.edu.icm.unity.webui.common.NotificationPopup;
 import pl.edu.icm.unity.webui.common.Styles;
 import pl.edu.icm.unity.webui.finalization.WorkflowCompletedComponent;
+import pl.edu.icm.unity.webui.forms.FormsUIHelper;
+import pl.edu.icm.unity.webui.forms.RegCodeException.ErrorCause;
+import pl.edu.icm.unity.webui.forms.StandalonePublicView;
 import pl.edu.icm.unity.webui.forms.reg.RegistrationRequestEditor.Stage;
-import pl.edu.icm.unity.webui.forms.reg.RequestEditorCreator.ErrorCause;
 import pl.edu.icm.unity.webui.forms.reg.RequestEditorCreator.RequestEditorCreatedCallback;
 
 /**
@@ -58,7 +58,7 @@ import pl.edu.icm.unity.webui.forms.reg.RequestEditorCreator.RequestEditorCreate
  * @author K. Benedyczak
  */
 @PrototypeComponent
-public class StandaloneRegistrationView extends CustomComponent implements View
+public class StandaloneRegistrationView extends CustomComponent implements StandalonePublicView
 {
 	private static final Logger log = Log.getLogger(Log.U_SERVER_WEB, StandaloneRegistrationView.class);
 	private RegistrationForm form;
@@ -96,7 +96,8 @@ public class StandaloneRegistrationView extends CustomComponent implements View
 		this.autoLoginProcessor = autoLogin;
 	}
 	
-	String getFormName()
+	@Override
+	public String getFormName()
 	{
 		if (form == null)
 			return null;
@@ -229,21 +230,16 @@ public class StandaloneRegistrationView extends CustomComponent implements View
 	
 	private Button createOKButton(RegistrationRequestEditor editor, TriggeringMode mode)
 	{
-		Button okButton = new Button(msg.getMessage("RegistrationRequestEditorDialog.submitRequest"));
-		okButton.addStyleName(Styles.vButtonPrimary.toString());
-		okButton.addStyleName("u-reg-submit");
-		okButton.addClickListener(event -> onSubmit(editor, mode));
-		okButton.setWidth(100f, Unit.PERCENTAGE);
-		okButton.setClickShortcut(KeyCode.ENTER);
+		Button okButton = FormsUIHelper.createOKButton(
+				msg.getMessage("RegistrationRequestEditorDialog.submitRequest"),
+				event -> onSubmit(editor, mode));
 		return okButton;
 	}
 
 	private Button createCancelButton()
 	{
-		Button cancelButton = new Button(msg.getMessage("cancel"));
-		cancelButton.addClickListener(event -> onCancel());
+		Button cancelButton = FormsUIHelper.createCancelButton(msg.getMessage("cancel"), event -> onCancel());
 		cancelButton.setStyleName(Styles.vButtonLink.toString());
-		cancelButton.addStyleName("u-reg-cancel");
 		return cancelButton;
 	}
 	
@@ -275,6 +271,7 @@ public class StandaloneRegistrationView extends CustomComponent implements View
 
 	private void handleError(Exception e, ErrorCause cause)
 	{
+		log.warn("Registration error", e);
 		WorkflowFinalizationConfiguration finalScreenConfig = postFillHandler
 				.getFinalRegistrationConfigurationOnError(cause.getTriggerState());
 		gotoFinalStep(finalScreenConfig);
@@ -364,6 +361,7 @@ public class StandaloneRegistrationView extends CustomComponent implements View
 
 	private void gotoFinalStep(WorkflowFinalizationConfiguration config)
 	{
+		log.debug("Registration is finalized, status: {}", config);
 		if (completedRegistrationHandler != null)
 			completedRegistrationHandler.run();
 		if (config.autoRedirect)
@@ -477,12 +475,14 @@ public class StandaloneRegistrationView extends CustomComponent implements View
 		@Override
 		public void onUnknownUser(AuthenticationResult result)
 		{
+			log.debug("External authentication resulted in unknown user, proceeding to 2nd stage");
 			switchTo2ndStagePostAuthn(result);
 		}
 
 		@Override
 		public void onUserExists(AuthenticationResult result)
 		{
+			log.debug("External authentication resulted in existing user, aborting registration");
 			enableSharedComponentsAndHideAuthnProgress();
 			WorkflowFinalizationConfiguration finalScreenConfig = 
 					postFillHandler.getFinalRegistrationConfigurationOnError(TriggeringState.PRESET_USER_EXISTS);
@@ -492,6 +492,7 @@ public class StandaloneRegistrationView extends CustomComponent implements View
 		@Override
 		public void onAuthnError(AuthenticationException e, String authenticatorError)
 		{
+			log.debug("External authentication failed, aborting: {}, {}", e.toString(), authenticatorError);
 			enableSharedComponentsAndHideAuthnProgress();
 			String genericError = msg.getMessage(e.getMessage());
 			String errorToShow = authenticatorError == null ? genericError : authenticatorError;
@@ -501,12 +502,14 @@ public class StandaloneRegistrationView extends CustomComponent implements View
 		@Override
 		public void onAuthnCancelled()
 		{
+			log.debug("External authentication cancelled, performing reset");
 			enableSharedComponentsAndHideAuthnProgress();
 		}
 
 		@Override
 		public void onAuthnStarted(boolean showProgress)
 		{
+			log.debug("External authentication started");
 			enableSharedWidgets(false);
 			header.setAuthNProgressVisibility(showProgress);
 		}

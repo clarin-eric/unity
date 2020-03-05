@@ -6,6 +6,7 @@ package pl.edu.icm.unity.webui.common.groups;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -27,6 +28,7 @@ import pl.edu.icm.unity.webui.common.groups.GroupSelectionHelper.GroupNameCompar
 public class OptionalGroupsSelection extends ChipsWithDropdown<Group> implements GroupsSelection
 {
 	private UnityMessageSource msg;
+	private Set<Group> selectedWithNextChild;
 	
 	public OptionalGroupsSelection(UnityMessageSource msg)
 	{
@@ -48,12 +50,20 @@ public class OptionalGroupsSelection extends ChipsWithDropdown<Group> implements
 		}
 		
 		addSelectionListener(this::onGroupSelection);
+		selectedWithNextChild = new HashSet<>();
+		setComboStyleGenerator(g -> selectedWithNextChild.contains(g) ? "inactive" : "");
 	}
 	
 	@Override
 	public List<String> getSelectedGroups()
 	{
 		return getSelectedItems().stream().map(group -> group.toString()).collect(Collectors.toList());
+	}
+	
+	@Override
+	public Set<String> getItems()
+	{
+		return super.getAllItems().stream().map(g -> g.toString()).collect(Collectors.toSet());
 	}
 	
 	private void onMultiGroupRemoval(ClickEvent event)
@@ -82,9 +92,10 @@ public class OptionalGroupsSelection extends ChipsWithDropdown<Group> implements
 		Group newGroup = event.getValue();
 		if (newGroup == null)
 			return;
-
+		
 		List<Group> selected = new ArrayList<>(getSelectedItems());
-		Set<Group> allItems = getItems();
+		
+		Set<Group> allItems = getAllItems();
 
 		for (Group g : allItems)
 		{
@@ -94,6 +105,31 @@ public class OptionalGroupsSelection extends ChipsWithDropdown<Group> implements
 			}
 		}
 		setSelectedItems(selected);
+	}
+	
+	@Override
+	protected List<Group> checkAvailableItems(Set<Group> allItems, Set<Group> selected)
+	{
+		Set<Group> remaining = super.checkAvailableItems(allItems, selected).stream().collect(Collectors.toSet());
+		
+		selectedWithNextChild.clear();
+		
+		selected.forEach(selG -> remaining.forEach(remG -> {
+			if (remG.isChild(selG))
+				selectedWithNextChild.add(selG);
+		}));
+		remaining.addAll(selectedWithNextChild);
+	
+		return remaining.stream().collect(Collectors.toList());
+	}
+	
+	@Override
+	protected void selectItem(Group selected)
+	{
+		if (!getSelectedItems().contains(selected))
+		{
+			super.selectItem(selected);		
+		}
 	}
 	
 	@Override

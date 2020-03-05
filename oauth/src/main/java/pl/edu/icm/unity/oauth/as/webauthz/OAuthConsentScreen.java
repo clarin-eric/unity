@@ -13,6 +13,7 @@ import org.apache.logging.log4j.Logger;
 import com.google.common.collect.Lists;
 import com.nimbusds.oauth2.sdk.AuthorizationErrorResponse;
 import com.nimbusds.oauth2.sdk.OAuth2Error;
+import com.nimbusds.oauth2.sdk.client.ClientType;
 import com.vaadin.server.Resource;
 import com.vaadin.ui.Alignment;
 import com.vaadin.ui.CheckBox;
@@ -36,6 +37,7 @@ import pl.edu.icm.unity.types.basic.Attribute;
 import pl.edu.icm.unity.types.basic.DynamicAttribute;
 import pl.edu.icm.unity.types.basic.IdentityParam;
 import pl.edu.icm.unity.webui.authn.StandardWebAuthenticationProcessor;
+import pl.edu.icm.unity.webui.common.Label100;
 import pl.edu.icm.unity.webui.common.Styles;
 import pl.edu.icm.unity.webui.common.attributes.AttributeHandlerRegistry;
 import pl.edu.icm.unity.webui.common.attributes.ext.JpegImageAttributeHandler;
@@ -143,13 +145,13 @@ class OAuthConsentScreen extends CustomComponent
 					image, 
 					syntax, "jpg").getResource();
 		}
-		Label info1 = new Label(msg.getMessage("OAuthAuthzUI.info1"));
+		Label info1 = new Label100(msg.getMessage("OAuthAuthzUI.info1"));
 		info1.addStyleName(Styles.vLabelH1.toString());
 		
 		SPInfoComponent spInfo = new SPInfoComponent(msg, clientLogo, oauthRequester, returnAddress);
 		
 		Label spc1 = HtmlTag.br();
-		Label info2 = new Label(msg.getMessage("OAuthAuthzUI.info2"));
+		Label info2 = new Label100(msg.getMessage("OAuthAuthzUI.info2"));
 		
 		contents.addComponents(info1, spInfo, spc1, info2);
 	}
@@ -166,8 +168,8 @@ class OAuthConsentScreen extends CustomComponent
 
 		for (ScopeInfo si: ctx.getEffectiveRequestedScopes())
 		{
-			Label scope = new Label(si.getName());
-			Label scopeDesc = new Label(si.getDescription());
+			Label scope = new Label100(si.getName());
+			Label scopeDesc = new Label100(si.getDescription());
 			scopeDesc.addStyleName(Styles.vLabelSmall.toString());
 			eiLayout.addComponents(scope, scopeDesc);
 		}
@@ -181,6 +183,9 @@ class OAuthConsentScreen extends CustomComponent
 		
 		rememberCB = new CheckBox(msg.getMessage("OAuthAuthzUI.rememberSettings"));
 		contents.addComponent(rememberCB);
+		
+		if (ctx.getClientType() == ClientType.PUBLIC)
+			rememberCB.setVisible(false);
 	}
 	
 	private void createIdentityPart(IdentityParam validIdentity, VerticalLayout contents)
@@ -208,7 +213,7 @@ class OAuthConsentScreen extends CustomComponent
 		{
 			OAuthPreferences preferences = OAuthPreferences.getPreferences(preferencesMan);
 			OAuthClientSettings settings = preferences.getSPSettings(ctx.getRequest().getClientID().getValue());
-			updateUIFromPreferences(settings);
+			updateUIFromPreferences(settings, ctx);
 		} catch (Exception e)
 		{
 			log.error("Engine problem when processing stored preferences", e);
@@ -220,7 +225,7 @@ class OAuthConsentScreen extends CustomComponent
 		}
 	}
 	
-	private void updateUIFromPreferences(OAuthClientSettings settings) throws EngineException
+	private void updateUIFromPreferences(OAuthClientSettings settings, OAuthAuthzContext ctx) throws EngineException
 	{
 		if (settings == null)
 			return;
@@ -228,7 +233,7 @@ class OAuthConsentScreen extends CustomComponent
 		String selId = settings.getSelectedIdentity();
 		idSelector.setSelected(selId);
 		
-		if (settings.isDoNotAsk())
+		if (settings.isDoNotAsk() && ctx.getClientType() != ClientType.PUBLIC)
 		{
 			setCompositionRoot(new VerticalLayout());
 			if (settings.isDefaultAccept())
