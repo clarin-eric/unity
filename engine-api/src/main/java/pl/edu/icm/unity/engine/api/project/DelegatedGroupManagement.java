@@ -24,10 +24,10 @@ public interface DelegatedGroupManagement
 	 * @param projectPath project group path
 	 * @param parentPath parent group path
 	 * @param groupName new group name
-	 * @param isOpen group access mode
+	 * @param isPublic group access mode
 	 * @throws EngineException
 	 */
-	void addGroup(String projectPath, String parentPath, I18nString groupName, boolean isOpen)
+	void addGroup(String projectPath, String parentPath, I18nString groupName, boolean isPublic)
 			throws EngineException;
 
 	/**
@@ -64,10 +64,10 @@ public interface DelegatedGroupManagement
 	 * 
 	 * @param projectPath project group path
 	 * @param path updated group path
-	 * @param isOpen indicates is group open or close mode
+	 * @param isPublic indicates is group public or private mode
 	 * @throws EngineException
 	 */
-	void setGroupAccessMode(String projectPath, String path, boolean isOpen)
+	void setGroupAccessMode(String projectPath, String path, boolean isPublic)
 			throws EngineException;
 
 	/**
@@ -96,12 +96,12 @@ public interface DelegatedGroupManagement
 
 	/**
 	 * Update value of group authorization role attribute 
-	 * @param path group path
+	 * @param projectPath project group path
 	 * @param entityId attribute owner
 	 * @param role value to set
 	 * @throws EngineException
 	 */
-	void setGroupAuthorizationRole(String path, long entityId, GroupAuthorizationRole role)
+	void setGroupAuthorizationRole(String projectPath, long entityId, GroupAuthorizationRole role)
 			throws EngineException;
 
 	/**

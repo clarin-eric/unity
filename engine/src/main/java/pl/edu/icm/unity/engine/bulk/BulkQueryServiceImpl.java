@@ -5,8 +5,10 @@
 package pl.edu.icm.unity.engine.bulk;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -21,12 +23,14 @@ import pl.edu.icm.unity.base.utils.Log;
 import pl.edu.icm.unity.engine.api.authn.local.LocalCredentialsRegistry;
 import pl.edu.icm.unity.engine.api.bulk.BulkGroupQueryService;
 import pl.edu.icm.unity.engine.api.bulk.GroupMembershipData;
+import pl.edu.icm.unity.engine.api.bulk.GroupMembershipInfo;
 import pl.edu.icm.unity.engine.api.bulk.GroupStructuralData;
 import pl.edu.icm.unity.engine.attribute.AttributeStatementProcessor;
 import pl.edu.icm.unity.engine.authz.AuthorizationManager;
 import pl.edu.icm.unity.engine.authz.AuthzCapability;
 import pl.edu.icm.unity.engine.credential.CredentialRequirementsHolder;
 import pl.edu.icm.unity.engine.credential.EntityCredentialsHelper;
+import pl.edu.icm.unity.engine.forms.enquiry.EnquiryTargetCondEvaluator;
 import pl.edu.icm.unity.exceptions.EngineException;
 import pl.edu.icm.unity.exceptions.IllegalCredentialException;
 import pl.edu.icm.unity.exceptions.InternalException;
@@ -37,6 +41,7 @@ import pl.edu.icm.unity.types.basic.Entity;
 import pl.edu.icm.unity.types.basic.Group;
 import pl.edu.icm.unity.types.basic.GroupContents;
 import pl.edu.icm.unity.types.basic.Identity;
+import pl.edu.icm.unity.types.registration.EnquiryForm;
 
 @Component
 @Primary
@@ -54,7 +59,7 @@ class BulkQueryServiceImpl implements BulkGroupQueryService
 	public BulkQueryServiceImpl(AttributeStatementProcessor statementsHelper,
 			EntityCredentialsHelper credentialsHelper,
 			LocalCredentialsRegistry localCredReg,
-			CompositeEntitiesInfoProvider dataProvider, AuthorizationManager authz)
+			CompositeEntitiesInfoProvider dataProvider,AuthorizationManager authz)
 	{
 		this.statementsHelper = statementsHelper;
 		this.credentialsHelper = credentialsHelper;
@@ -66,13 +71,20 @@ class BulkQueryServiceImpl implements BulkGroupQueryService
 
 	@Transactional
 	@Override
+	public GroupMembershipData getBulkMembershipData(String group, Set<Long> filter) throws EngineException
+	{
+		authz.checkAuthorization(AuthzCapability.readHidden, AuthzCapability.read);
+		return dataProvider.getCompositeGroupContents(group, Optional.ofNullable(filter));
+	}
+	
+	@Transactional
+	@Override
 	public GroupMembershipData getBulkMembershipData(String group) throws EngineException
 	{
 		authz.checkAuthorization(AuthzCapability.readHidden, AuthzCapability.read);
-		return dataProvider.getCompositeGroupContents(group);
+		return dataProvider.getCompositeGroupContents(group, Optional.empty());
 	}
 	
-
 	@Transactional
 	@Override
 	public GroupStructuralData getBulkStructuralData(String group) throws EngineException
@@ -95,7 +107,46 @@ class BulkQueryServiceImpl implements BulkGroupQueryService
 		log.debug("Bulk attributes assembly: {}", watch.toString());
 		return ret;
 	}
+	
+	@Override
+	public Map<Long, GroupMembershipInfo> getMembershipInfo(GroupMembershipData dataO)
+	{
+		Stopwatch watch = Stopwatch.createStarted();
+		GroupMembershipDataImpl data = (GroupMembershipDataImpl) dataO;
+		Map<Long, Set<String>> memberships = data.getMemberships();
+		Map<Long, List<Identity>> identities = data.getIdentities();
+		Map<Long, Map<String, Map<String, AttributeExt>>> directAttributes = data.getDirectAttributes();
+		Map<Long, GroupMembershipInfo> ret = new HashMap<>();
 
+		for (Long e : memberships.keySet())
+		{
+			CredentialInfo credentialInfo = getCredentialInfo(e, data);
+			ret.put(e, new GroupMembershipInfo(data.getEntityInfo().get(e), identities.get(e),
+					memberships.get(e), directAttributes.get(e),
+					getEnquiryForms(e, data, credentialInfo), getCredentialInfo(e, data)));
+		}
+
+		log.debug("Bulk members with groups: {}", watch.toString());
+		return ret;
+	}
+
+	private Set<String> getEnquiryForms(Long e, GroupMembershipDataImpl data, CredentialInfo credentialInfo)
+	{
+		Set<String> forms = new HashSet<>();
+
+		for (EnquiryForm enqForm : data.getEnquiryForms().values())
+		{
+			if (EnquiryTargetCondEvaluator.evaluateTargetCondition(enqForm,
+							data.getIdentities().get(e),
+							data.getEntityInfo().get(e).getEntityState().toString(),
+							credentialInfo.getCredentialRequirementId(),
+							data.getMemberships().get(e),
+							data.getDirectAttributes().get(e).get("/").values()))
+				forms.add(enqForm.getName());
+		}
+		return forms;
+	}
+	
 	@Override
 	public Map<Long, Entity> getGroupEntitiesNoContextWithTargeted(GroupMembershipData dataO)
 	{

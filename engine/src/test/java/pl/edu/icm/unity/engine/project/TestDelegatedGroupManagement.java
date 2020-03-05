@@ -21,32 +21,20 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import org.assertj.core.api.Assertions;
 import org.assertj.core.util.Lists;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnitRunner;
 
-import pl.edu.icm.unity.engine.api.AttributeTypeManagement;
-import pl.edu.icm.unity.engine.api.AttributesManagement;
-import pl.edu.icm.unity.engine.api.EntityManagement;
-import pl.edu.icm.unity.engine.api.GroupsManagement;
-import pl.edu.icm.unity.engine.api.bulk.BulkGroupQueryService;
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
 import pl.edu.icm.unity.engine.api.project.DelegatedGroup;
 import pl.edu.icm.unity.engine.api.project.DelegatedGroupContents;
 import pl.edu.icm.unity.engine.api.project.DelegatedGroupMember;
 import pl.edu.icm.unity.engine.api.project.GroupAuthorizationRole;
-import pl.edu.icm.unity.engine.attribute.AttributeTypeHelper;
-import pl.edu.icm.unity.engine.attribute.AttributesHelper;
 import pl.edu.icm.unity.engine.project.DelegatedGroupManagementImpl.IllegalGroupAttributeException;
 import pl.edu.icm.unity.engine.project.DelegatedGroupManagementImpl.IllegalGroupNameException;
 import pl.edu.icm.unity.engine.project.DelegatedGroupManagementImpl.OneManagerRemainsException;
-import pl.edu.icm.unity.engine.project.DelegatedGroupManagementImpl.OpenChildGroupException;
-import pl.edu.icm.unity.engine.project.DelegatedGroupManagementImpl.ParentIsCloseGroupException;
 import pl.edu.icm.unity.engine.project.DelegatedGroupManagementImpl.RemovalOfProjectGroupException;
 import pl.edu.icm.unity.engine.project.DelegatedGroupManagementImpl.RenameProjectGroupException;
 import pl.edu.icm.unity.exceptions.EngineException;
@@ -65,36 +53,14 @@ import pl.edu.icm.unity.types.basic.GroupDelegationConfiguration;
 import pl.edu.icm.unity.types.basic.GroupMembership;
 import pl.edu.icm.unity.types.basic.Identity;
 
+/**
+ * 
+ * @author P.Piernik
+ *
+ */
 @RunWith(MockitoJUnitRunner.class)
-public class TestDelegatedGroupManagement
+public class TestDelegatedGroupManagement extends TestProjectBase
 {
-	@Mock
-	ProjectAuthorizationManager mockAuthz;
-
-	@Mock
-	GroupsManagement mockGroupMan;
-
-	@Mock
-	BulkGroupQueryService mockBulkQueryService;
-
-	@Mock
-	UnityMessageSource mockMsg;
-
-	@Mock
-	AttributesManagement mockAttrMan;
-
-	@Mock
-	AttributeTypeManagement mockAttrTypeMan;
-
-	@Mock
-	AttributesHelper mockAttrHelper;
-
-	@Mock
-	AttributeTypeHelper mockAtHelper;
-
-	@Mock
-	EntityManagement mockIdMan;
-
 	private DelegatedGroupManagementImpl dGroupMan;
 
 	@Before
@@ -214,7 +180,7 @@ public class TestDelegatedGroupManagement
 
 		DelegatedGroupMember firstMember = delegatedGroupMemebers.iterator().next();
 		assertThat(firstMember.entityId, is(1L));
-		assertThat(firstMember.email, is("demo@demo.com"));
+		assertThat(firstMember.email.getValue(), is("demo@demo.com"));
 		assertThat(firstMember.name, is("demo"));
 		assertThat(firstMember.attributes.iterator().next().getValues().iterator().next(), is("extraValue"));
 
@@ -256,48 +222,12 @@ public class TestDelegatedGroupManagement
 	}
 
 	@Test
-	public void shouldForbidChangeAccessModeToCloseWhenChildGroupIsOpen() throws EngineException
-	{
-
-		when(mockGroupMan.getContents(eq("/project/subgroup"), anyInt())).thenReturn(
-				getGroupContent("/project/subgroup", Arrays.asList("/project/subgroup/subgroup2")));
-
-		GroupContents childCon2 = getGroupContent("/project/subgroup/subgroup2");
-		childCon2.getGroup().setOpen(true);
-
-		when(mockGroupMan.getContents(eq("/project/subgroup/subgroup2"), anyInt())).thenReturn(childCon2);
-
-		Throwable exception = catchThrowable(
-				() -> dGroupMan.setGroupAccessMode("/project", "/project/subgroup", false));
-		assertExceptionType(exception, OpenChildGroupException.class);
-	}
-
-	@Test
-	public void shouldForbidChangeAccessModeToOpenWhenParentGroupIsClose() throws EngineException
-	{
-
-		GroupContents content = getGroupContent("/project",
-				Arrays.asList("/project/subgroup", "/project/subgroup/subgroup2"));
-
-		when(mockGroupMan.getContents(eq("/project"), anyInt())).thenReturn(content);
-
-		when(mockGroupMan.getContents(eq("/project/subgroup"), anyInt())).thenReturn(
-				getGroupContent("/project/subgroup", Arrays.asList("/project/subgroup/subgroup2")));
-
-		Throwable exception = catchThrowable(
-				() -> dGroupMan.setGroupAccessMode("/project", "/project/subgroup", true));
-		assertExceptionType(exception, ParentIsCloseGroupException.class);
-	}
-
-	@Test
 	public void shouldForwardUpdateGroupAccessModeToCoreManager() throws EngineException
 	{
 		GroupContents content = getGroupContent("/project",
 				Arrays.asList("/project/subgroup", "/project/subgroup/subgroup2"));
-		content.getGroup().setOpen(true);
-
-		when(mockGroupMan.getContents(eq("/project"), anyInt())).thenReturn(content);
-
+		content.getGroup().setPublic(true);
+		
 		when(mockGroupMan.getContents(eq("/project/subgroup"), anyInt())).thenReturn(
 				getGroupContent("/project/subgroup", Arrays.asList("/project/subgroup/subgroup2")));
 
@@ -305,7 +235,7 @@ public class TestDelegatedGroupManagement
 
 		ArgumentCaptor<Group> argument = ArgumentCaptor.forClass(Group.class);
 		verify(mockGroupMan).updateGroup(eq("/project/subgroup"), argument.capture());
-		assertThat(argument.getValue().isOpen(), is(true));
+		assertThat(argument.getValue().isPublic(), is(true));
 	}
 
 	@Test
@@ -387,11 +317,6 @@ public class TestDelegatedGroupManagement
 		verify(mockGroupMan).removeMember(eq("/project/destination"), any());
 	}
 
-	private void assertExceptionType(Throwable exception, Class<?> type)
-	{
-		Assertions.assertThat(exception).isNotNull().isInstanceOf(type);
-	}
-
 	private AttributeExt getAttributeExt(String value)
 	{
 		return new AttributeExt(new Attribute(null, null, null, Arrays.asList(value)), false);
@@ -412,11 +337,9 @@ public class TestDelegatedGroupManagement
 
 	private GroupContents getEnabledGroupContentsWithDefaultMember(String path)
 	{
-		GroupContents content = getGroupContent("/project");
+		GroupContents content = getConfiguredGroupContents(path);
 		GroupMembership member = new GroupMembership("/project", 1L, new Date());
 		content.setMembers(Lists.list(member));
-		content.getGroup().setDelegationConfiguration(
-				new GroupDelegationConfiguration(true, null, null, null, null, Lists.emptyList()));
 		return content;
 	}
 }

@@ -24,8 +24,10 @@ import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
 import pl.edu.icm.unity.webui.common.HamburgerMenu;
 import pl.edu.icm.unity.webui.common.Images;
 import pl.edu.icm.unity.webui.common.NotificationPopup;
+import pl.edu.icm.unity.webui.common.NotificationTray;
 import pl.edu.icm.unity.webui.common.SidebarStyles;
 import pl.edu.icm.unity.webui.common.SingleActionHandler;
+import pl.edu.icm.unity.webui.confirmations.ConfirmationInfoFormatter;
 import pl.edu.icm.unity.webui.exceptions.ControllerException;
 
 /**
@@ -42,14 +44,16 @@ public class UpdateRequestsComponent extends CustomComponent
 	private UpdateRequestsGrid updateRequestGrid;
 	private String project;
 
-	public UpdateRequestsComponent(UnityMessageSource msg, UpdateRequestsController controller, String project)
+	public UpdateRequestsComponent(UnityMessageSource msg, UpdateRequestsController controller, String project, ConfirmationInfoFormatter formatter)
 			throws ControllerException
 	{
 		this.msg = msg;
 		this.controller = controller;
 		this.project = project;
 
+		setSizeFull();
 		VerticalLayout main = new VerticalLayout();
+		main.setSizeFull();
 		main.setMargin(false);
 		main.setSpacing(false);
 		setCompositionRoot(main);
@@ -58,7 +62,7 @@ public class UpdateRequestsComponent extends CustomComponent
 		commonActions.add(getAcceptRequestAction());
 		commonActions.add(getDeclineRequestAction());
 
-		updateRequestGrid = new UpdateRequestsGrid(msg, commonActions);
+		updateRequestGrid = new UpdateRequestsGrid(msg, commonActions, formatter);
 
 		HamburgerMenu<UpdateRequestEntry> hamburgerMenu = new HamburgerMenu<>();
 		hamburgerMenu.addStyleNames(SidebarStyles.indentSmall.toString());
@@ -84,28 +88,42 @@ public class UpdateRequestsComponent extends CustomComponent
 			selfSingUpForm.setVisible(false);
 		}
 
+		Link singUpEnquiryForm = new Link();
+		singUpEnquiryForm.setCaption(msg.getMessage("UpdateRequestsComponent.signUpForm"));
+		singUpEnquiryForm.setTargetName("_blank");
+		Optional<String> projectEnquiryFormLink = controller.getProjectSingUpEnquiryFormLink(project);
+		if (projectEnquiryFormLink.isPresent())
+		{
+			singUpEnquiryForm.setResource(new ExternalResource(projectEnquiryFormLink.get()));
+		} else
+		{
+			singUpEnquiryForm.setVisible(false);
+		}
+		
 		Link updateForm = new Link();
 		updateForm.setCaption(msg.getMessage("UpdateRequestsComponent.updateForm"));
 		updateForm.setTargetName("_blank");
-		Optional<String> projectEnquiryFormLink = controller.getProjectEnquiryFormLink(project);
-		if (projectEnquiryFormLink.isPresent())
+		Optional<String> projectUpdateFormLink = controller.getProjectUpdateMembershipEnquiryFormLink(project);
+		if (projectUpdateFormLink.isPresent())
 		{
-			updateForm.setResource(new ExternalResource(projectEnquiryFormLink.get()));
+			updateForm.setResource(new ExternalResource(projectUpdateFormLink.get()));
 		} else
 		{
 			updateForm.setVisible(false);
 		}
 		
-		main.addComponents(selfSingUpForm, updateForm);
-		if (selfSingUpForm.isVisible() || updateForm.isVisible())
+		
+		main.addComponents(selfSingUpForm, singUpEnquiryForm, updateForm);
+		if (selfSingUpForm.isVisible() || singUpEnquiryForm.isVisible())
 		{
 			Label space = new Label();
 			main.addComponent(space);
 		}
 		main.addComponents(menuBar, updateRequestGrid);
-		
-		reloadRequestsGrid();
+		main.setExpandRatio(menuBar, 0);
+		main.setExpandRatio(updateRequestGrid, 2);
 
+		reloadRequestsGrid();
 	}
 
 	private SingleActionHandler<UpdateRequestEntry> getAcceptRequestAction()
@@ -121,6 +139,7 @@ public class UpdateRequestsComponent extends CustomComponent
 		try
 		{
 			controller.accept(project, items);
+			NotificationTray.showSuccess(msg.getMessage("UpdateRequestsComponent.accepted"));
 		} catch (ControllerException e)
 		{
 			NotificationPopup.showError(e);
@@ -141,6 +160,7 @@ public class UpdateRequestsComponent extends CustomComponent
 		try
 		{
 			controller.decline(project, items);
+			NotificationTray.showSuccess(msg.getMessage("UpdateRequestsComponent.declined"));
 		} catch (ControllerException e)
 		{
 			NotificationPopup.showError(e);

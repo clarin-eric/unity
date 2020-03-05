@@ -37,9 +37,11 @@ import pl.edu.icm.unity.webui.common.ConfirmDialog;
 import pl.edu.icm.unity.webui.common.HamburgerMenu;
 import pl.edu.icm.unity.webui.common.Images;
 import pl.edu.icm.unity.webui.common.NotificationPopup;
+import pl.edu.icm.unity.webui.common.NotificationTray;
 import pl.edu.icm.unity.webui.common.SidebarStyles;
 import pl.edu.icm.unity.webui.common.SingleActionHandler;
 import pl.edu.icm.unity.webui.common.groups.MandatoryGroupSelection;
+import pl.edu.icm.unity.webui.confirmations.ConfirmationInfoFormatter;
 import pl.edu.icm.unity.webui.exceptions.ControllerException;
 
 /**
@@ -58,7 +60,7 @@ class GroupMembersComponent extends CustomComponent
 	private String group;
 	private String project;
 
-	public GroupMembersComponent(UnityMessageSource msg, GroupMembersController controller, String project)
+	public GroupMembersComponent(UnityMessageSource msg, GroupMembersController controller, String project, ConfirmationInfoFormatter formatter)
 			throws ControllerException
 	{
 		this.msg = msg;
@@ -66,8 +68,9 @@ class GroupMembersComponent extends CustomComponent
 		this.project = project;
 		Map<String, String> additionalProjectAttributes = controller
 				.getAdditionalAttributeNamesForProject(project);
-
+		setSizeFull();
 		VerticalLayout main = new VerticalLayout();
+		main.setSizeFull();
 		main.setMargin(false);
 		main.setSpacing(false);
 		setCompositionRoot(main);
@@ -82,7 +85,7 @@ class GroupMembersComponent extends CustomComponent
 		rawActions.add(getAddManagerPrivilegesAction(true));
 		rawActions.add(getRevokeManagerPrivilegesAction(true, s -> false));
 
-		groupMemebersGrid = new GroupMemebersGrid(msg, rawActions, additionalProjectAttributes);
+		groupMemebersGrid = new GroupMemebersGrid(msg, rawActions, additionalProjectAttributes, formatter);
 
 		HamburgerMenu<GroupMemberEntry> hamburgerMenu = new HamburgerMenu<>();
 		hamburgerMenu.addStyleNames(SidebarStyles.indentSmall.toString());
@@ -99,6 +102,8 @@ class GroupMembersComponent extends CustomComponent
 		menuBar.setComponentAlignment(search, Alignment.MIDDLE_RIGHT);
 		menuBar.setWidth(100, Unit.PERCENTAGE);
 		main.addComponents(menuBar, groupMemebersGrid);
+		main.setExpandRatio(menuBar, 0);
+		main.setExpandRatio(groupMemebersGrid, 2);
 	}
 
 	private SingleActionHandler<GroupMemberEntry> getRemoveFromProjectAction()
@@ -148,6 +153,7 @@ class GroupMembersComponent extends CustomComponent
 		try
 		{
 			controller.removeFromGroup(project, groupFrom, items);
+			NotificationTray.showSuccess( msg.getMessage("GroupMembersComponent.removed"));
 
 		} catch (ControllerException e)
 		{
@@ -291,9 +297,9 @@ class GroupMembersComponent extends CustomComponent
 		try
 		{
 			name = controller.getProjectDisplayedName(projectPath);
-		} catch (Exception e)
+		} catch (ControllerException e)
 		{
-			// ok
+			NotificationPopup.showError(e);
 		}
 		return name;
 	}
@@ -305,6 +311,7 @@ class GroupMembersComponent extends CustomComponent
 			try
 			{
 				controller.addToGroup(project, group, selection);
+				NotificationTray.showSuccess(msg.getMessage("GroupMembersComponent.addedToGroup"));
 			} catch (ControllerException e)
 			{
 				NotificationPopup.showError(e);

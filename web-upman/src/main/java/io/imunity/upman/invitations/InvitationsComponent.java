@@ -20,6 +20,7 @@ import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
 import pl.edu.icm.unity.webui.common.HamburgerMenu;
 import pl.edu.icm.unity.webui.common.Images;
 import pl.edu.icm.unity.webui.common.NotificationPopup;
+import pl.edu.icm.unity.webui.common.NotificationTray;
 import pl.edu.icm.unity.webui.common.SidebarStyles;
 import pl.edu.icm.unity.webui.common.SingleActionHandler;
 import pl.edu.icm.unity.webui.exceptions.ControllerException;
@@ -44,13 +45,15 @@ public class InvitationsComponent extends CustomComponent
 		this.controller = controller;
 		this.project = project;
 
+		setSizeFull();
 		VerticalLayout main = new VerticalLayout();
+		main.setSizeFull();
 		main.setMargin(false);
 		main.setSpacing(false);
 		setCompositionRoot(main);
 
 		List<SingleActionHandler<InvitationEntry>> commonActions = new ArrayList<>();
-		commonActions.add(getDeleteInvitationAction());
+		commonActions.add(getRemoveInvitationAction());
 		commonActions.add(getResendInvitationAction());
 
 		invitationsGrid = new InvitationsGrid(msg, commonActions);
@@ -69,13 +72,14 @@ public class InvitationsComponent extends CustomComponent
 		
 		reload();
 		main.addComponents(menuBar, invitationsGrid);
-
+		main.setExpandRatio(menuBar , 0);
+		main.setExpandRatio(invitationsGrid, 2);
 	}
 
-	private SingleActionHandler<InvitationEntry> getDeleteInvitationAction()
+	private SingleActionHandler<InvitationEntry> getRemoveInvitationAction()
 	{
 		return SingleActionHandler.builder(InvitationEntry.class)
-				.withCaption(msg.getMessage("InvitationsComponent.deleteInvitationAction"))
+				.withCaption(msg.getMessage("InvitationsComponent.removeInvitationAction"))
 				.withIcon(Images.trash.getResource()).multiTarget().withHandler(this::deleteInvitation)
 				.build();
 	}
@@ -84,7 +88,8 @@ public class InvitationsComponent extends CustomComponent
 	{
 		try
 		{
-			controller.deleteInvitations(project, items);
+			controller.removeInvitations(project, items);
+			NotificationTray.showSuccess(msg.getMessage("InvitationsComponent.removed"));
 
 		} catch (ControllerException e)
 		{
@@ -106,7 +111,7 @@ public class InvitationsComponent extends CustomComponent
 		try
 		{
 			controller.resendInvitations(project, items);
-
+			NotificationTray.showSuccess(msg.getMessage("InvitationsComponent.sent"));
 		} catch (ControllerException e)
 		{
 			NotificationPopup.showError(e);

@@ -35,6 +35,7 @@ import pl.edu.icm.unity.webui.common.Images;
 import pl.edu.icm.unity.webui.common.NotificationPopup;
 import pl.edu.icm.unity.webui.common.SidebarStyles;
 import pl.edu.icm.unity.webui.common.groups.MandatoryGroupSelection;
+import pl.edu.icm.unity.webui.confirmations.ConfirmationInfoFormatter;
 import pl.edu.icm.unity.webui.exceptions.ControllerException;
 
 /**
@@ -51,12 +52,15 @@ public class GroupMembersView extends CustomComponent implements UpManView
 
 	private UnityMessageSource msg;
 	private GroupMembersController controller;
+	private ConfirmationInfoFormatter formatter;
 
 	@Autowired
-	public GroupMembersView(UnityMessageSource msg, GroupMembersController controller)
+	public GroupMembersView(UnityMessageSource msg, GroupMembersController controller, ConfirmationInfoFormatter formatter)
 	{
 		this.msg = msg;
 		this.controller = controller;
+		this.formatter = formatter;
+		setSizeFull();
 	}
 
 	@Override
@@ -64,6 +68,7 @@ public class GroupMembersView extends CustomComponent implements UpManView
 	{
 		String project = UpManUI.getProjectGroup();
 		VerticalLayout main = new VerticalLayout();
+		main.setSizeFull();
 		main.setMargin(false);
 		setCompositionRoot(main);
 
@@ -91,21 +96,25 @@ public class GroupMembersView extends CustomComponent implements UpManView
 			}
 			return g;
 		}).collect(Collectors.toList()));
+		subGroupCombo.setRequiredIndicatorVisible(false);
 		
-		main.addComponent(new FormLayout(subGroupCombo));
+		FormLayout subGroupComboWrapper = new FormLayout(subGroupCombo);
+		main.addComponent(subGroupComboWrapper);
+		main.setExpandRatio(subGroupComboWrapper, 0);
 		GroupMembersComponent groupMembersComponent;
 		try
 		{
-			groupMembersComponent = new GroupMembersComponent(msg, controller, project);
+			groupMembersComponent = new GroupMembersComponent(msg, controller, project, formatter);
 		} catch (ControllerException e)
 		{
 			NotificationPopup.showError(e);
 			return;
 		}
 		main.addComponent(groupMembersComponent);
+		main.setExpandRatio(groupMembersComponent, 2);
 		subGroupCombo.addValueChangeListener(e -> groupMembersComponent.setGroup(subGroupCombo.getSelectedGroup()));
-
 		groupMembersComponent.setGroup(project);
+		
 
 	}
 

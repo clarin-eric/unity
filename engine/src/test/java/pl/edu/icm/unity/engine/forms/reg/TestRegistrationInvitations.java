@@ -4,11 +4,13 @@
  */
 package pl.edu.icm.unity.engine.forms.reg;
 
+import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.hamcrest.CoreMatchers.is;
 import static org.junit.Assert.assertThat;
 
 import java.time.Instant;
 
+import org.assertj.core.api.Assertions;
 import org.junit.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -17,9 +19,9 @@ import com.google.common.collect.Lists;
 import pl.edu.icm.unity.engine.DBIntegrationTestBase;
 import pl.edu.icm.unity.engine.InitializerCommon;
 import pl.edu.icm.unity.engine.api.InvitationManagement;
-import pl.edu.icm.unity.engine.forms.reg.RegistrationRequestPreprocessor;
 import pl.edu.icm.unity.engine.server.EngineInitialization;
 import pl.edu.icm.unity.exceptions.EngineException;
+import pl.edu.icm.unity.exceptions.SchemaConsistencyException;
 import pl.edu.icm.unity.stdext.attr.VerifiableEmailAttribute;
 import pl.edu.icm.unity.stdext.attr.VerifiableEmailAttributeSyntax;
 import pl.edu.icm.unity.stdext.identity.EmailIdentity;
@@ -39,8 +41,9 @@ import pl.edu.icm.unity.types.registration.RegistrationRequestBuilder;
 import pl.edu.icm.unity.types.registration.invite.InvitationParam;
 import pl.edu.icm.unity.types.registration.invite.InvitationWithCode;
 import pl.edu.icm.unity.types.registration.invite.PrefilledEntryMode;
+import pl.edu.icm.unity.types.registration.invite.RegistrationInvitationParam;
 
-public class TestInvitations extends DBIntegrationTestBase
+public class TestRegistrationInvitations extends DBIntegrationTestBase
 {
 	@Autowired
 	private RegistrationRequestPreprocessor validator;
@@ -143,7 +146,9 @@ public class TestInvitations extends DBIntegrationTestBase
 	@Test
 	public void shouldReturnUpdatedInvitation() throws EngineException
 	{
-		InvitationParam invitation = getAttributeInvitation();
+		InvitationWithCode invitationWithCode = getAttributeInvitation();
+		InvitationParam invitation = invitationWithCode.getInvitation();
+		
 		registrationsMan.addForm(new RegistrationFormBuilder()
 				.withName("form")
 				.withPubliclyAvailable(true)
@@ -156,7 +161,25 @@ public class TestInvitations extends DBIntegrationTestBase
 		invitationMan.updateInvitation(code, invitation);
 		
 		InvitationWithCode returnedInvitation = invitationMan.getInvitation(code);
-		assertThat(returnedInvitation.getMessageParams().get("added"), is("param"));
+		assertThat(returnedInvitation.getInvitation().getMessageParams().get("added"), is("param"));
+	}
+	
+	@Test
+	public void formWithnvitationCantBeUpdated() throws Exception
+	{
+		InvitationWithCode invitationWithCode = getAttributeInvitation();
+		InvitationParam invitation = invitationWithCode.getInvitation();
+		
+		RegistrationForm form = new RegistrationFormBuilder()
+				.withName("form")
+				.withPubliclyAvailable(true)
+				.withDefaultCredentialRequirement(
+						EngineInitialization.DEFAULT_CREDENTIAL_REQUIREMENT)
+				.build();
+		registrationsMan.addForm(form);
+		invitationMan.addInvitation(invitation);
+		Throwable exception = catchThrowable(() -> registrationsMan.updateForm(form, false));
+		Assertions.assertThat(exception).isNotNull().isInstanceOf(SchemaConsistencyException.class);	
 	}
 	
 	private RegistrationForm getIdentityForm(ConfirmationMode confirmationMode)
@@ -178,7 +201,7 @@ public class TestInvitations extends DBIntegrationTestBase
 		IdentityParam identity = new IdentityParam(EmailIdentity.ID, "test@example.com");
 		identity.setConfirmationInfo(new ConfirmationInfo(true));
 		String invitationCode = "code";
-		InvitationParam invitation = InvitationParam.builder()
+		InvitationParam invitation = RegistrationInvitationParam.builder()
 			.withForm("form")
 			.withIdentity(identity, PrefilledEntryMode.HIDDEN)
 			.withExpiration(Instant.now().plusSeconds(1000))
@@ -205,7 +228,7 @@ public class TestInvitations extends DBIntegrationTestBase
 		Attribute email = VerifiableEmailAttribute.of("email", "/", 
 				new VerifiableEmail("test@example.com", new ConfirmationInfo(true)));
 		String invitationCode = "code";
-		InvitationParam invitation = InvitationParam.builder()
+		InvitationParam invitation = RegistrationInvitationParam.builder()
 			.withForm("form")
 			.withAttribute(email, PrefilledEntryMode.HIDDEN)
 			.withExpiration(Instant.now().plusSeconds(1000))

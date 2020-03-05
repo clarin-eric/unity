@@ -62,6 +62,16 @@ $narrow-bar-size: 50px;
        	background-color: $button-hover-bg-color;
        	color: $button-hover-color;
     }
+    
+     .v-button-link {
+       	background-color: transparent;
+       	text-decoration: none;
+    }
+
+    .v-button-link:hover {
+       background-color: transparent;
+       color: $topMenuButton-hover-color
+    }
         
     .v-button:focus::after {
        	border-color: none;
@@ -288,9 +298,8 @@ $narrow-bar-size: 50px;
                             }
                         }
                         
-                        .u-subMenu {
-                            & > .v-slot {
-                                &:first-child .u-toolTip {
+                        .u-subMenu {    
+                               .u-toolTip {
                                     @include sidebarPos(absolute, 0, 5px);
                                     @include sidebarSize(30px, 30px);
 
@@ -303,7 +312,7 @@ $narrow-bar-size: 50px;
                                     }
                                 }
 
-                                &:last-child > .v-verticallayout {
+                              .menucontent {
                                     @include sidebarTransition(max-height 0.5s ease-in-out);
                                     width: calc(100% - 24px) !important;
                                     position: relative;
@@ -312,14 +321,14 @@ $narrow-bar-size: 50px;
                                     display: block;
                                     max-height: 0;
                                 }
-                            }
+                            
                         
-                            &.u-open > .v-slot {
-                                &:first-child .u-toolTip .v-icon {
+                            &.u-open {
+                               .u-toolTip .v-icon {
                                     @include sidebarTransformRotate(-180deg);
                                 }
 
-                                &:last-child > .v-verticallayout {
+                                .menucontent {
                                     max-height: 1000px !important;
                                     overflow: visible;
                                 }
@@ -330,9 +339,9 @@ $narrow-bar-size: 50px;
             }
             
             .u-breadcrumbs {                
-                .v-slot {
-                    width: auto !important;
-                    
+					&:first-child .v-slot{
+                   		 width: auto !important;
+                     }
                     .u-menuButton.u-clickable {
                     	transition: color $transition-time;
                         cursor: pointer;
@@ -344,7 +353,7 @@ $narrow-bar-size: 50px;
                     .u-menuLabel {
                         display: none !important;
                     }
-                }
+                
             }
            
             .u-headerBar {

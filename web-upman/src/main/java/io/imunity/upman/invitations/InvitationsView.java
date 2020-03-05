@@ -46,6 +46,7 @@ import pl.edu.icm.unity.engine.api.utils.PrototypeComponent;
 import pl.edu.icm.unity.stdext.utils.EmailUtils;
 import pl.edu.icm.unity.types.I18nString;
 import pl.edu.icm.unity.types.basic.Group;
+import pl.edu.icm.unity.types.basic.GroupDelegationConfiguration;
 import pl.edu.icm.unity.webui.common.AbstractDialog;
 import pl.edu.icm.unity.webui.common.CompactFormLayout;
 import pl.edu.icm.unity.webui.common.Images;
@@ -76,6 +77,7 @@ public class InvitationsView extends CustomComponent implements UpManView
 	{
 		this.msg = msg;
 		this.controller = controller;
+		setSizeFull();
 	}
 
 	@Override
@@ -83,10 +85,11 @@ public class InvitationsView extends CustomComponent implements UpManView
 	{
 		project = UpManUI.getProjectGroup();
 		VerticalLayout main = new VerticalLayout();
+		main.setSizeFull();
 		main.setMargin(false);
 		setCompositionRoot(main);
 		invitationsComponent = new InvitationsComponent(msg, controller, project);
-		main.addComponent(invitationsComponent);
+		main.addComponent(invitationsComponent);	
 	}
 
 	@Override
@@ -118,7 +121,6 @@ public class InvitationsView extends CustomComponent implements UpManView
 				try
 				{
 					controller.addInvitation(invitation);
-
 				} catch (ControllerException er)
 				{
 					NotificationPopup.showError(er);
@@ -127,20 +129,27 @@ public class InvitationsView extends CustomComponent implements UpManView
 			}).show();
 
 		});
-		
+
 		try
 		{
-			Optional<DelegatedGroup> findFirst = controller.getProjectGroups(project).stream()
+			Optional<DelegatedGroup> projectGroup = controller.getProjectGroups(project).stream()
 					.filter(dg -> dg.path.equals(project)).findFirst();
-			//TODO add support to enquiry inv
-			addInvitationButton.setVisible(findFirst.isPresent()
-					&& findFirst.get().delegationConfiguration.registrationForm != null);
+
+			if (projectGroup.isPresent())
+			{
+				GroupDelegationConfiguration config = projectGroup.get().delegationConfiguration;
+				addInvitationButton.setVisible((config.registrationForm != null
+						&& !config.registrationForm.isEmpty())
+						|| (config.signupEnquiryForm != null
+								&& !config.signupEnquiryForm.isEmpty()));
+
+			}
 
 		} catch (ControllerException er)
 		{
 			NotificationPopup.showError(er);
 		}
-		
+
 		header.addComponents(name, addInvitationButton);
 		header.setComponentAlignment(name, Alignment.MIDDLE_CENTER);
 		header.setComponentAlignment(addInvitationButton, Alignment.MIDDLE_CENTER);
@@ -174,9 +183,9 @@ public class InvitationsView extends CustomComponent implements UpManView
 		{
 			super(msg, msg.getMessage("NewInvitationDialog.caption"));
 			this.selectionConsumer = selectionConsumer;
-			setSizeEm(35, 24);
+			setSizeEm(45, 24);
 		}
-		
+
 		@Override
 		protected Button createConfirmButton()
 		{
@@ -192,12 +201,14 @@ public class InvitationsView extends CustomComponent implements UpManView
 			List<DelegatedGroup> allowedGroups = new ArrayList<>();
 			try
 			{
-				allowedGroups.addAll(controller.getProjectGroups(project));
+				allowedGroups.addAll(controller.getProjectGroups(project).stream()
+						.filter(dg -> !dg.path.equals(project)).collect(Collectors.toList()));
 			} catch (ControllerException e)
 			{
 				NotificationPopup.showError(e);
 			}
-			
+			email.setWidth(25, Unit.EM);
+
 			groups = new OptionalGroupsSelection(msg, true);
 			groups.setCaption(msg.getMessage("NewInvitationDialog.allowedGroups"));
 			groups.setItems(allowedGroups.stream().map(dg -> {
@@ -205,7 +216,8 @@ public class InvitationsView extends CustomComponent implements UpManView
 				g.setDisplayedName(new I18nString(dg.displayedName));
 				return g;
 			}).collect(Collectors.toList()));
-			
+			groups.setDescription(msg.getMessage("NewInvitationDialog.allowedGroupsDesc"));
+		
 			lifeTime = new DateTimeField(msg.getMessage("NewInvitationDialog.invitationLivetime"));
 			lifeTime.setResolution(DateTimeResolution.MINUTE);
 
@@ -220,7 +232,8 @@ public class InvitationsView extends CustomComponent implements UpManView
 
 					.withValidator((v, c) -> {
 						return v.isAfter(Instant.now()) ? ValidationResult.ok()
-								: ValidationResult.error(msg.getMessage("NewInvitationDialog.invalidLifeTime"));
+								: ValidationResult.error(msg.getMessage(
+										"NewInvitationDialog.invalidLifeTime"));
 					}).bind("expiration");
 
 			ProjectInvitationParams bean = new ProjectInvitationParams();
@@ -234,7 +247,6 @@ public class InvitationsView extends CustomComponent implements UpManView
 			main.setSizeFull();
 			return main;
 		}
-
 
 		@Override
 		protected void onConfirm()

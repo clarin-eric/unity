@@ -31,7 +31,7 @@ public class HomeEndpointProperties extends PropertiesHelper
 {
 	private static final Logger log = Log.getLegacyLogger(Log.U_SERVER_CFG, HomeEndpointProperties.class);
 
-	public enum Components {credentialTab, preferencesTab, userDetailsTab, enquriesTab, 
+	public enum Components {credentialTab, preferencesTab, userDetailsTab, accountUpdateTab, 
 		accountRemoval, attributesManagement, userInfo, identitiesManagement,
 		accountLinking};
 
@@ -45,7 +45,7 @@ public class HomeEndpointProperties extends PropertiesHelper
 
 	public static final String DISABLED_COMPONENTS = "disabledComponents.";
 	public static final String ATTRIBUTES = "attributes.";
-	public static final String ENQUIRIES = "enquiries.";
+	public static final String ENQUIRIES = "accountUpdateEnquiries.";
 	public static final String GWA_ATTRIBUTE = "attribute";
 	public static final String GWA_GROUP = "group";
 	public static final String GWA_SHOW_GROUP = "showGroup";
@@ -53,13 +53,16 @@ public class HomeEndpointProperties extends PropertiesHelper
 	public static final String REMOVAL_MODE = "selfRemovalMode";
 	public static final String DISABLE_REMOVAL_SCHEDULE = "disableSelfRemovalScheduling";
         public static final String SUPPORT_PAGE = "supportpage";
+	public static final String ENABLE_PROJECT_MANAGEMENT_LINK = "enableProjectManagementLink";
+	public static final String PROJECT_MANAGEMENT_ENDPOINT = "projectManagementEndpoint";
+
 	
 	static
 	{
 		META.put(DISABLED_COMPONENTS, new PropertyMD().setList(false).
 				setDescription("List of tags of UI components "
 				+ "which should be disabled. Valid tags: '" + 
-				Arrays.toString(Arrays.asList(Components.values(), "oauthTokens").toArray()) + "'"));
+				Arrays.deepToString(Arrays.asList(Components.values(), "oauthTokens").toArray()) + "'"));
 		META.put(REMOVAL_MODE, new PropertyMD(RemovalModes.remove).
 				setDescription("Relevant ONLY if the " + DISABLE_REMOVAL_SCHEDULE + " is true. "
 				+ "Controls what action should be performed when user "
@@ -84,10 +87,15 @@ public class HomeEndpointProperties extends PropertiesHelper
 				setDescription("If true then the group is shown next to the attribute."));
 		META.put(ENQUIRIES, new PropertyMD().setList(false).
 				setDescription("List of enquiries to be presented on User Home UI."));	
+
                 META.put(SUPPORT_PAGE, new PropertyMD("http://unity-idm.eu/site/support").
                                 setDescription("Link to support page"));
-                
-                
+                                
+		META.put(ENABLE_PROJECT_MANAGEMENT_LINK, new PropertyMD("true").setDescription(
+				"If true then the project managament link is shown in header of User Home UI."));
+		META.put(PROJECT_MANAGEMENT_ENDPOINT, new PropertyMD().setDescription(
+				"If project management link is active, then link redirect to this endpoint address. By default first active project management endpoint is used."));
+
 	}
 	
 	public HomeEndpointProperties(Properties properties) throws ConfigurationException
@@ -104,4 +112,14 @@ public class HomeEndpointProperties extends PropertiesHelper
 	{
 		return new ArrayList<>(getListOfValues(ENQUIRIES));
 	}
+	
+	public boolean isProjectManLinkIsEnabled()
+	{
+		return getBooleanValue(ENABLE_PROJECT_MANAGEMENT_LINK);
+	}
+	
+	public String getProjectManEndpoint()
+	{
+		return getValue(PROJECT_MANAGEMENT_ENDPOINT);
+	}	
 }
