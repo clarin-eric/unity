@@ -44,7 +44,7 @@ import pl.edu.icm.unity.types.NamedObject;
  * @author K. Benedyczak
  */
 public class Group extends I18nDescribedObject implements NamedObject
-{
+{        
 	private String[] path;
 
 	private AttributeStatement[] attributeStatements = new AttributeStatement[0];
@@ -367,7 +367,7 @@ public class Group extends I18nDescribedObject implements NamedObject
 			} catch (Exception e)
 			{
 				throw new InternalException(
-						"Can't deserialize group delegation configuration from JSON",
+						"Can't deserialize group delegation configuration from JSON: ",
 						e);
 			}
 
