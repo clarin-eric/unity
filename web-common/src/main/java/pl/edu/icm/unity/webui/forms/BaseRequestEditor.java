@@ -128,16 +128,6 @@ public abstract class BaseRequestEditor<T extends BaseRegistrationInput> extends
 	/**
 	 * Note - the two managers must be insecure, if the form is used in not-authenticated context, 
 	 * what is possible for registration form.
-	 *  
-	 * @param msg
-	 * @param form
-	 * @param remotelyAuthenticated
-	 * @param identityEditorRegistry
-	 * @param credentialEditorRegistry
-	 * @param attributeHandlerRegistry
-	 * @param atMan
-	 * @param credMan
-	 * @throws EngineException
 	 */
 	public BaseRequestEditor(UnityMessageSource msg, BaseForm form,
 			RemotelyAuthenticatedContext remotelyAuthenticated,
@@ -145,7 +135,7 @@ public abstract class BaseRequestEditor<T extends BaseRegistrationInput> extends
 			CredentialEditorRegistry credentialEditorRegistry,
 			AttributeHandlerRegistry attributeHandlerRegistry,
 			AttributeTypeManagement atMan, CredentialManagement credMan,
-			GroupsManagement groupsMan) throws AuthenticationException
+			GroupsManagement groupsMan)
 	{
 		this.msg = msg;
 		this.form = form;
@@ -160,8 +150,12 @@ public abstract class BaseRequestEditor<T extends BaseRegistrationInput> extends
 		this.remoteAttributes = RemoteDataRegistrationParser.parseRemoteAttributes(form, remotelyAuthenticated);
 		this.remoteIdentitiesByType = RemoteDataRegistrationParser.parseRemoteIdentities(
 				form, remotelyAuthenticated);
-		
-		
+	}
+	
+	protected void validateMandatoryRemoteInput() throws AuthenticationException
+	{
+		RemoteDataRegistrationParser.assertMandatoryRemoteAttributesArePresent(form, remoteAttributes);
+		RemoteDataRegistrationParser.assertMandatoryRemoteIdentitiesArePresent(form, remoteIdentitiesByType);
 	}
 	
 	@Override
@@ -645,7 +639,9 @@ public abstract class BaseRequestEditor<T extends BaseRegistrationInput> extends
 		} else if (!idParam.getRetrievalSettings().isInteractivelyEntered(rid != null))
 		{
 			if (!idParam.getRetrievalSettings().isPotentiallyAutomaticAndVisible())
+			{
 				return false;
+			}
 			IdentityTaV id = remoteIdentitiesByType.get(idParam.getIdentityType());
 			if (id == null)
 				return false;
@@ -693,10 +689,10 @@ public abstract class BaseRequestEditor<T extends BaseRegistrationInput> extends
 		
 		if (prefilledEntry != null && prefilledEntry.getMode() == PrefilledEntryMode.HIDDEN)
 			return false;
+			
 		if (aParam.getRetrievalSettings() == ParameterRetrievalSettings.automaticHidden)
 			return false;
-		if (aParam.getRetrievalSettings() == ParameterRetrievalSettings.automaticOrInteractive &&
-				rattr != null)
+		if (aParam.getRetrievalSettings() == ParameterRetrievalSettings.automaticOrInteractive && rattr != null)
 			return false;
 		
 		CompositeLayoutAdapter layoutAdapter = new CompositeLayoutAdapter(layout);
@@ -777,21 +773,33 @@ public abstract class BaseRequestEditor<T extends BaseRegistrationInput> extends
 			isGroupParamUsedAsMandatoryAttributeGroup(form, groupParam));
 		selection.setCaption(isEmpty(groupParam.getLabel()) ? "" : groupParam.getLabel());
 		selection.setWidth(formWidth(), formWidthUnit());
-
+	
 		if (hasPrefilledROSelected)
 		{
 			selection.setReadOnly(true);
-			List<Group> prefilled = GroupPatternMatcher.filterMatching(allMatchingGroups, 
-					prefilledEntry.getEntry().getSelectedGroups());
-			selection.setItems(prefilled);
-			selection.setSelectedItems(prefilled);
-			layout.addComponent(selection);
+			List<Group> prefilled = GroupPatternMatcher.filterByIncludeGroupsMode(
+					GroupPatternMatcher.filterMatching(allMatchingGroups,
+							prefilledEntry.getEntry().getSelectedGroups()),
+					groupParam.getIncludeGroupsMode());
+			
+			if (!prefilled.isEmpty())
+			{
+				selection.setItems(prefilled);
+				selection.setSelectedItems(prefilled);
+				layout.addComponent(selection);
+			}
 		} else if (hasAutomaticRO)
 		{
-			selection.setReadOnly(true);
-			selection.setItems(remotelySelected);
-			selection.setSelectedItems(remotelySelected);
-			layout.addComponent(selection);
+			List<Group> remotelySelectedFiltered = GroupPatternMatcher
+					.filterByIncludeGroupsMode(remotelySelected, groupParam.getIncludeGroupsMode());
+			if (!remotelySelectedFiltered.isEmpty())
+			{
+				selection.setReadOnly(true);
+				selection.setItems(remotelySelectedFiltered);
+				selection.setSelectedItems(remotelySelectedFiltered);
+				layout.addComponent(selection);
+			}
+
 		} else
 		{
 			if (groupParam.getDescription() != null)
@@ -807,12 +815,14 @@ public abstract class BaseRequestEditor<T extends BaseRegistrationInput> extends
 				allowedGroup = GroupPatternMatcher.filterMatching(allMatchingGroups,
 						allowedFromInvitation.get(index).getSelectedGroups());
 			}
-			selection.setItems(allowedGroup);
-
+			
+			List<Group> allowedFilteredByMode = GroupPatternMatcher.filterByIncludeGroupsMode(allowedGroup, groupParam.getIncludeGroupsMode());
+			selection.setItems(allowedFilteredByMode);
+			
 			if (groupParam.getRetrievalSettings() == ParameterRetrievalSettings.automaticAndInteractive
 					&& hasRemoteGroup)
 			{
-				List<Group> remotelySelectedLimited = GroupPatternMatcher.filterMatching(allowedGroup,
+				List<Group> remotelySelectedLimited = GroupPatternMatcher.filterMatching(allowedFilteredByMode,
 						remotelySelected.stream().map(g -> g.getName()).collect(Collectors.toList()));
 				selection.setSelectedItems(remotelySelectedLimited);
 			}
@@ -820,16 +830,21 @@ public abstract class BaseRequestEditor<T extends BaseRegistrationInput> extends
 			if (prefilledEntry != null && prefilledEntry.getMode() == PrefilledEntryMode.DEFAULT)
 			{
 
-				selection.setSelectedItems(GroupPatternMatcher.filterMatching(allowedGroup,
+				selection.setSelectedItems(GroupPatternMatcher.filterMatching(allowedFilteredByMode,
 						prefilledEntry.getEntry().getSelectedGroups()));
 
 			}
+			
 			groupSelectors.put(index, selection);
-			layout.addComponent(selection);
+			if (!allowedFilteredByMode.isEmpty())
+			{
+				layout.addComponent(selection);
+				return false;
+			}
 		}
+		
 		return true;
 	}
-	
 	
 	protected boolean createCredentialControl(AbstractOrderedLayout layout, FormParameterElement element)
 	{
@@ -875,12 +890,13 @@ public abstract class BaseRequestEditor<T extends BaseRegistrationInput> extends
 	{
 		return !identityParamEditors.isEmpty()
 				|| !attributeEditor.isEmpty()
-				|| !groupSelectors.isEmpty()
+				|| !(groupSelectors.values().stream().filter(a -> a != null && !a.getItems().isEmpty())
+				.count() == 0)
 				|| !agreementSelectors.isEmpty()
 				|| !credentialParamEditors.isEmpty()
 				|| form.isCollectComments();
 	}
-
+	
 	protected boolean isEmpty(String str)
 	{
 		return str == null || str.equals("");

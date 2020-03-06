@@ -5,15 +5,20 @@
 
 package io.imunity.webconsole.authentication.realms;
 
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.List;
+import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import io.imunity.webconsole.common.EndpointController;
 import pl.edu.icm.unity.engine.api.RealmsManagement;
 import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
 import pl.edu.icm.unity.exceptions.EngineException;
 import pl.edu.icm.unity.types.authn.AuthenticationRealm;
+import pl.edu.icm.unity.types.endpoint.ResolvedEndpoint;
 import pl.edu.icm.unity.webui.exceptions.ControllerException;
 
 /**
@@ -23,20 +28,22 @@ import pl.edu.icm.unity.webui.exceptions.ControllerException;
  *
  */
 @Component
-public class AuthenticationRealmController
+class AuthenticationRealmController
 {
 	private RealmsManagement realmMan;
 	private UnityMessageSource msg;
+	private EndpointController endpointController;
 
 	@Autowired
-	public AuthenticationRealmController(UnityMessageSource msg, RealmsManagement realmMan)
+	AuthenticationRealmController(UnityMessageSource msg, RealmsManagement realmMan,
+			EndpointController endpointController)
 	{
 		this.realmMan = realmMan;
 		this.msg = msg;
+		this.endpointController = endpointController;
 	}
 
-	public boolean addRealm(AuthenticationRealm realm) throws ControllerException
-
+	boolean addRealm(AuthenticationRealm realm) throws ControllerException
 	{
 		try
 		{
@@ -44,15 +51,14 @@ public class AuthenticationRealmController
 		} catch (Exception e)
 		{
 			throw new ControllerException(
-					msg.getMessage("AuthenticationRealmController.addError",
-							realm.getName()),
+					msg.getMessage("AuthenticationRealmController.addError", realm.getName()),
 					e.getMessage(), e);
 		}
 
 		return true;
 	}
 
-	public boolean updateRealm(AuthenticationRealm realm) throws ControllerException
+	boolean updateRealm(AuthenticationRealm realm) throws ControllerException
 
 	{
 		try
@@ -61,15 +67,14 @@ public class AuthenticationRealmController
 		} catch (Exception e)
 		{
 			throw new ControllerException(
-					msg.getMessage("AuthenticationRealmController.updateError",
-							realm.getName()),
+					msg.getMessage("AuthenticationRealmController.updateError", realm.getName()),
 					e.getMessage(), e);
 		}
 
 		return true;
 	}
 
-	public boolean removeRealm(AuthenticationRealm realm) throws ControllerException
+	boolean removeRealm(AuthenticationRealm realm) throws ControllerException
 	{
 		try
 		{
@@ -78,38 +83,55 @@ public class AuthenticationRealmController
 		} catch (Exception e)
 		{
 			throw new ControllerException(
-					msg.getMessage("AuthenticationRealmController.removeError",
-							realm.getName()),
+					msg.getMessage("AuthenticationRealmController.removeError", realm.getName()),
 					e.getMessage(), e);
 		}
 
 		return true;
 	}
 
-	public Collection<AuthenticationRealm> getRealms() throws ControllerException
+	Collection<AuthenticationRealmEntry> getRealms() throws ControllerException
 	{
+
+		List<AuthenticationRealmEntry> ret = new ArrayList<>();
+		Collection<AuthenticationRealm> realms;
 		try
 		{
-			return realmMan.getRealms();
+			realms = realmMan.getRealms();
+		} catch (EngineException e)
+		{
+			throw new ControllerException(msg.getMessage("AuthenticationRealmController.getAllError"),
+					e.getMessage(), e);
+		}
+		List<ResolvedEndpoint> endpoints = endpointController.getEndpoints();
+
+		for (AuthenticationRealm realm : realms)
+		{
+			ret.add(new AuthenticationRealmEntry(realm, filterEndpoints(realm.getName(), endpoints)));
+		}
+
+		return ret;
+
+	}
+
+	AuthenticationRealmEntry getRealm(String realmName) throws ControllerException
+	{
+		List<ResolvedEndpoint> endpoints =  endpointController.getEndpoints();
+
+		try
+		{
+			return new AuthenticationRealmEntry(realmMan.getRealm(realmName), filterEndpoints(realmName, endpoints));
 		} catch (EngineException e)
 		{
 			throw new ControllerException(
-					msg.getMessage("AuthenticationRealmController.getAllError"),
+					msg.getMessage("AuthenticationRealmController.getError", realmName),
 					e.getMessage(), e);
 		}
 	}
 
-	public AuthenticationRealm getRealm(String realmName) throws ControllerException
+	private List<String> filterEndpoints(String realmName, List<ResolvedEndpoint> all)
 	{
-		try
-		{
-			return realmMan.getRealm(realmName);
-		} catch (EngineException e)
-		{
-			throw new ControllerException(
-					msg.getMessage("AuthenticationRealmController.getError",
-							realmName),
-					e.getMessage(), e);
-		}
+		return all.stream().filter(e -> e.getRealm().getName().equals(realmName)).map(e -> e.getName()).sorted()
+				.collect(Collectors.toList());
 	}
 }

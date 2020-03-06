@@ -106,11 +106,17 @@ public class EnquiryResponseEditorController
 	}
 
 	public EnquiryResponseEditor getEditorInstance(EnquiryForm form, 
-			RemotelyAuthenticatedContext remoteContext) throws Exception
+			RemotelyAuthenticatedContext remoteContext, PrefilledSet set) throws Exception
 	{
 		return new EnquiryResponseEditor(msg, form, remoteContext, 
 				identityEditorRegistry, credentialEditorRegistry, 
-				attributeHandlerRegistry, atMan, credMan, groupsMan, getPrefilledForSticky(form));
+				attributeHandlerRegistry, atMan, credMan, groupsMan, set);
+	}
+	
+	public EnquiryResponseEditor getEditorInstance(EnquiryForm form, 
+			RemotelyAuthenticatedContext remoteContext) throws Exception
+	{
+		return getEditorInstance(form, remoteContext, getPrefilledForSticky(form, getLoggedEntity()));
 	}
 	
 	public EnquiryResponseEditor getEditorInstance(String form, 
@@ -118,10 +124,14 @@ public class EnquiryResponseEditorController
 	{
 		return getEditorInstance(getForm(form), remoteContext);
 	}
-
+	
 	public PrefilledSet getPrefilledForSticky(EnquiryForm form) throws EngineException
 	{
-		EntityParam entity = getLoggedEntity();
+		return getPrefilledForSticky(form, getLoggedEntity());
+	}
+
+	public PrefilledSet getPrefilledForSticky(EnquiryForm form, EntityParam entity) throws EngineException
+	{
 		if (form.getType().equals(EnquiryType.STICKY))
 		{	
 			return new PrefilledSet(null, getPreffiledGroup(entity, form), getPrefilledAttribute(entity, form), null);
@@ -129,8 +139,7 @@ public class EnquiryResponseEditorController
 		}else
 		{
 			return new PrefilledSet();
-		}
-		
+		}	
 	}
 
 	private Map<Integer, PrefilledEntry<GroupSelection>> getPreffiledGroup(EntityParam entity, EnquiryForm form)
@@ -144,8 +153,8 @@ public class EnquiryResponseEditorController
 
 			GroupRegistrationParam groupParam = form.getGroupParams().get(i);
 			List<Group> allMatchingGroups = groupsMan.getGroupsByWildcard(groupParam.getGroupPath());
-			List<Group> filterMatching = GroupPatternMatcher.filterMatching(allMatchingGroups,
-					allGroups.keySet().stream().sorted().collect(Collectors.toList()));
+			List<Group> filterMatching = GroupPatternMatcher.filterByIncludeGroupsMode(GroupPatternMatcher.filterMatching(allMatchingGroups,
+					allGroups.keySet().stream().sorted().collect(Collectors.toList())), groupParam.getIncludeGroupsMode());
 
 			PrefilledEntry<GroupSelection> pe = new PrefilledEntry<GroupSelection>(new GroupSelection(
 					filterMatching.stream().map(g -> g.getName()).collect(Collectors.toList())),
@@ -163,8 +172,6 @@ public class EnquiryResponseEditorController
 
 		Collection<AttributeExt> allAttributes =   attrMan.getAttributes(entity, null, null);
 		
-		
-		
 		for (int i = 0; i < form.getAttributeParams().size(); i++)
 		{
 			AttributeRegistrationParam attrParam = form.getAttributeParams().get(i);
@@ -173,11 +180,10 @@ public class EnquiryResponseEditorController
 							&& a.getName().equals(attrParam.getAttributeType()))
 					.collect(Collectors.toList());
 
-			if (!attributes.isEmpty())
-			{
-				prefilledAttributes.put(i,
-						new PrefilledEntry<>(attributes.iterator().next(), PrefilledEntryMode.DEFAULT));
-			}
+			prefilledAttributes.put(i, !attributes.isEmpty() ? (new PrefilledEntry<>(
+					  attributes.iterator().next(),
+					PrefilledEntryMode.DEFAULT)) : null);
+	
 		}
 
 		return prefilledAttributes;
@@ -230,7 +236,7 @@ public class EnquiryResponseEditorController
 		List<EnquiryForm> ret = new ArrayList<>();
 		try
 		{
-			ret.addAll(enquiryManagement.getStickyEnquires(entity));
+			ret.addAll(enquiryManagement.getAvailableStickyEnquires(entity));
 		} catch (EngineException e)
 		{
 			log.error("Can't load sticky enquiry forms", e);
@@ -319,7 +325,7 @@ public class EnquiryResponseEditorController
 		}
 	}
 	
-	private PostFillingHandler getFinalizationHandler(EnquiryForm form)
+	public PostFillingHandler getFinalizationHandler(EnquiryForm form)
 	{
 		String pageTitle = form.getPageTitle() == null ? null : form.getPageTitle().getValue(msg);
 		return new PostFillingHandler(form.getName(), form.getWrapUpConfig(), msg,

@@ -62,7 +62,10 @@ class GroupsTree extends TreeGrid<GroupNode>
 
 		groupTree = controller.getGroupTree(projectPath, path);
 
-		for (DelegatedGroup rootGr : groupTree.get(null))
+		List<DelegatedGroup> rootGrs = groupTree.get(null);
+		if (rootGrs == null)
+			return;
+		for (DelegatedGroup rootGr : rootGrs)
 		{
 			GroupNode rootNode = new GroupNode(rootGr, parent);
 			treeData.addItem(parent, rootNode);
@@ -108,6 +111,12 @@ class GroupsTree extends TreeGrid<GroupNode>
 		expandItemsRecursively(treeData.getRootItems());
 
 	}
+	
+	public void expandRoot()
+	{
+		expand(treeData.getRootItems());;
+
+	}
 
 	private void collapseItemsRecursively(Collection<GroupNode> items)
 	{
@@ -121,7 +130,7 @@ class GroupsTree extends TreeGrid<GroupNode>
 
 	public void collapseAll()
 	{
-		collapseItemsRecursively(treeData.getChildren(null));
+		collapseItemsRecursively(treeData.getChildren(null));		
 	}
 
 }

@@ -46,6 +46,7 @@ import pl.edu.icm.unity.types.basic.Group;
 import pl.edu.icm.unity.types.basic.GroupContents;
 import pl.edu.icm.unity.types.basic.GroupMembership;
 import pl.edu.icm.unity.types.basic.IdentityParam;
+import pl.edu.icm.unity.types.basic.VerifiableElementBase;
 
 /**
  * Implementation of {@link DelegatedGroupManagement}
@@ -87,7 +88,7 @@ public class DelegatedGroupManagementImpl implements DelegatedGroupManagement
 
 	@Override
 	@Transactional
-	public void addGroup(String projectPath, String parentPath, I18nString groupName, boolean isOpen)
+	public void addGroup(String projectPath, String parentPath, I18nString groupName, boolean isPublic)
 			throws EngineException
 	{
 		authz.checkManagerAuthorization(projectPath, parentPath);
@@ -104,14 +105,8 @@ public class DelegatedGroupManagementImpl implements DelegatedGroupManagement
 		} while (subGroups.contains(name));
 
 		Group toAdd = new Group(new Group(parentPath), name);
-		toAdd.setOpen(isOpen);
+		toAdd.setPublic(isPublic);
 		toAdd.setDisplayedName(groupName);
-		
-		if (toAdd.isOpen())
-		{	
-			assertIfParentIsClose(toAdd);
-		}
-		
 		groupMan.addGroup(toAdd);
 	}
 
@@ -145,8 +140,8 @@ public class DelegatedGroupManagementImpl implements DelegatedGroupManagement
 				ret.put(entry.getKey(),
 						new DelegatedGroupContents(new DelegatedGroup(orgGroup.toString(),
 								orgGroup.getDelegationConfiguration(),
-								orgGroup.isOpen(), getGroupDisplayName(orgGroup)),
-								content.getSubGroups()));
+								orgGroup.isPublic(), getGroupDisplayName(orgGroup)),
+								Optional.ofNullable(content.getSubGroups())));
 			}
 		}
 		return ret;
@@ -163,8 +158,8 @@ public class DelegatedGroupManagementImpl implements DelegatedGroupManagement
 
 		return new DelegatedGroupContents(
 				new DelegatedGroup(orgGroup.toString(), orgGroup.getDelegationConfiguration(),
-						orgGroup.isOpen(), getGroupDisplayName(orgGroup)),
-				orgGroupContents.getSubGroups());
+						orgGroup.isPublic(), getGroupDisplayName(orgGroup)),
+				Optional.ofNullable(orgGroupContents.getSubGroups()));
 
 	}
 
@@ -206,22 +201,12 @@ public class DelegatedGroupManagementImpl implements DelegatedGroupManagement
 
 	@Override
 	@Transactional
-	public void setGroupAccessMode(String projectPath, String path, boolean isOpen) throws EngineException
+	public void setGroupAccessMode(String projectPath, String path, boolean isPublic) throws EngineException
 	{
 		authz.checkManagerAuthorization(projectPath, path);
 		GroupContents groupContent = groupMan.getContents(path, GroupContents.METADATA | GroupContents.GROUPS);
 		Group group = groupContent.getGroup();
-		if (!isOpen)
-		{
-			assertIfChildsAreOpen(groupContent);
-		} else
-		{
-			if (!projectPath.equals(path))
-				assertIfParentIsClose(group);
-
-		}
-
-		group.setOpen(isOpen);
+		group.setPublic(isPublic);
 		groupMan.updateGroup(path, group);
 	}
 
@@ -262,7 +247,7 @@ public class DelegatedGroupManagementImpl implements DelegatedGroupManagement
 				if (val.isPresent() && val.get().equals(GroupAuthorizationRole.manager.toString()))
 				{
 					projects.add(new DelegatedGroup(gr.toString(), gr.getDelegationConfiguration(),
-							gr.isOpen(), getGroupDisplayName(gr)));
+							gr.isPublic(), getGroupDisplayName(gr)));
 
 				}
 			}
@@ -301,14 +286,14 @@ public class DelegatedGroupManagementImpl implements DelegatedGroupManagement
 			for (GroupMembership member : orgMembers)
 			{
 				long entity = member.getEntityId();
-				String emailId = getEmailIdentity(entity);
+				VerifiableElementBase emailId = getEmailIdentity(entity);
 				DelegatedGroupMember entry = new DelegatedGroupMember(member.getEntityId(), projectPath,
 						member.getGroup(), getGroupAuthRoleAttr(entity, projectPath),
 						projectAttrHelper.getAttributeFromMeta(entity, "/",
 								EntityNameMetadataProvider.NAME),
-						emailId != null ? emailId : projectAttrHelper.getAttributeFromMeta(entity, "/",
+						emailId != null ? emailId : projectAttrHelper.getVerifiableAttributeFromMeta(entity, "/",
 								ContactEmailMetadataProvider.NAME),
-						getProjectMemberAttributes(entity, projectPath, projectAttrs));
+						Optional.ofNullable(getProjectMemberAttributes(entity, projectPath, projectAttrs)));
 				members.add(entry);
 			}
 		}
@@ -321,32 +306,7 @@ public class DelegatedGroupManagementImpl implements DelegatedGroupManagement
 		return groupMan.getContents(path, GroupContents.METADATA).getGroup();
 	}
 
-	private void assertIfChildsAreOpen(GroupContents group) throws EngineException
-	{
-		for (String child : group.getSubGroups())
-		{
-			Group childGroup = getGroupInternal(child);
-			if (childGroup.isOpen())
-			{
-				throw new OpenChildGroupException(group.getGroup().getDisplayedName().getValue(msg),
-						childGroup.getDisplayedName().getValue(msg));
-
-			}
-		}
-	}
-
-	private void assertIfParentIsClose(Group group) throws EngineException
-	{
-		if (!group.isTopLevel())
-		{
-			Group parent = getGroupInternal(group.getParentPath());
-			if (!parent.isOpen())
-			{
-				throw new ParentIsCloseGroupException(parent.getDisplayedName().getValue(msg),
-						group.getDisplayedName().getValue(msg));
-			}
-		}
-	}
+	
 
 	private void assertIfOneManagerRemain(String projectPath, long entityId) throws EngineException
 	{
@@ -431,31 +391,16 @@ public class DelegatedGroupManagementImpl implements DelegatedGroupManagement
 		return displayName;
 	}
 	
-	private String getEmailIdentity(long entityId) throws EngineException
+	private VerifiableElementBase getEmailIdentity(long entityId) throws EngineException
 	{
 		Entity entity = identitiesMan.getEntity(new EntityParam(entityId));
 		for (IdentityParam id : entity.getIdentities())
 		{
 			if (id != null && id.getTypeId().equals(EmailIdentity.ID))
-				return id.getValue();
+				return new VerifiableElementBase(id.getValue(), id.getConfirmationInfo());
+
 		}
 		return null;
-	}
-
-	public static class OpenChildGroupException extends InternalException
-	{
-		public OpenChildGroupException(String parent, String child)
-		{
-			super("Cannot set group " + parent + " to close mode, child group " + child + " is open");
-		}
-	}
-
-	public static class ParentIsCloseGroupException extends InternalException
-	{
-		public ParentIsCloseGroupException(String parent, String child)
-		{
-			super("Cannot set group " + child + " to open mode, parent group " + parent + " is close");
-		}
 	}
 
 	public static class IllegalGroupAttributeException extends InternalException

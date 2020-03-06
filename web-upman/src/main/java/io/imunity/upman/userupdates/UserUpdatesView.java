@@ -27,6 +27,7 @@ import pl.edu.icm.unity.engine.api.utils.PrototypeComponent;
 import pl.edu.icm.unity.webui.common.Images;
 import pl.edu.icm.unity.webui.common.NotificationPopup;
 import pl.edu.icm.unity.webui.common.SidebarStyles;
+import pl.edu.icm.unity.webui.confirmations.ConfirmationInfoFormatter;
 import pl.edu.icm.unity.webui.exceptions.ControllerException;
 
 /**
@@ -42,13 +43,16 @@ public class UserUpdatesView extends CustomComponent implements UpManView
 	public static final String VIEW_NAME = "UserUpdates";
 
 	private UpdateRequestsController controller;
+	private ConfirmationInfoFormatter formatter;
 	private UnityMessageSource msg;
 
 	@Autowired
-	public UserUpdatesView(UnityMessageSource msg, UpdateRequestsController controller)
+	public UserUpdatesView(UnityMessageSource msg, UpdateRequestsController controller, ConfirmationInfoFormatter formatter)
 	{
 		this.msg = msg;
 		this.controller = controller;
+		this.formatter = formatter;
+		setSizeFull();
 	}
 
 	@Override
@@ -57,19 +61,20 @@ public class UserUpdatesView extends CustomComponent implements UpManView
 		String project = UpManUI.getProjectGroup();
 
 		VerticalLayout main = new VerticalLayout();
+		main.setSizeFull();
 		main.setMargin(false);
 		setCompositionRoot(main);
 
 		UpdateRequestsComponent updateRequestsComponent;
 		try
 		{
-			updateRequestsComponent = new UpdateRequestsComponent(msg, controller, project);
+			updateRequestsComponent = new UpdateRequestsComponent(msg, controller, project, formatter);
 		} catch (ControllerException e)
 		{
 			NotificationPopup.showError(e);
 			return;
 		}
-		main.addComponent(updateRequestsComponent);
+		main.addComponent(updateRequestsComponent);	
 	}
 
 	@Override

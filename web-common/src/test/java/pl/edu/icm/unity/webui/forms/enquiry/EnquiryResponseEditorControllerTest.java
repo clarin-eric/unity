@@ -41,6 +41,11 @@ import pl.edu.icm.unity.types.registration.EnquiryFormBuilder;
 import pl.edu.icm.unity.types.registration.ParameterRetrievalSettings;
 import pl.edu.icm.unity.webui.forms.PrefilledSet;
 
+/**
+ * 
+ * @author P.Piernik
+ *
+ */
 @RunWith(MockitoJUnitRunner.class)
 public class EnquiryResponseEditorControllerTest
 {
@@ -92,7 +97,7 @@ public class EnquiryResponseEditorControllerTest
 				null, null, null, null, null, null, null, null, null);
 		initContext();
 		controller.getStickyForms();
-		verify(mockEnquiryMan).getStickyEnquires(any());
+		verify(mockEnquiryMan).getAvailableStickyEnquires(any());
 	}
 
 	@Test
@@ -102,7 +107,7 @@ public class EnquiryResponseEditorControllerTest
 		EnquiryResponseEditorController controller = new EnquiryResponseEditorController(null, mockEnquiryMan,
 				null, null, null, null, null, null, null, null, null);
 
-		when(mockEnquiryMan.getStickyEnquires(any())).thenReturn(Arrays.asList(getForm()));
+		when(mockEnquiryMan.getAvailableStickyEnquires(any())).thenReturn(Arrays.asList(getForm()));
 		initContext();
 		assertThat(controller.isStickyFormApplicable("sticky"), is(true));
 	}

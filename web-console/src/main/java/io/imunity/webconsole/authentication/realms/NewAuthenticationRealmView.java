@@ -5,6 +5,8 @@
 
 package io.imunity.webconsole.authentication.realms;
 
+import java.util.Collections;
+
 import org.springframework.beans.factory.ObjectFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -36,7 +38,6 @@ import pl.edu.icm.unity.webui.exceptions.ControllerException;
 @PrototypeComponent
 public class NewAuthenticationRealmView extends CustomComponent implements UnityView
 {
-
 	public static final String VIEW_NAME = "NewAuthenticationRealm";
 
 	private AuthenticationRealmController controller;
@@ -79,7 +80,7 @@ public class NewAuthenticationRealmView extends CustomComponent implements Unity
 
 	}
 
-	private AuthenticationRealm getDefaultAuthenticationRealm()
+	private AuthenticationRealmEntry getDefaultAuthenticationRealm()
 	{
 		AuthenticationRealm bean = new AuthenticationRealm();
 		bean.setName(msg.getMessage("AuthenticationRealm.defaultName"));
@@ -88,7 +89,7 @@ public class NewAuthenticationRealmView extends CustomComponent implements Unity
 		bean.setBlockFor(60);
 		bean.setMaxInactivity(1800);
 		bean.setBlockAfterUnsuccessfulLogins(5);
-		return bean;
+		return new AuthenticationRealmEntry(bean, Collections.emptyList());
 	}
 
 	@Override
@@ -102,7 +103,6 @@ public class NewAuthenticationRealmView extends CustomComponent implements Unity
 				msg.getMessage("cancel"), () -> onConfirm(), () -> onCancel());
 		main.addComponent(hl);
 		setCompositionRoot(main);
-
 	}
 
 	@Override

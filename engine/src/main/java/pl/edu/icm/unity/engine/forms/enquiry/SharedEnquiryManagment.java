@@ -28,6 +28,7 @@ import pl.edu.icm.unity.engine.api.registration.GroupDiffUtils;
 import pl.edu.icm.unity.engine.api.registration.RequestSubmitStatus;
 import pl.edu.icm.unity.engine.api.registration.RequestedGroupDiff;
 import pl.edu.icm.unity.engine.api.translation.form.GroupParam;
+import pl.edu.icm.unity.engine.api.translation.form.RegistrationActionsRegistry;
 import pl.edu.icm.unity.engine.api.translation.form.TranslatedRegistrationRequest;
 import pl.edu.icm.unity.engine.api.translation.form.TranslatedRegistrationRequest.AutomaticRequestAction;
 import pl.edu.icm.unity.engine.attribute.AttributeTypeHelper;
@@ -42,9 +43,10 @@ import pl.edu.icm.unity.engine.identity.IdentityHelper;
 import pl.edu.icm.unity.engine.notifications.InternalFacilitiesManagement;
 import pl.edu.icm.unity.engine.notifications.NotificationFacility;
 import pl.edu.icm.unity.engine.translation.form.EnquiryTranslationProfile;
-import pl.edu.icm.unity.engine.translation.form.RegistrationActionsRegistry;
 import pl.edu.icm.unity.exceptions.EngineException;
+import pl.edu.icm.unity.store.api.GroupDAO;
 import pl.edu.icm.unity.store.api.generic.EnquiryResponseDB;
+import pl.edu.icm.unity.store.api.generic.InvitationDB;
 import pl.edu.icm.unity.types.basic.Attribute;
 import pl.edu.icm.unity.types.basic.EntityParam;
 import pl.edu.icm.unity.types.basic.Group;
@@ -75,7 +77,8 @@ public class SharedEnquiryManagment extends BaseSharedRegistrationSupport
 	private RegistrationConfirmationSupport confirmationsSupport;
 	private RegistrationActionsRegistry registrationTranslationActionsRegistry;
 	private EnquiryResponsePreprocessor responseValidator;
-
+	private GroupDAO groupDB;
+	
 	private AttributeTypeHelper atHelper;
 
 	@Autowired
@@ -86,10 +89,10 @@ public class SharedEnquiryManagment extends BaseSharedRegistrationSupport
 			InternalFacilitiesManagement facilitiesManagement,
 			RegistrationActionsRegistry registrationTranslationActionsRegistry,
 			EnquiryResponsePreprocessor responseValidator, AttributeTypeHelper atHelper,
-			RegistrationConfirmationSupport confirmationsSupport)
+			RegistrationConfirmationSupport confirmationsSupport, InvitationDB invitationDB, GroupDAO groupDB)
 	{
 		super(msg, notificationProducer, attributesHelper, groupHelper, entityCredentialsHelper,
-				facilitiesManagement);
+				facilitiesManagement, invitationDB);
 		this.enquiryResponseDB = enquiryResponseDB;
 		this.dbIdentities = dbIdentities;
 		this.confirmationsRewriteSupport = confirmationsRewriteSupport;
@@ -97,6 +100,7 @@ public class SharedEnquiryManagment extends BaseSharedRegistrationSupport
 		this.responseValidator = responseValidator;
 		this.atHelper = atHelper;
 		this.confirmationsSupport = confirmationsSupport;
+		this.groupDB = groupDB;
 	}
 
 	/**
@@ -142,18 +146,11 @@ public class SharedEnquiryManagment extends BaseSharedRegistrationSupport
 		attributesHelper.addAttributesList(rootAttributes, entityId, true);
 
 		List<Group> allUserGroups = groupHelper.getEntityGroups(entityId);
-		if (!form.getType().equals(EnquiryType.STICKY))
-		{
-			applyGroupAndAttributesFromEnquiry(entityId, allUserGroups, remainingAttributesByGroup,
-					translatedRequest.getGroups());
+	
+		applyGroupsAndAttributesFromEnquiry(entityId, groupDB.getAll(), allUserGroups, remainingAttributesByGroup,
+				translatedRequest.getGroups(), form, currentRequest.getRequest());
 
-		} else
-		{
-			applyGroupsAndAttributesFromStickyEnquiry(entityId, allUserGroups, remainingAttributesByGroup,
-					translatedRequest.getGroups(), form, currentRequest.getRequest());
-
-		}
-		
+	
 		applyRequestedAttributeClasses(translatedRequest.getAttributeClasses(), entityId);
 
 		applyRequestedCredentials(currentRequest, entityId);
@@ -170,29 +167,24 @@ public class SharedEnquiryManagment extends BaseSharedRegistrationSupport
 			confirmationsRewriteSupport.rewriteRequestToken(currentRequest, entityId);
 	}
 
-	
-	private void applyGroupAndAttributesFromEnquiry(long entityId, List<Group> allUserGroups,
-			Map<String, List<Attribute>> remainingAttributesByGroup, Collection<GroupParam> requestedGroup)
-			throws EngineException
-	{
-		applyRequestedGroups(entityId, remainingAttributesByGroup, requestedGroup, allUserGroups);
-
-		applyRequestedAttributesInCurrentMembership(entityId, remainingAttributesByGroup, requestedGroup,
-				allUserGroups);
-	}
-
-	private void applyGroupsAndAttributesFromStickyEnquiry(long entityId, List<Group> allUserGroups,
+	private void applyGroupsAndAttributesFromEnquiry(long entityId, List<Group> allGroups, List<Group> allUserGroups,
 			Map<String, List<Attribute>> remainingAttributesByGroup, Collection<GroupParam> requestedGroup,
 			EnquiryForm form, EnquiryResponse response) throws EngineException
 	{
 
-		RequestedGroupDiff diff = GroupDiffUtils.getAllRequestedGroupsDiff(allUserGroups, response.getGroupSelections(),
+		RequestedGroupDiff diff = GroupDiffUtils.getAllRequestedGroupsDiff(allGroups, allUserGroups, response.getGroupSelections(),
 				form.getGroupParams());
 
-		List<GroupParam> toAdd = requestedGroup.stream().filter(p -> diff.toAdd.contains(p.getGroup()))
+		List<GroupParam> toAdd = requestedGroup.stream()
+				.filter(p -> diff.toAdd.contains(p.getGroup()))
 				.collect(Collectors.toList());
+		toAdd.addAll(requestedGroup.stream().filter(g -> g.getTranslationProfile() != null).collect(Collectors.toList()));
+	
 		applyRequestedGroups(entityId, remainingAttributesByGroup, toAdd, allUserGroups);
-		applyRemovedGroup(entityId, diff.toRemove);
+		if (form.getType().equals(EnquiryType.STICKY))
+		{
+			applyRemovedGroup(entityId, diff.toRemove);
+		}
 
 		applyRequestedAttributesInCurrentMembership(entityId, remainingAttributesByGroup, toAdd, allUserGroups);
 	}

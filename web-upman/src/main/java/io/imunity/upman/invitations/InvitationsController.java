@@ -22,6 +22,7 @@ import pl.edu.icm.unity.engine.api.project.DelegatedGroup;
 import pl.edu.icm.unity.engine.api.project.ProjectInvitation;
 import pl.edu.icm.unity.engine.api.project.ProjectInvitationParam;
 import pl.edu.icm.unity.engine.api.project.ProjectInvitationsManagement;
+import pl.edu.icm.unity.engine.api.project.ProjectInvitationsManagement.AlreadyMemberException;
 import pl.edu.icm.unity.webui.exceptions.ControllerException;
 
 /**
@@ -75,7 +76,7 @@ public class InvitationsController
 		}
 	}
 
-	public void deleteInvitations(String projectPath, Set<InvitationEntry> items) throws ControllerException
+	public void removeInvitations(String projectPath, Set<InvitationEntry> items) throws ControllerException
 	{
 		List<String> removed = new ArrayList<>();
 		try
@@ -128,7 +129,9 @@ public class InvitationsController
 		try
 		{
 			invitationMan.addInvitation(invitation);
-
+		} catch (AlreadyMemberException e)
+		{
+			throw ControllerException.warning(msg.getMessage("InvitationsController.alreadyAMember"), e);
 		} catch (Exception e)
 		{
 			log.debug("Can not add invitation", e);

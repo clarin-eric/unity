@@ -11,6 +11,7 @@ import com.vaadin.data.Binder;
 import com.vaadin.ui.ComboBox;
 import com.vaadin.ui.CustomComponent;
 import com.vaadin.ui.FormLayout;
+import com.vaadin.ui.Label;
 import com.vaadin.ui.TextArea;
 import com.vaadin.ui.TextField;
 
@@ -25,7 +26,7 @@ import pl.edu.icm.unity.webui.common.DescriptionTextArea;
  * @author P.Piernik
  *
  */
-public class AuthenticationRealmEditor extends CustomComponent
+class AuthenticationRealmEditor extends CustomComponent
 {
 
 	private Binder<AuthenticationRealm> binder;
@@ -37,7 +38,7 @@ public class AuthenticationRealmEditor extends CustomComponent
 	private IntStepper allowForRememberMeDays;
 	private ComboBox<RememberMePolicy> rememberMePolicy;
 
-	public AuthenticationRealmEditor(UnityMessageSource msg, AuthenticationRealm toEdit)
+	AuthenticationRealmEditor(UnityMessageSource msg, AuthenticationRealmEntry toEdit)
 	{
 		name = new TextField(msg.getMessage("AuthenticationRealm.name"));
 		name.setWidth(100, Unit.PERCENTAGE);
@@ -73,6 +74,11 @@ public class AuthenticationRealmEditor extends CustomComponent
 		maxInactivity.setMaxValue(99999);
 		maxInactivity.setWidth(5, Unit.EM);
 
+		Label endpoints = new Label();
+		endpoints.setCaption(msg.getMessage("AuthenticationRealm.endpoints"));
+		endpoints.setWidth(100, Unit.PERCENTAGE);
+		endpoints.setValue(String.join(", ", toEdit.endpoints));
+		
 		binder = new Binder<>(AuthenticationRealm.class);
 
 		binder.forField(name).asRequired(msg.getMessage("fieldRequired")).bind("name");
@@ -91,27 +97,31 @@ public class AuthenticationRealmEditor extends CustomComponent
 
 		binder.forField(maxInactivity).asRequired(msg.getMessage("fieldRequired"))
 				.bind("maxInactivity");
-		binder.setBean(toEdit);
+		binder.setBean(toEdit.realm);
 		FormLayout mainLayout = new FormLayout();
 		mainLayout.setMargin(false);
 
 		mainLayout.addComponents(name, description, blockAfterUnsuccessfulLogins, blockFor, 
 				rememberMePolicy, allowForRememberMeDays, maxInactivity);
+		if (!toEdit.endpoints.isEmpty())
+		{
+			mainLayout.addComponent(endpoints);
+		}
 		setCompositionRoot(mainLayout);
 		setWidth(100, Unit.PERCENTAGE);
 	}
 
-	public void editMode()
+	void editMode()
 	{
 		name.setReadOnly(true);
 	}
 
-	public boolean hasErrors()
+	boolean hasErrors()
 	{
 		return binder.validate().hasErrors();
 	}
 
-	public AuthenticationRealm getAuthenticationRealm()
+	AuthenticationRealm getAuthenticationRealm()
 	{
 		return binder.getBean();
 	}

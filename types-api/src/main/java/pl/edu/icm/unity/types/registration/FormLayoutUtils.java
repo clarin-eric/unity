@@ -14,6 +14,7 @@ import java.util.stream.Stream;
 
 import pl.edu.icm.unity.MessageSource;
 import pl.edu.icm.unity.types.I18nString;
+import pl.edu.icm.unity.types.authn.AuthenticationOptionKey;
 import pl.edu.icm.unity.types.registration.layout.BasicFormElement;
 import pl.edu.icm.unity.types.registration.layout.FormCaptionElement;
 import pl.edu.icm.unity.types.registration.layout.FormElement;
@@ -133,11 +134,13 @@ public final class FormLayoutUtils
 	 */
 	private static void updatePrimaryLayout(RegistrationFormLayouts layouts, RegistrationForm form)
 	{
-		if (layouts.getPrimaryLayout() != null)
+		FormLayout primaryLayout = layouts.getPrimaryLayout();
+		if (primaryLayout == null)
+			return;
+		Set<String> definedElements = getDefinedElements(primaryLayout);
+
+		if (form.isLocalSignupEnabled())
 		{
-			FormLayout primaryLayout = layouts.getPrimaryLayout();
-			Set<String> definedElements = getDefinedElements(primaryLayout);
-			
 			if (layouts.isLocalSignupEmbeddedAsButton())
 			{
 				addLocalSignupButtonElementIfMissing(primaryLayout, definedElements);
@@ -145,6 +148,7 @@ public final class FormLayoutUtils
 				{
 					if (type == FormLayoutElement.LOCAL_SIGNUP 
 							|| type == FormLayoutElement.REMOTE_SIGNUP
+							|| type == FormLayoutElement.REMOTE_SIGNUP_GRID
 							|| type == FormLayoutElement.CAPTION)
 						continue;
 					removeAllElements(primaryLayout, type);
@@ -156,12 +160,42 @@ public final class FormLayoutUtils
 				updateFormParametersInLayout(primaryLayout, form, definedElements);
 				updateOtherElementsInLayout(primaryLayout, form, definedElements);
 			}
-			
-			int externalSignUpSize = form.getExternalSignupSpec().getSpecs().size();
-			for (int i = 0; i < externalSignUpSize; i++)
-				addParameterIfMissing(primaryLayout, FormLayoutElement.REMOTE_SIGNUP, i, definedElements);
-			removeParametersWithIndexLargerThen(primaryLayout, FormLayoutElement.REMOTE_SIGNUP, externalSignUpSize);
+		} else
+		{
+			for (FormLayoutElement type : FormLayoutElement.values())
+			{
+				if (type == FormLayoutElement.REMOTE_SIGNUP
+						|| type == FormLayoutElement.REMOTE_SIGNUP_GRID
+						|| type == FormLayoutElement.CAPTION)
+					continue;
+				removeAllElements(primaryLayout, type);
+			}
 		}
+
+		
+		int externalSignUpSize = form.getExternalSignupSpec().getSpecs().size();
+		List<AuthenticationOptionKey> gridSpecs = form.getExternalSignupGridSpec().getSpecs();
+
+		for (int i = 0; i < externalSignUpSize; i++)
+		{
+			if (!gridSpecs.contains(form.getExternalSignupSpec().getSpecs().get(i)))
+			{
+				addParameterIfMissing(primaryLayout, FormLayoutElement.REMOTE_SIGNUP, i, definedElements);
+			} else
+			{
+				removeParametersWithIndexIfPresent(primaryLayout, FormLayoutElement.REMOTE_SIGNUP, i);
+			}
+		}		
+		removeParametersWithIndexLargerThen(primaryLayout, FormLayoutElement.REMOTE_SIGNUP, externalSignUpSize);
+
+
+		if (form.getExternalSignupGridSpec().getSpecs().size() > 0)
+		{
+			addParameterIfMissing(primaryLayout, FormLayoutElement.REMOTE_SIGNUP_GRID, 0, definedElements);
+		} else
+		{
+			removeParametersWithIndexIfPresent(primaryLayout, FormLayoutElement.REMOTE_SIGNUP_GRID, 0);
+		}		
 	}
 
 	private static void removeAllElements(FormLayout layout, FormLayoutElement type)
@@ -234,17 +268,29 @@ public final class FormLayoutUtils
 	public static void validatePrimaryLayout(RegistrationForm form)
 	{
 		FormLayout layout = form.getFormLayouts().getPrimaryLayout();
-		if (form.getFormLayouts().isLocalSignupEmbeddedAsButton())
+		
+		if (form.isLocalSignupEnabled())
+		{
+			if (form.getFormLayouts().isLocalSignupEmbeddedAsButton())
+			{
+				Set<String> definedElements = getDefinedElements(layout);
+				checkLayoutElement(FormLayoutElement.LOCAL_SIGNUP.name(), definedElements);
+				checkRemoteSignupElements(form, definedElements);
+
+				if (!definedElements.isEmpty())
+					throw new IllegalStateException("Form layout contains elements "
+							+ "which are not defied in the form: " + definedElements);
+			} else
+			{
+				validateLayout(layout, form, true, true);
+			}
+		} else
 		{
 			Set<String> definedElements = getDefinedElements(layout);
-			checkLayoutElement(FormLayoutElement.LOCAL_SIGNUP.name(), definedElements);
 			checkRemoteSignupElements(form, definedElements);
 			if (!definedElements.isEmpty())
 				throw new IllegalStateException("Form layout contains elements "
 						+ "which are not defied in the form: " + definedElements);
-		} else
-		{
-			validateLayout(layout, form, true, true);
 		}
 	}
 	
@@ -331,8 +377,19 @@ public final class FormLayoutUtils
 	
 	private static void checkRemoteSignupElements(RegistrationForm registrationform, Set<String> definedElements)
 	{
+		
+		List<AuthenticationOptionKey> gridSpecs = registrationform.getExternalSignupGridSpec().getSpecs();
 		for (int i = 0; i < registrationform.getExternalSignupSpec().getSpecs().size(); i++)
-			checkLayoutElement(getIdOfElement(FormLayoutElement.REMOTE_SIGNUP, i), definedElements);
+		{
+			if (!gridSpecs.contains(registrationform.getExternalSignupSpec().getSpecs().get(i)))
+			{
+				checkLayoutElement(getIdOfElement(FormLayoutElement.REMOTE_SIGNUP, i), definedElements);
+			}
+		}
+		if (gridSpecs.size() > 0)
+		{
+			checkLayoutElement(getIdOfElement(FormLayoutElement.REMOTE_SIGNUP_GRID, 0), definedElements);		
+		}
 	}
 	
 	private static void removeParametersWithIndexLargerThen(FormLayout layout, FormLayoutElement type, int size)
@@ -343,6 +400,18 @@ public final class FormLayoutUtils
 			FormElement formElement = iterator.next();
 			if (formElement.getType().equals(type) && 
 					((FormParameterElement)formElement).getIndex() >= size)
+				iterator.remove();
+		}
+	}
+	
+	private static void removeParametersWithIndexIfPresent(FormLayout layout, FormLayoutElement type, int index)
+	{
+		Iterator<FormElement> iterator = layout.getElements().iterator();
+		while (iterator.hasNext())
+		{
+			FormElement formElement = iterator.next();
+			if (formElement.getType().equals(type) && 
+					((FormParameterElement)formElement).getIndex() == index)
 				iterator.remove();
 		}
 	}

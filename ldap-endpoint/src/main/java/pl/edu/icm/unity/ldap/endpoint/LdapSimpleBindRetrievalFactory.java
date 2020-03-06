@@ -1,4 +1,4 @@
-/*
+/*  
  * Copyright (c) 2013 ICM Uniwersytet Warszawski All rights reserved.
  * See LICENCE.txt file for licensing information.
  */
@@ -45,9 +45,16 @@ public class LdapSimpleBindRetrievalFactory implements CredentialRetrievalFactor
 		return LdapServerAuthentication.NAME;
 	}
 
+        /*
 	@Override
 	public boolean isCredentialExchangeSupported(CredentialExchange e)
 	{
 		return e instanceof PasswordVerificator;
 	}
+        */
+
+        @Override
+        public boolean isCredentialExchangeSupported(String credentialExchangeId) {
+            return true;//throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+        }
 }

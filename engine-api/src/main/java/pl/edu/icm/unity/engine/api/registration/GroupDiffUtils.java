@@ -24,22 +24,21 @@ import pl.edu.icm.unity.types.registration.GroupSelection;
  */
 public class GroupDiffUtils
 {
-	/**
-	 * Generate group diff based on single GroupRegistration param and
-	 * single GroupSelection
-	 * 
-	 * @param allUserGroups
-	 * @param selected
-	 * @param formGroup
-	 * @return
-	 */
-	public static RequestedGroupDiff getSingleGroupDiff(List<Group> allUserGroups, GroupSelection selected,
+	public static RequestedGroupDiff getSingleGroupDiff(List<Group> allGroups, List<Group> allUserGroups, GroupSelection selected,
 			GroupRegistrationParam formGroup)
 	{
 
-		List<Group> usersGroup = GroupPatternMatcher.filterMatching(allUserGroups, formGroup.getGroupPath());
+		List<Group> usersGroup = GroupPatternMatcher.filterByIncludeGroupsMode(
+				GroupPatternMatcher.filterMatching(allUserGroups, formGroup.getGroupPath()),
+				formGroup.getIncludeGroupsMode());
 
-		List<String> selectedGroups = selected.getSelectedGroups();
+		List<String> selectedGroups = GroupPatternMatcher
+				.filterByIncludeGroupsMode(
+						GroupPatternMatcher.filterMatching(allGroups,
+								selected.getSelectedGroups()),
+						formGroup.getIncludeGroupsMode())
+				.stream().map(g -> g.toString()).collect(Collectors.toList());
+
 		Set<String> toAdd = new HashSet<>();
 		Set<String> toRemove = new HashSet<>();
 		Set<String> remain = new HashSet<>();
@@ -59,16 +58,7 @@ public class GroupDiffUtils
 		return new RequestedGroupDiff(toAdd, filterGroupsForAddFromGroupsToRemove(toAdd, toRemove), remain);
 	}
 
-	/**
-	 * Generate group diff based on all form group params and all users
-	 * group selections
-	 * 
-	 * @param allUserGroup
-	 * @param groupSelections
-	 * @param formGroupParams
-	 * @return
-	 */
-	public static RequestedGroupDiff getAllRequestedGroupsDiff(List<Group> allUserGroup,
+	public static RequestedGroupDiff getAllRequestedGroupsDiff(List<Group> allGroups, List<Group> allUserGroup,
 			List<GroupSelection> groupSelections, List<GroupRegistrationParam> formGroupParams)
 	{
 
@@ -78,7 +68,7 @@ public class GroupDiffUtils
 		{
 			if (groupSelections.get(i) != null)
 			{
-				diffs.add(getSingleGroupDiff(allUserGroup, groupSelections.get(i),
+				diffs.add(getSingleGroupDiff(allGroups, allUserGroup, groupSelections.get(i),
 						formGroupParams.get(i)));
 			}
 		}
