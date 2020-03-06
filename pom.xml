@@ -19,15 +19,15 @@
 	<properties>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 		<scm.base>scm:git:git@github.com:unity-idm/unity.git</scm.base>
-		<jetty.version>9.4.14.v20181114</jetty.version>
+		<jetty.version>9.4.17.v20190418</jetty.version>
 		<slf4j.version>1.7.25</slf4j.version>
 		<log4j.version>2.11.1</log4j.version>
 		<spring.version>5.1.4.RELEASE</spring.version>
 		<vaadin.version>8.6.4</vaadin.version>
 		<groovy-all.version>2.4.8</groovy-all.version>
 		<cxf.version>3.1.10</cxf.version>
-		<!--apacheds.version>2.0.0-M24</apacheds.version-->
-                <apacheds.version>2.0.0.AM25</apacheds.version>
+		<apacheds.version>2.0.0-M24</apacheds.version>
+                <!--apacheds.version>2.0.0.AM25</apacheds.version-->
                 <jackson-databind-version>2.10.1</jackson-databind-version>
 		<bc.version>1.60</bc.version>
 		<selenium.version>3.14.0</selenium.version>
@@ -379,7 +379,18 @@
 				<groupId>pl.edu.icm.saml</groupId>
 				<artifactId>samly2</artifactId>
 				<version>2.3.3</version>
+                                <exclusions>
+                                    <exclusion>
+                                        <groupId>org.apache.santuario</groupId>
+                                        <artifactId>xmlsec</artifactId>
+                                    </exclusion>
+                                </exclusions>
 			</dependency>
+                        <dependency>
+				<groupId>org.apache.santuario</groupId>
+				<artifactId>xmlsec</artifactId>
+                                <version>2.1.4</version>
+                        </dependency>
 			<dependency>
 				<groupId>eu.unicore.security</groupId>
 				<artifactId>SAMLMetadataTypes</artifactId>
@@ -544,8 +555,19 @@
 			<dependency>
 				<groupId>commons-validator</groupId>
 				<artifactId>commons-validator</artifactId>
-				<version>1.6</version>
+				<version>1.6</version>                               
+                                <exclusions>
+                                    <exclusion>
+                                        <groupId>commons-beanutils</groupId>
+                                        <artifactId>commons-beanutils</artifactId>                                        
+                                    </exclusion>
+                                </exclusions>                                
 			</dependency>
+                        <dependency>
+                                <groupId>commons-beanutils</groupId>
+                                <artifactId>commons-beanutils</artifactId>
+                                <version>1.9.4</version>
+                        </dependency>
 			<dependency>
 				<groupId>org.quartz-scheduler</groupId>
 				<artifactId>quartz</artifactId>
@@ -610,7 +632,19 @@
 				<groupId>org.apache.directory.server</groupId>
 				<artifactId>apacheds-protocol-ldap</artifactId>
 				<version>${apacheds.version}</version>
+                                <exclusions>
+                                    <exclusion>
+                                        <groupId>org.apache.mina</groupId>
+                                        <artifactId>mina-core</artifactId>
+                                    </exclusion>
+                                </exclusions>
 			</dependency>
+                        <dependency>
+				<groupId>org.apache.mina</groupId>
+				<artifactId>mina-core</artifactId>
+				<version>2.0.21</version>
+			</dependency>
+                        
 			<dependency>
 				<groupId>org.apache.directory.api</groupId>
 				<artifactId>api-all</artifactId>
