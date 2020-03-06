@@ -26,7 +26,9 @@
 		<vaadin.version>8.6.4</vaadin.version>
 		<groovy-all.version>2.4.8</groovy-all.version>
 		<cxf.version>3.1.10</cxf.version>
-		<apacheds.version>2.0.0-M24</apacheds.version>
+		<!--apacheds.version>2.0.0-M24</apacheds.version-->
+                <apacheds.version>2.0.0.AM25</apacheds.version>
+                <jackson-databind-version>2.10.1</jackson-databind-version>
 		<bc.version>1.60</bc.version>
 		<selenium.version>3.14.0</selenium.version>
 
@@ -352,7 +354,7 @@
 			<dependency>
 				<groupId>com.fasterxml.jackson.core</groupId>
 				<artifactId>jackson-databind</artifactId>
-				<version>2.9.9</version>
+				<version>${jackson-databind-version}</version>
 			</dependency>
 			<dependency>
 				<groupId>eu.unicore.security</groupId>
