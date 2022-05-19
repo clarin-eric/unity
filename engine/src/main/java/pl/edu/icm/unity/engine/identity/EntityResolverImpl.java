@@ -46,6 +46,7 @@ public class EntityResolverImpl implements EntityResolver
 		return getFullIdentity(entity).getEntityId();
 	}
 
+	@Transactional
 	@Override
 	public long getEntityId(EntityParam entity) throws IllegalIdentityValueException
 	{
@@ -63,7 +64,7 @@ public class EntityResolverImpl implements EntityResolver
 
 	@Transactional
 	@Override
-	public Identity getFullIdentity(IdentityTaV entity) throws IllegalIdentityValueException
+	public Identity getFullIdentity(IdentityTaV entity)
 	{
 		IdentityTypeDefinition idTypeDef = idTypesRegistry.getByName(entity.getTypeId());
 		String comparableValue = idTypeDef.getComparableValue(entity.getValue(), entity.getRealm(), 

@@ -15,9 +15,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 
 import com.google.common.collect.Lists;
 
+import pl.edu.icm.unity.MessageSource;
 import pl.edu.icm.unity.engine.DBIntegrationTestBase;
 import pl.edu.icm.unity.engine.api.finalization.WorkflowFinalizationConfiguration;
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
 import pl.edu.icm.unity.engine.api.registration.PostFillingHandler;
 import pl.edu.icm.unity.engine.api.registration.RegistrationRedirectURLBuilder;
 import pl.edu.icm.unity.exceptions.EngineException;
@@ -29,7 +29,7 @@ import pl.edu.icm.unity.types.registration.RegistrationWrapUpConfig.TriggeringSt
 public class PostFillingHandlerTest extends DBIntegrationTestBase
 {
 	@Autowired
-	private UnityMessageSource msg;
+	private MessageSource msg;
 	
 	@Test
 	public void testDefaultSubmitted() throws EngineException
@@ -58,7 +58,7 @@ public class PostFillingHandlerTest extends DBIntegrationTestBase
 		shouldHandleConfiguredSubmitted(RegistrationRequestStatus.accepted, 
 				new RegistrationWrapUpConfig(TriggeringState.AUTO_ACCEPTED, 
 						new I18nString("title"), new I18nString("info"), 
-						new I18nString("redirect"), false, "url"));
+						new I18nString("redirect"), false, "url", null));
 	}
 
 	@Test
@@ -67,7 +67,7 @@ public class PostFillingHandlerTest extends DBIntegrationTestBase
 		shouldHandleConfiguredSubmitted(RegistrationRequestStatus.accepted, 
 				new RegistrationWrapUpConfig(TriggeringState.AUTO_ACCEPTED, 
 						new I18nString("title"), null, 
-						new I18nString("redirect"), false, "url"));
+						new I18nString("redirect"), false, "url", null));
 	}
 	
 	@Test
@@ -75,7 +75,7 @@ public class PostFillingHandlerTest extends DBIntegrationTestBase
 	{
 		shouldHandleConfiguredOnError(new RegistrationWrapUpConfig(TriggeringState.GENERAL_ERROR, 
 						null, null, 
-						null, true, "url"));
+						null, true, "url", null));
 	}
 
 	@Test
@@ -83,7 +83,7 @@ public class PostFillingHandlerTest extends DBIntegrationTestBase
 	{
 		shouldHandleConfiguredOnError(new RegistrationWrapUpConfig(TriggeringState.PRESET_USER_EXISTS, 
 						new I18nString("title"), new I18nString("info"), 
-						null, false, "url"));
+						null, false, "url", null));
 	}
 
 	@Test
@@ -91,7 +91,7 @@ public class PostFillingHandlerTest extends DBIntegrationTestBase
 	{
 		shouldHandleConfiguredOnError(new RegistrationWrapUpConfig(TriggeringState.PRESET_USER_EXISTS, 
 						new I18nString("title"), new I18nString("info"), 
-						null, false, null));
+						null, false, null, null));
 	}
 
 

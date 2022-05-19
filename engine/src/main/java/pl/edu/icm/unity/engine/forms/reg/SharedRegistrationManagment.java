@@ -22,9 +22,11 @@ import org.springframework.stereotype.Component;
 import com.google.common.base.Functions;
 import com.google.common.collect.Lists;
 
+import pl.edu.icm.unity.MessageSource;
 import pl.edu.icm.unity.base.utils.Log;
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
+import pl.edu.icm.unity.engine.api.identity.EntityResolver;
 import pl.edu.icm.unity.engine.api.notification.NotificationProducer;
+import pl.edu.icm.unity.engine.api.policyAgreement.PolicyAgreementManagement;
 import pl.edu.icm.unity.engine.api.registration.GroupDiffUtils;
 import pl.edu.icm.unity.engine.api.registration.RequestSubmitStatus;
 import pl.edu.icm.unity.engine.api.registration.RequestedGroupDiff;
@@ -40,6 +42,7 @@ import pl.edu.icm.unity.engine.forms.RegistrationConfirmationSupport;
 import pl.edu.icm.unity.engine.forms.RegistrationConfirmationSupport.Phase;
 import pl.edu.icm.unity.engine.group.GroupHelper;
 import pl.edu.icm.unity.engine.identity.IdentityHelper;
+import pl.edu.icm.unity.engine.identity.SecondFactorOptInService;
 import pl.edu.icm.unity.engine.notifications.InternalFacilitiesManagement;
 import pl.edu.icm.unity.engine.notifications.NotificationFacility;
 import pl.edu.icm.unity.engine.translation.form.RegistrationTranslationProfile;
@@ -49,6 +52,7 @@ import pl.edu.icm.unity.store.api.GroupDAO;
 import pl.edu.icm.unity.store.api.generic.InvitationDB;
 import pl.edu.icm.unity.store.api.generic.RegistrationRequestDB;
 import pl.edu.icm.unity.types.basic.Attribute;
+import pl.edu.icm.unity.types.basic.EntityParam;
 import pl.edu.icm.unity.types.basic.Identity;
 import pl.edu.icm.unity.types.basic.IdentityParam;
 import pl.edu.icm.unity.types.registration.AdminComment;
@@ -66,7 +70,7 @@ import pl.edu.icm.unity.types.registration.RegistrationRequestStatus;
 @Component
 public class SharedRegistrationManagment extends BaseSharedRegistrationSupport
 {
-	private static final Logger LOG = Log.getLogger(Log.U_SERVER,
+	private static final Logger LOG = Log.getLogger(Log.U_SERVER_FORMS,
 			SharedRegistrationManagment.class);
 
 	private RegistrationRequestDB requestDB;
@@ -79,9 +83,10 @@ public class SharedRegistrationManagment extends BaseSharedRegistrationSupport
 	private RegistrationConfirmationSupport confirmationsSupport;
 	private AutomaticInvitationProcessingSupport autoInvitationProcessingSupport;
 	private GroupDAO groupDB;
+	
 
 	@Autowired
-	public SharedRegistrationManagment(UnityMessageSource msg,
+	public SharedRegistrationManagment(MessageSource msg,
 			NotificationProducer notificationProducer,
 			AttributesHelper attributesHelper, GroupHelper groupHelper,
 			EntityCredentialsHelper entityCredentialsHelper,
@@ -95,11 +100,13 @@ public class SharedRegistrationManagment extends BaseSharedRegistrationSupport
 			RegistrationConfirmationSupport confirmationsSupport,
 			AutomaticInvitationProcessingSupport autoInvitationProcessingSupport,
 			InvitationDB invitationDB,
-			GroupDAO groupDB)
+			GroupDAO groupDB, PolicyAgreementManagement policyAgreementManagement,
+			SecondFactorOptInService secondFactorOptInService, EntityResolver entityResolver)
 			
 	{
 		super(msg, notificationProducer, attributesHelper, groupHelper,
-				entityCredentialsHelper, facilitiesManagement, invitationDB);
+				entityCredentialsHelper, facilitiesManagement, invitationDB, policyAgreementManagement,
+				secondFactorOptInService, requestDB, entityResolver);
 		this.requestDB = requestDB;
 		this.confirmationsRewriteSupport = confirmationsRewriteSupport;
 		this.registrationRequestValidator = registrationRequestValidator;
@@ -114,14 +121,6 @@ public class SharedRegistrationManagment extends BaseSharedRegistrationSupport
 	/**
 	 * Accepts a registration request applying all its settings. The method operates on a result 
 	 * of the form's translation profile, rather then on the original request. 
-	 * @param form
-	 * @param currentRequest
-	 * @param publicComment
-	 * @param internalComment
-	 * @param rewriteConfirmationToken
-	 * @param sql
-	 * @return
-	 * @throws EngineException
 	 */
 	public Long acceptRequest(RegistrationForm form, RegistrationRequestState currentRequest,
 			AdminComment publicComment, AdminComment internalComment,
@@ -154,7 +153,7 @@ public class SharedRegistrationManagment extends BaseSharedRegistrationSupport
 		Identity initial = identityHelper.addEntity(identitiesIterator.next(),
 				translatedRequest.getCredentialRequirement(),
 				translatedRequest.getEntityState(), 
-				false, rootAttributes, true);
+				rootAttributes, true);
 
 		currentRequest.setCreatedEntityId(initial.getEntityId());
 		requestDB.update(currentRequest);
@@ -177,6 +176,7 @@ public class SharedRegistrationManagment extends BaseSharedRegistrationSupport
 		applyRequestedGroups(initial.getEntityId(), remainingAttributesByGroup, toAdd, null);
 		applyRequestedAttributeClasses(translatedRequest.getAttributeClasses(), initial.getEntityId());		
 		applyRequestedCredentials(currentRequest, initial.getEntityId());
+		applyMFAStatus(initial.getEntityId(), translatedRequest.getMfaPreferenceStatus());
 		
 		RegistrationFormNotifications notificationsCfg = form.getNotificationsConfiguration();
 		sendProcessingNotification(notificationsCfg.getAcceptedTemplate(), currentRequest,
@@ -189,9 +189,11 @@ public class SharedRegistrationManagment extends BaseSharedRegistrationSupport
 		if (rewriteConfirmationToken)
 			confirmationsRewriteSupport.rewriteRequestToken(currentRequest, initial.getEntityId());
 		
+		policyAgreementManagement.submitDecisions(new EntityParam(initial), currentRequest.getRequest().getPolicyAgreements());
+		
+		
 		return initial.getEntityId();
 	}
-	
 
 	public void dropRequest(String id) throws EngineException
 	{
@@ -216,7 +218,7 @@ public class SharedRegistrationManagment extends BaseSharedRegistrationSupport
 	 * @throws EngineException 
 	 */
 	public Long autoProcess(RegistrationForm form, RegistrationRequestState requestFull, 
-			String logMessageTemplate)	throws EngineException
+			String logMessageTemplate) throws EngineException
 	{
 		RegistrationTranslationProfile translationProfile = new RegistrationTranslationProfile(
 				form.getTranslationProfile(), registrationTranslationActionsRegistry, atHelper, form);
@@ -232,6 +234,12 @@ public class SharedRegistrationManagment extends BaseSharedRegistrationSupport
 		String formattedMsg = MessageFormat.format(logMessageTemplate, autoProcessAction);
 		LOG.info(formattedMsg);
 		
+		return execAutoProcessAction(autoProcessAction, form, requestFull, systemComment);
+	}
+	
+	private Long execAutoProcessAction(AutomaticRequestAction autoProcessAction, 
+			RegistrationForm form, RegistrationRequestState requestFull, AdminComment systemComment) throws EngineException
+	{
 		switch (autoProcessAction)
 		{
 		case accept:
@@ -246,8 +254,9 @@ public class SharedRegistrationManagment extends BaseSharedRegistrationSupport
 			break;
 		default:
 		}
-		return null;
+		return null;		
 	}
+	
 
 	@EventListener
 	public void onAutoProcessEvent(RegistrationRequestAutoProcessEvent event)

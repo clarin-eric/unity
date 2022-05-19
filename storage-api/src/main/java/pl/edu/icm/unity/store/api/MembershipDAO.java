@@ -4,12 +4,13 @@
  */
 package pl.edu.icm.unity.store.api;
 
+import pl.edu.icm.unity.types.basic.Group;
+import pl.edu.icm.unity.types.basic.GroupMembership;
+
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-
-import pl.edu.icm.unity.types.basic.GroupMembership;
-
 
 /**
  * Group membership DAO
@@ -21,12 +22,16 @@ public interface MembershipDAO
 	String NAME = "group membership";
 	
 	void create(GroupMembership obj);
+
+	void createList(ArrayList<GroupMembership> memberships);
 	
 	void deleteByKey(long entityId, String group);
 
 	boolean isMember(long entityId, String group);
 
 	List<GroupMembership> getEntityMembership(long entityId);
+
+	List<GroupMembership> getEntityMemberships(Set<Long> entityId);
 
 	List<GroupMembership> getMembers(String group);
 	
@@ -40,4 +45,6 @@ public interface MembershipDAO
 			ret.add(gm.getGroup());
 		return ret;
 	}
+
+	List<Group> getEntityMembershipGroups(long entityId);
 }

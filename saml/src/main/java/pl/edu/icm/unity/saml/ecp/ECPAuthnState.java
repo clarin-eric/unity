@@ -4,18 +4,17 @@
  */
 package pl.edu.icm.unity.saml.ecp;
 
-import pl.edu.icm.unity.engine.api.authn.remote.RemoteAuthnState;
+import pl.edu.icm.unity.engine.api.authn.remote.RelayedAuthnState;
 
 /**
  * State of the ECP authentication, i.e. records the info about a request provided via PAOS, 
  * to be correlated with a further response.
  * @author K. Benedyczak
  */
-public class ECPAuthnState extends RemoteAuthnState
+public class ECPAuthnState extends RelayedAuthnState
 {
 	private String requestId;
 
-	
 	public void setRequestId(String requestId)
 	{
 		this.requestId = requestId;

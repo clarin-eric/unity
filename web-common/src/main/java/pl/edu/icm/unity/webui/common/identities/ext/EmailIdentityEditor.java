@@ -9,10 +9,10 @@ import org.apache.logging.log4j.Logger;
 import com.vaadin.data.ValidationResult;
 import com.vaadin.data.ValueContext;
 
+import pl.edu.icm.unity.MessageSource;
 import pl.edu.icm.unity.base.utils.Log;
 import pl.edu.icm.unity.engine.api.confirmation.EmailConfirmationManager;
 import pl.edu.icm.unity.engine.api.identity.EntityResolver;
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
 import pl.edu.icm.unity.exceptions.EngineException;
 import pl.edu.icm.unity.exceptions.IllegalIdentityValueException;
 import pl.edu.icm.unity.stdext.identity.EmailIdentity;
@@ -31,14 +31,10 @@ import pl.edu.icm.unity.webui.common.identities.IdentityEditor;
 import pl.edu.icm.unity.webui.common.identities.IdentityEditorContext;
 import pl.edu.icm.unity.webui.confirmations.ConfirmationInfoFormatter;
 
-/**
- * {@link EmailIdentity} editor
- * @author P. Piernik
- */
 public class EmailIdentityEditor implements IdentityEditor
 {
 	private Logger log = Log.getLogger(Log.U_SERVER_WEB, EmailIdentityEditor.class);
-	private UnityMessageSource msg;
+	private MessageSource msg;
 	private ConfirmationInfo confirmationInfo;
 	private TextFieldWithVerifyButton editor;
 	private boolean skipUpdate = false;
@@ -48,7 +44,7 @@ public class EmailIdentityEditor implements IdentityEditor
 	private ConfirmationInfoFormatter formatter;
 	private SingleStringFieldBinder binder;
 	
-	public EmailIdentityEditor(UnityMessageSource msg, EmailConfirmationManager emailConfirmationMan, 
+	public EmailIdentityEditor(MessageSource msg, EmailConfirmationManager emailConfirmationMan, 
 			EntityResolver idResolver, ConfirmationInfoFormatter formatter)
 	{
 		this.msg = msg;
@@ -110,6 +106,11 @@ public class EmailIdentityEditor implements IdentityEditor
 			}
 		});
 		
+		if (!context.getConfirmationEditMode().isShowVerifyButton())
+			editor.removeVerifyButton();
+		if (!context.getConfirmationEditMode().isShowConfirmationStatus())
+			editor.removeConfirmationStatusIcon();
+		
 		if (context.isCustomWidth())
 			editor.setWidth(context.getCustomWidth(), context.getCustomWidthUnit());
 		
@@ -133,7 +134,7 @@ public class EmailIdentityEditor implements IdentityEditor
 		} catch (EngineException e1)
 		{
 			
-			log.debug("Cannot send cofirmation request", e1);
+			log.warn("Cannot send cofirmation request", e1);
 			NotificationPopup.showError(msg, msg.getMessage(
 					"EmailIdentityEditor.confirmationSendError"), e1);
 		

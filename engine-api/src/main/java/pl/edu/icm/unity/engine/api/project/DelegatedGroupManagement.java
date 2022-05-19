@@ -25,9 +25,10 @@ public interface DelegatedGroupManagement
 	 * @param parentPath parent group path
 	 * @param groupName new group name
 	 * @param isPublic group access mode
+	 * @return 
 	 * @throws EngineException
 	 */
-	void addGroup(String projectPath, String parentPath, I18nString groupName, boolean isPublic)
+	String addGroup(String projectPath, String parentPath, I18nString groupName, boolean isPublic)
 			throws EngineException;
 
 	/**
@@ -38,6 +39,16 @@ public interface DelegatedGroupManagement
 	 * @throws EngineException
 	 */
 	void removeGroup(String projectPath, String path) throws EngineException;
+	
+	/**
+	 * Removes subproject
+	 * 
+	 * @param projectPath project group path
+	 * @param subProjectPath removed subproject group path
+	 * @throws EngineException
+	 */
+	void removeProject(String projectPath, String subProjectPath) throws EngineException;
+
 	
 	/**
 	 * Allows to retrieve group's contents and metadata. 
@@ -71,6 +82,7 @@ public interface DelegatedGroupManagement
 			throws EngineException;
 
 	/**
+	 * Gets group with all child (recursive) groups as map.
 	 * 
 	 * @param projectPath project group path
 	 * @param groupPath group to be queried
@@ -95,16 +107,42 @@ public interface DelegatedGroupManagement
 			throws EngineException;
 
 	/**
-	 * Update value of group authorization role attribute 
+	 * Update value of group authorization role attribute
+	 *  
 	 * @param projectPath project group path
 	 * @param entityId attribute owner
 	 * @param role value to set
 	 * @throws EngineException
 	 */
-	void setGroupAuthorizationRole(String projectPath, long entityId, GroupAuthorizationRole role)
+	void setGroupAuthorizationRole(String projectPath, String groupPath, long entityId, GroupAuthorizationRole role)
+			throws EngineException;
+
+	
+	/**
+	 * Update value of group authorization role attribute 
+	 * 
+	 * @param projectPath project group path
+	 * @param entityId attribute owner
+	 * @param role value to set
+	 * @throws EngineException
+	 */
+	GroupAuthorizationRole getGroupAuthorizationRole(String projectPath, long entityId)
 			throws EngineException;
 
 	/**
+	 * Sets group delegation configuration 
+	 * @param projectPath project group path
+	 * @param groupPath group path
+	 * @param subprojectGroupDelegationConfiguration group delegation configuration to set
+	 * @throws EngineException
+	 */
+	void setGroupDelegationConfiguration(String projectPath, String groupPath,
+			SubprojectGroupDelegationConfiguration subprojectGroupDelegationConfiguration)
+			throws EngineException;
+	
+	/**
+	 * Gets projects for entity
+	 * 
 	 * @param entityId project manager
 	 * @return All project group of entity
 	 * @throws EngineException
@@ -144,4 +182,5 @@ public interface DelegatedGroupManagement
 	List<DelegatedGroupMember> getDelegatedGroupMemebers(String projectPath, String groupPath)
 			throws EngineException;
 
+	
 }

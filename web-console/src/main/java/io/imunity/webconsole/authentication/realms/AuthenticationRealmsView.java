@@ -8,6 +8,7 @@ package io.imunity.webconsole.authentication.realms;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.List;
 
 import org.springframework.beans.factory.ObjectFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -15,9 +16,8 @@ import org.springframework.stereotype.Component;
 
 import com.google.common.collect.Sets;
 import com.vaadin.navigator.ViewChangeListener.ViewChangeEvent;
-import com.vaadin.ui.Alignment;
-import com.vaadin.ui.Button;
 import com.vaadin.ui.CustomComponent;
+import com.vaadin.ui.FormLayout;
 import com.vaadin.ui.HorizontalLayout;
 import com.vaadin.ui.Label;
 import com.vaadin.ui.VerticalLayout;
@@ -29,16 +29,15 @@ import io.imunity.webelements.helpers.NavigationHelper.CommonViewParam;
 import io.imunity.webelements.navigation.NavigationInfo;
 import io.imunity.webelements.navigation.NavigationInfo.Type;
 import io.imunity.webelements.navigation.UnityView;
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
+import pl.edu.icm.unity.MessageSource;
 import pl.edu.icm.unity.engine.api.utils.MessageUtils;
 import pl.edu.icm.unity.engine.api.utils.PrototypeComponent;
 import pl.edu.icm.unity.webui.common.ConfirmDialog;
-import pl.edu.icm.unity.webui.common.ListOfElementsWithActions;
-import pl.edu.icm.unity.webui.common.ListOfElementsWithActions.ActionColumn;
-import pl.edu.icm.unity.webui.common.ListOfElementsWithActions.ActionColumn.Position;
-import pl.edu.icm.unity.webui.common.ListOfElementsWithActions.Column;
+import pl.edu.icm.unity.webui.common.GridWithActionColumn;
+import pl.edu.icm.unity.webui.common.Images;
 import pl.edu.icm.unity.webui.common.NotificationPopup;
 import pl.edu.icm.unity.webui.common.SingleActionHandler;
+import pl.edu.icm.unity.webui.common.StandardButtonsHelper;
 import pl.edu.icm.unity.webui.common.Styles;
 import pl.edu.icm.unity.webui.exceptions.ControllerException;
 
@@ -49,103 +48,83 @@ import pl.edu.icm.unity.webui.exceptions.ControllerException;
  *
  */
 @PrototypeComponent
-public class AuthenticationRealmsView extends CustomComponent implements UnityView
+class AuthenticationRealmsView extends CustomComponent implements UnityView
 {
 	public static final String VIEW_NAME = "AuthenticationRealms";
 
-	private AuthenticationRealmController realmsMan;
-	private UnityMessageSource msg;
-	private ListOfElementsWithActions<AuthenticationRealmEntry> realmsList;
-	
+	private AuthenticationRealmsController realmsMan;
+	private MessageSource msg;
+	private GridWithActionColumn<AuthenticationRealmEntry> realmsGrid;
+
 	@Autowired
-	public AuthenticationRealmsView(UnityMessageSource msg,
-			AuthenticationRealmController realmsMan)
+	public AuthenticationRealmsView(MessageSource msg, AuthenticationRealmsController realmsMan)
 	{
 		this.realmsMan = realmsMan;
 		this.msg = msg;
-		
+
 	}
 
 	@Override
 	public void enter(ViewChangeEvent event)
 	{
-		HorizontalLayout buttonsBar = new HorizontalLayout();
-		buttonsBar.setMargin(false);
-		Button newRealm = new Button();
-		newRealm.setCaption(msg.getMessage("add"));
-		newRealm.addStyleName("u-button-action");
-		newRealm.addClickListener(e -> {
-			getUI().getNavigator().navigateTo(NewAuthenticationRealmView.VIEW_NAME);
-		});
-		buttonsBar.addComponent(newRealm);
-		buttonsBar.setComponentAlignment(newRealm, Alignment.MIDDLE_RIGHT);
-		buttonsBar.setWidth(100, Unit.PERCENTAGE);
+		HorizontalLayout buttonsBar = StandardButtonsHelper
+				.buildTopButtonsBar(StandardButtonsHelper.build4AddAction(msg,
+						e -> NavigationHelper.goToView(NewAuthenticationRealmView.VIEW_NAME)));
+
+		realmsGrid = new GridWithActionColumn<>(msg, getActionsHandlers(), false);
+		realmsGrid.addShowDetailsColumn(r -> getDetailsComponent(r));	
+		realmsGrid.addComponentColumn(
+				r -> StandardButtonsHelper.buildLinkButton(r.realm.getName(), e -> gotoEdit(r)),
+				msg.getMessage("AuthenticationRealmsView.nameCaption"), 10).setSortable(true)
+				.setComparator((r1, r2) -> {
+					return r1.realm.getName().compareTo(r2.realm.getName());
+				}).setId("name");
 		
-		SingleActionHandler<AuthenticationRealmEntry> edit = SingleActionHandler
-				.builder4Edit(msg, AuthenticationRealmEntry.class)
-				.withHandler(r -> gotoEdit(r.iterator().next()))
-				.build();
-
-		SingleActionHandler<AuthenticationRealmEntry> remove = SingleActionHandler
-				.builder4Delete(msg, AuthenticationRealmEntry.class).withHandler(r -> {
-
-					tryRemove(r.iterator().next());
-
-				}
-
-				).build();
-		
-		realmsList = new ListOfElementsWithActions<>(
-				Arrays.asList(new Column<>(msg.getMessage("AuthenticationRealm.nameCaption"),
-						r -> getEditButton(r), 1),
-						new Column<>(msg.getMessage("AuthenticationRealm.endpointsCaption"),
-								r -> new Label(String.join(", ", r.endpoints)), 4)),
-				new ActionColumn<>(msg.getMessage("actions"), Arrays.asList(edit, remove), 0,
-						Position.Right)
-		);
-		
-		realmsList.setAddSeparatorLine(true);
-
-		for (AuthenticationRealmEntry realm : getRealms())
-		{
-			realmsList.addEntry(realm);
-		}
+		realmsGrid.setItems(getRealms());
+		realmsGrid.sort("name");
+		realmsGrid.setHeightByRows(false);
+		realmsGrid.setHeight(100, Unit.PERCENTAGE);
 
 		VerticalLayout main = new VerticalLayout();
 		main.addComponent(buttonsBar);
-		main.addComponent(realmsList);
+		main.addComponent(realmsGrid);
 		main.setWidth(100, Unit.PERCENTAGE);
 		main.setMargin(false);
 
 		setCompositionRoot(main);
 	}
 
+	private FormLayout getDetailsComponent(AuthenticationRealmEntry realm)
+	{
+		Label endpoints = new Label();
+		endpoints.setCaption(msg.getMessage("AuthenticationRealmsView.endpointsCaption"));
+		endpoints.setValue(String.join(", ", realm.endpoints));
+		FormLayout wrapper = new FormLayout(endpoints);
+		endpoints.setStyleName(Styles.wordWrap.toString());
+		wrapper.setWidth(95, Unit.PERCENTAGE);
+		return wrapper;
+	}
 	
+	private List<SingleActionHandler<AuthenticationRealmEntry>> getActionsHandlers()
+	{
+		SingleActionHandler<AuthenticationRealmEntry> edit = SingleActionHandler
+				.builder4Edit(msg, AuthenticationRealmEntry.class)
+				.withHandler(r -> gotoEdit(r.iterator().next())).build();
+
+		SingleActionHandler<AuthenticationRealmEntry> remove = SingleActionHandler
+				.builder4Delete(msg, AuthenticationRealmEntry.class)
+				.withHandler(r -> tryRemove(r.iterator().next())).build();
+
+		return Arrays.asList(edit, remove);
+
+	}
+
 	private void gotoEdit(AuthenticationRealmEntry e)
 	{
-		NavigationHelper.goToView(
-				EditAuthenticationRealmView.VIEW_NAME + "/"
-						+ CommonViewParam.name.toString()
-						+ "="
-						+ e.realm.getName());
+		NavigationHelper.goToView(EditAuthenticationRealmView.VIEW_NAME + "/" + CommonViewParam.name.toString()
+				+ "=" + e.realm.getName());
 	}
-	
-	private HorizontalLayout getEditButton(AuthenticationRealmEntry e)
-	{
-		HorizontalLayout layout = new HorizontalLayout();
-		layout.setSpacing(false);
-		layout.setMargin(false);
-		layout.setWidth(100, Unit.PERCENTAGE);
-		Button button = new Button();
-		button.setCaption(e.realm.getName());		
-		button.addStyleName(Styles.vButtonLink.toString());
-		button.addStyleName(Styles.vBorderLess.toString());
-		button.addClickListener(ev -> gotoEdit(e));
-		layout.addComponent(button);
-		layout.setComponentAlignment(button, Alignment.TOP_LEFT);
-		return layout;
-	}
-	
+
 	private Collection<AuthenticationRealmEntry> getRealms()
 	{
 		try
@@ -153,7 +132,7 @@ public class AuthenticationRealmsView extends CustomComponent implements UnityVi
 			return realmsMan.getRealms();
 		} catch (ControllerException e)
 		{
-			NotificationPopup.showError(e);
+			NotificationPopup.showError(msg, e);
 		}
 		return Collections.emptyList();
 	}
@@ -162,21 +141,19 @@ public class AuthenticationRealmsView extends CustomComponent implements UnityVi
 	{
 		try
 		{
-			if (realmsMan.removeRealm(realm.realm))
-				realmsList.removeEntry(realm);
+			realmsMan.removeRealm(realm.realm);
+			realmsGrid.removeElement(realm);
 		} catch (ControllerException e)
 		{
-			NotificationPopup.showError(e);
+			NotificationPopup.showError(msg, e);
 		}
 	}
 
 	private void tryRemove(AuthenticationRealmEntry realm)
 	{
 
-		String confirmText = MessageUtils.createConfirmFromStrings(msg,
-				Sets.newHashSet(realm.realm.getName()));
-		new ConfirmDialog(msg,
-				msg.getMessage("AuthenticationRealmsView.confirmDelete", confirmText),
+		String confirmText = MessageUtils.createConfirmFromStrings(msg, Sets.newHashSet(realm.realm.getName()));
+		new ConfirmDialog(msg, msg.getMessage("AuthenticationRealmsView.confirmDelete", confirmText),
 				() -> remove(realm)).show();
 
 	}
@@ -186,7 +163,7 @@ public class AuthenticationRealmsView extends CustomComponent implements UnityVi
 	{
 		return msg.getMessage("WebConsoleMenu.authentication.realms");
 	}
-	
+
 	@Override
 	public String getViewName()
 	{
@@ -194,21 +171,19 @@ public class AuthenticationRealmsView extends CustomComponent implements UnityVi
 	}
 
 	@Component
-	public static class RealmsNavigationInfoProvider
-			extends WebConsoleNavigationInfoProviderBase
+	public static class RealmsNavigationInfoProvider extends WebConsoleNavigationInfoProviderBase
 	{
-
+		public static final String ID = VIEW_NAME;
+		
 		@Autowired
-		public RealmsNavigationInfoProvider(UnityMessageSource msg,
-				AuthenticationNavigationInfoProvider parent,
+		public RealmsNavigationInfoProvider(MessageSource msg, 
 				ObjectFactory<AuthenticationRealmsView> factory)
 		{
-			super(new NavigationInfo.NavigationInfoBuilder(VIEW_NAME, Type.View)
-					.withParent(parent.getNavigationInfo())
-					.withObjectFactory(factory)
-					.withCaption(msg.getMessage(
-							"WebConsoleMenu.authentication.realms"))
-					.build());
+			super(new NavigationInfo.NavigationInfoBuilder(ID, Type.View)
+					.withParent(AuthenticationNavigationInfoProvider.ID).withObjectFactory(factory)
+					.withCaption(msg.getMessage("WebConsoleMenu.authentication.realms"))
+					.withIcon(Images.grid.getResource())
+					.withPosition(40).build());
 
 		}
 	}

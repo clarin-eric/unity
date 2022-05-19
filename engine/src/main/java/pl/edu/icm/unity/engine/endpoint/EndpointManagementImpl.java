@@ -4,8 +4,6 @@
  */
 package pl.edu.icm.unity.engine.endpoint;
 
-import java.net.MalformedURLException;
-import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -16,13 +14,16 @@ import org.springframework.stereotype.Component;
 
 import com.google.common.collect.Sets;
 
+import pl.edu.icm.unity.base.capacityLimit.CapacityLimitName;
 import pl.edu.icm.unity.base.utils.Log;
 import pl.edu.icm.unity.engine.api.EndpointManagement;
 import pl.edu.icm.unity.engine.api.authn.AuthenticationFlow;
 import pl.edu.icm.unity.engine.api.endpoint.EndpointFactory;
 import pl.edu.icm.unity.engine.api.endpoint.EndpointInstance;
-import pl.edu.icm.unity.engine.authz.AuthorizationManager;
+import pl.edu.icm.unity.engine.api.endpoint.EndpointPathValidator;
 import pl.edu.icm.unity.engine.authz.AuthzCapability;
+import pl.edu.icm.unity.engine.authz.InternalAuthorizationManager;
+import pl.edu.icm.unity.engine.capacityLimits.InternalCapacityLimitVerificator;
 import pl.edu.icm.unity.engine.events.InvocationEventProducer;
 import pl.edu.icm.unity.exceptions.AuthorizationException;
 import pl.edu.icm.unity.exceptions.EngineException;
@@ -32,8 +33,8 @@ import pl.edu.icm.unity.store.api.generic.RealmDB;
 import pl.edu.icm.unity.store.api.tx.Transactional;
 import pl.edu.icm.unity.store.api.tx.TransactionalRunner;
 import pl.edu.icm.unity.types.I18nString;
-import pl.edu.icm.unity.types.authn.AuthenticationRealm;
 import pl.edu.icm.unity.types.endpoint.Endpoint;
+import pl.edu.icm.unity.types.endpoint.Endpoint.EndpointState;
 import pl.edu.icm.unity.types.endpoint.EndpointConfiguration;
 import pl.edu.icm.unity.types.endpoint.EndpointTypeDescription;
 import pl.edu.icm.unity.types.endpoint.ResolvedEndpoint;
@@ -47,23 +48,23 @@ import pl.edu.icm.unity.types.endpoint.ResolvedEndpoint;
 @InvocationEventProducer
 public class EndpointManagementImpl implements EndpointManagement
 {
-	private static final Logger log = Log.getLogger(Log.U_SERVER, EndpointManagementImpl.class);
+	private static final Logger log = Log.getLogger(Log.U_SERVER_CORE, EndpointManagementImpl.class);
 	private EndpointFactoriesRegistry endpointFactoriesReg;
 	private InternalEndpointManagement internalManagement;
 	private EndpointsUpdater endpointsUpdater;
 	private EndpointInstanceLoader endpointInstanceLoader;
-	private AuthorizationManager authz;
+	private InternalAuthorizationManager authz;
 	private EndpointDB endpointDB;
 	private RealmDB realmDB;
 	private TransactionalRunner tx;
-
+	private InternalCapacityLimitVerificator capacityLimitVerificator;
 	
 	@Autowired
 	public EndpointManagementImpl(EndpointFactoriesRegistry endpointFactoriesReg,
 			InternalEndpointManagement internalManagement,
 			EndpointsUpdater endpointsUpdater,
-			EndpointInstanceLoader endpointInstanceLoader, AuthorizationManager authz,
-			EndpointDB endpointDB, RealmDB realmDB, TransactionalRunner tx)
+			EndpointInstanceLoader endpointInstanceLoader, InternalAuthorizationManager authz,
+			EndpointDB endpointDB, RealmDB realmDB, TransactionalRunner tx, InternalCapacityLimitVerificator capacityLimitVerificator)
 	{
 		this.endpointFactoriesReg = endpointFactoriesReg;
 		this.internalManagement = internalManagement;
@@ -73,6 +74,7 @@ public class EndpointManagementImpl implements EndpointManagement
 		this.endpointDB = endpointDB;
 		this.realmDB = realmDB;
 		this.tx = tx;
+		this.capacityLimitVerificator = capacityLimitVerificator;
 	}
 
 	@Override
@@ -98,6 +100,9 @@ public class EndpointManagementImpl implements EndpointManagement
 			String address, EndpointConfiguration configuration) throws EngineException
 	{
 		authz.checkAuthorization(AuthzCapability.maintenance);
+		capacityLimitVerificator.assertInSystemLimitForSingleAdd(CapacityLimitName.EndpointsCount,
+				() -> endpointDB.getCount());
+
 		synchronized(internalManagement)
 		{
 			return deployInt(typeId, endpointName, address, configuration);
@@ -113,7 +118,7 @@ public class EndpointManagementImpl implements EndpointManagement
 		EndpointFactory factory = endpointFactoriesReg.getById(typeId);
 		if (factory == null)
 			throw new WrongArgumentException("Endpoint type " + typeId + " is unknown");
-		validateEndpointPath(address);
+		EndpointPathValidator.validateEndpointPath(address);
 		EndpointInstance endpointInstance;
 		try
 		{
@@ -123,7 +128,20 @@ public class EndpointManagementImpl implements EndpointManagement
 			verifyAuthenticators(endpointInstance.getAuthenticationFlows(), 
 					factory.getDescription().getSupportedBinding());
 			
-			endpointDB.create(endpoint);
+			Endpoint endpointExisting = getEndpointInt(endpointName);
+			if (endpointExisting != null)
+			{
+				if (endpointExisting.getState().equals(EndpointState.DEPLOYED))
+				{
+					throw new EngineException("The [" + endpointName + "] endpoint already exists");
+				}
+				endpointDB.update(endpoint);
+			}else
+			{
+				endpointDB.create(endpoint);
+			}
+			
+			
 		} catch (Exception e)
 		{
 			throw new EngineException("Unable to deploy an endpoint: " + e.getMessage(), e);
@@ -141,21 +159,15 @@ public class EndpointManagementImpl implements EndpointManagement
 		}
 		return endpointInstance.getEndpointDescription();
 	}
-
-	private void validateEndpointPath(String contextPath) throws WrongArgumentException
+	
+	private Endpoint getEndpointInt(String name)
 	{
-		if (!contextPath.startsWith("/"))
-			throw new WrongArgumentException("Context path must start with a leading '/'");
-		if (contextPath.indexOf("/", 1) != -1)
-			throw new WrongArgumentException("Context path must not possess more then one '/'");
 		try
 		{
-			URL tested = new URL("https://localhost:8080" + contextPath);
-			if (!contextPath.equals(tested.getPath()))
-				throw new WrongArgumentException("Context path must be a valid path element of a URL");
-		} catch (MalformedURLException e)
+			return endpointDB.get(name);
+		} catch (IllegalArgumentException e)
 		{
-			throw new WrongArgumentException("Context path must be a valid path element of a URL", e);
+			return null;
 		}
 	}
 	
@@ -166,7 +178,7 @@ public class EndpointManagementImpl implements EndpointManagement
 	}
 
 	@Override
-	public List<ResolvedEndpoint> getEndpoints() throws AuthorizationException
+	public List<ResolvedEndpoint> getDeployedEndpoints() throws AuthorizationException
 	{
 		authz.checkAuthorization(AuthzCapability.maintenance);
 		List<EndpointInstance> endpoints = internalManagement.getDeployedEndpoints();
@@ -174,6 +186,31 @@ public class EndpointManagementImpl implements EndpointManagement
 		for (EndpointInstance endpI: endpoints)
 			ret.add(endpI.getEndpointDescription());
 		return ret;
+	}
+	
+	@Override
+	@Transactional
+	public List<Endpoint> getEndpoints() throws AuthorizationException
+	{
+		authz.checkAuthorization(AuthzCapability.maintenance);
+		return endpointDB.getAll();
+	}
+	
+	@Override
+	@Transactional
+	public Endpoint getEndpoint(String name) throws AuthorizationException
+	{
+		authz.checkAuthorization(AuthzCapability.maintenance);
+		return endpointDB.get(name);
+	}
+	
+	@Override
+	@Transactional
+	public void removeEndpoint(String id) throws EngineException
+	{
+		authz.checkAuthorization(AuthzCapability.maintenance);
+		endpointDB.delete(id);
+		endpointsUpdater.update();		
 	}
 
 	@Override
@@ -192,7 +229,13 @@ public class EndpointManagementImpl implements EndpointManagement
 		tx.runInTransactionThrowing(() -> {
 			try
 			{
-				endpointDB.delete(id);
+				Endpoint existing = endpointDB.get(id);
+				Endpoint updatedEndpoint = new Endpoint(id, 
+						existing.getTypeId(), 
+						existing.getContextAddress(), 
+						existing.getConfiguration(),
+						existing.getRevision() + 1, EndpointState.UNDEPLOYED);
+				endpointDB.update(updatedEndpoint);
 			} catch (Exception e)
 			{
 				throw new EngineException("Unable to undeploy an endpoint: " + e.getMessage(), e);
@@ -217,9 +260,6 @@ public class EndpointManagementImpl implements EndpointManagement
 	 * -) in the new instance set all fields to the new ones if not null or to the existing values
 	 * -) serialize and store in db
 	 * -) trigger runtime system update.
-	 * @param id
-	 * @param configuration
-	 * @throws EngineException
 	 */
 	private void updateEndpointInt(String id, EndpointConfiguration configuration) throws EngineException
 	{
@@ -248,7 +288,7 @@ public class EndpointManagementImpl implements EndpointManagement
 						configuration.getRealm() :
 						existing.getConfiguration().getRealm();
 
-				AuthenticationRealm realm = realmDB.get(newRealm);
+				String realmName = newRealm !=null ? realmDB.get(newRealm).getName() : null;
 
 				I18nString newDisplayedName = configuration.getDisplayedName() != null ?
 						configuration.getDisplayedName() :
@@ -259,14 +299,15 @@ public class EndpointManagementImpl implements EndpointManagement
 						newDesc, 
 						newAuthn, 
 						jsonConf, 
-						realm.getName());
+						realmName, configuration.getTag());
 				
-				Endpoint current = endpointDB.get(id);
+				
 				Endpoint updatedEndpoint = new Endpoint(id, 
 						endpointTypeId, 
 						existing.getContextAddress(), 
 						newConfiguration,
-						current.getRevision() + 1);
+						existing.getRevision() + 1,
+						existing.getState());
 				endpointDB.update(updatedEndpoint);
 				log.info("Endpoint " + id + " successfully updated in DB");
 			} catch (Exception e)

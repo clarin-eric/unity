@@ -4,10 +4,10 @@
  */
 package pl.edu.icm.unity.engine.api.event;
 
-import pl.edu.icm.unity.base.event.Event;
+import pl.edu.icm.unity.types.Event;
 
 /**
- * Event listeners are {@link Event} consumers. E.g. a listener can send email with notification or 
+ * Event listeners are {@link Event} consumers. E.g. a listener can send email with notification or
  * dump the event to an auditing database.
  * @author K. Benedyczak
  */
@@ -26,19 +26,17 @@ public interface EventListener
 	
 	/**
 	 * This method should perform a fast filtering of uninteresting events.
-	 * @param event
 	 * @return true if the event should be handled by this listener
 	 */
-	boolean isWanted(Event event); 
+	boolean isWanted(Event event);
 
 	/**
 	 * This method should return whether async processing is allowed. Otherwise processing is
 	 * done immediately.
 	 * 
-	 * @param event
 	 * @return true if the event should be handled in async mode.
 	 */
-	boolean isAsync(Event event); 
+	boolean isAsync(Event event);
 	
 	/**
 	 * Called only on events of a proper category, for which isWanted returned true. 
@@ -59,4 +57,9 @@ public interface EventListener
 	 * to return {@link #DEFAULT_MAX_FAILURES}  
 	 */
 	int getMaxFailures();
+
+	/**
+	 * Called before {@link EventListener} is being added to {@link EventProcessor}
+	 */
+	default void init() {}
 }

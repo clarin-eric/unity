@@ -10,7 +10,7 @@ import java.util.Objects;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 
-import pl.edu.icm.unity.types.authn.AuthenticationOptionKey;
+import pl.edu.icm.unity.types.authn.AuthenticationOptionsSelector;
 
 /**
  * Configures the external sign up process during registration.
@@ -19,25 +19,20 @@ import pl.edu.icm.unity.types.authn.AuthenticationOptionKey;
  */
 public class ExternalSignupSpec
 {
-	private List<AuthenticationOptionKey> specs = new ArrayList<>();
+	private List<AuthenticationOptionsSelector> specs = new ArrayList<>();
 
-	public ExternalSignupSpec(List<AuthenticationOptionKey> specs)
+	public ExternalSignupSpec(List<AuthenticationOptionsSelector> specs)
 	{
 		this.specs = specs;
 	}
 	
 	ExternalSignupSpec() {} 
 
-	public List<AuthenticationOptionKey> getSpecs()
+	public List<AuthenticationOptionsSelector> getSpecs()
 	{
 		return specs;
 	}
 
-	public void setSpecs(List<AuthenticationOptionKey> specs)
-	{
-		this.specs = specs;
-	}
-	
 	@JsonIgnore
 	public boolean isEnabled()
 	{

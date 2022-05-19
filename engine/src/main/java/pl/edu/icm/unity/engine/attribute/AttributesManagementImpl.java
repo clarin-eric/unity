@@ -4,15 +4,11 @@
  */
 package pl.edu.icm.unity.engine.attribute;
 
-import java.util.Collection;
-import java.util.Set;
-import java.util.stream.Collectors;
-
+import com.google.common.collect.ImmutableMap;
 import org.apache.logging.log4j.Logger;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
-
 import pl.edu.icm.unity.base.utils.Log;
 import pl.edu.icm.unity.engine.api.AttributesManagement;
 import pl.edu.icm.unity.engine.api.attributes.AttributeClassHelper;
@@ -20,24 +16,29 @@ import pl.edu.icm.unity.engine.api.attributes.AttributeMetadataProvider;
 import pl.edu.icm.unity.engine.api.attributes.AttributeMetadataProvidersRegistry;
 import pl.edu.icm.unity.engine.api.confirmation.EmailConfirmationManager;
 import pl.edu.icm.unity.engine.api.identity.EntityResolver;
-import pl.edu.icm.unity.engine.authz.AuthorizationManager;
+import pl.edu.icm.unity.engine.api.registration.GroupPatternMatcher;
+import pl.edu.icm.unity.engine.audit.AuditEventTrigger;
+import pl.edu.icm.unity.engine.audit.AuditPublisher;
 import pl.edu.icm.unity.engine.authz.AuthzCapability;
+import pl.edu.icm.unity.engine.authz.InternalAuthorizationManager;
 import pl.edu.icm.unity.engine.authz.RoleAttributeTypeProvider;
 import pl.edu.icm.unity.engine.events.InvocationEventProducer;
 import pl.edu.icm.unity.engine.session.AdditionalAuthenticationService;
-import pl.edu.icm.unity.exceptions.AuthorizationException;
-import pl.edu.icm.unity.exceptions.EngineException;
-import pl.edu.icm.unity.exceptions.IllegalAttributeValueException;
-import pl.edu.icm.unity.exceptions.IllegalGroupValueException;
-import pl.edu.icm.unity.exceptions.SchemaConsistencyException;
+import pl.edu.icm.unity.exceptions.*;
 import pl.edu.icm.unity.store.api.AttributeDAO;
 import pl.edu.icm.unity.store.api.AttributeTypeDAO;
+import pl.edu.icm.unity.store.api.MembershipDAO;
 import pl.edu.icm.unity.store.api.tx.Transactional;
 import pl.edu.icm.unity.store.api.tx.TransactionalRunner;
-import pl.edu.icm.unity.types.basic.Attribute;
-import pl.edu.icm.unity.types.basic.AttributeExt;
-import pl.edu.icm.unity.types.basic.AttributeType;
-import pl.edu.icm.unity.types.basic.EntityParam;
+import pl.edu.icm.unity.types.basic.*;
+import pl.edu.icm.unity.types.basic.audit.AuditEventAction;
+import pl.edu.icm.unity.types.basic.audit.AuditEventTag;
+import pl.edu.icm.unity.types.basic.audit.AuditEventType;
+
+import java.util.*;
+
+import static java.util.Collections.emptyList;
+import static java.util.stream.Collectors.toList;
 
 /**
  * Implements attributes operations.
@@ -48,26 +49,30 @@ import pl.edu.icm.unity.types.basic.EntityParam;
 @InvocationEventProducer
 public class AttributesManagementImpl implements AttributesManagement
 {
-	private static final Logger log = Log.getLogger(Log.U_SERVER, AttributesManagementImpl.class);
+	private static final Logger log = Log.getLogger(Log.U_SERVER_CORE, AttributesManagementImpl.class);
 	private AttributeClassUtil acUtil;
 	private AttributeTypeDAO attributeTypeDAO;
 	private AttributeDAO dbAttributes;
 	private EntityResolver idResolver;
-	private AuthorizationManager authz;
+	private InternalAuthorizationManager authz;
 	private AttributesHelper attributesHelper;
 	private EmailConfirmationManager confirmationManager;
 	private TransactionalRunner txRunner;
 	private AttributeMetadataProvidersRegistry atMetaProvidersRegistry;
 	private AdditionalAuthenticationService additionalAuthnService;
+	private final AuditPublisher audit;
+	private final MembershipDAO membershipDAO;
 
 	@Autowired
 	public AttributesManagementImpl(AttributeClassUtil acUtil,
 			AttributeTypeDAO attributeTypeDAO, AttributeDAO dbAttributes,
-			EntityResolver idResolver, AuthorizationManager authz,
+			EntityResolver idResolver, InternalAuthorizationManager authz,
 			AttributesHelper attributesHelper, EmailConfirmationManager confirmationManager,
 			TransactionalRunner txRunner,
 			AttributeMetadataProvidersRegistry atMetaProvidersRegistry,
-			AdditionalAuthenticationService repeatedAuthnService)
+			AdditionalAuthenticationService repeatedAuthnService,
+			AuditPublisher audit,
+			MembershipDAO membershipDAO)
 	{
 		this.acUtil = acUtil;
 		this.attributeTypeDAO = attributeTypeDAO;
@@ -79,6 +84,8 @@ public class AttributesManagementImpl implements AttributesManagement
 		this.txRunner = txRunner;
 		this.atMetaProvidersRegistry = atMetaProvidersRegistry;
 		this.additionalAuthnService = repeatedAuthnService;
+		this.audit = audit;	
+		this.membershipDAO = membershipDAO;
 	}
 
 	
@@ -123,15 +130,16 @@ public class AttributesManagementImpl implements AttributesManagement
 		txRunner.runInTransactionThrowing(() -> {
 			//Important - attributes can be also set as a result of addMember and addEntity.
 			//  when changing this method, verify if those needs an update too.
+			
 			long entityId = idResolver.getEntityId(entity);
 			AttributeType at = attributeTypeDAO.get(attribute.getName());
 			boolean fullAuthz = checkSetAttributeAuthz(entityId, at, attribute);
 			if (!fullAuthz)
 				checkAdditionalAuthn(at);
 			checkIfAllowed(entityId, attribute.getGroupPath(), attribute.getName());
-
 			attributesHelper.addAttribute(entityId, attribute, at, allowUpdate, fullAuthz);
 		});
+
 		//this is merely to propagate the change to authz layer more quickly in typical situations. It does 
 		// not guarantee that authz cache is cleared after all possible situations when roles are be altered. 
 		if (RoleAttributeTypeProvider.AUTHORIZATION_ROLE.equals(attribute.getName()))
@@ -144,7 +152,7 @@ public class AttributesManagementImpl implements AttributesManagement
 	{
 		if (isSensitiveAttributeChange(at))
 		{
-			log.debug("Additional authentication triggered for sensitive >{}< attribute change", at.getName());
+			log.info("Additional authentication triggered for sensitive >{}< attribute change", at.getName());
 			additionalAuthnService.checkAdditionalAuthenticationRequirements();
 		}
 	}
@@ -209,6 +217,14 @@ public class AttributesManagementImpl implements AttributesManagement
 		checkIfMandatory(entityId, groupPath, attributeTypeId);
 		
 		dbAttributes.deleteAttribute(attributeTypeId, entityId, groupPath);
+		
+		audit.log(AuditEventTrigger.builder()
+				.type(AuditEventType.ATTRIBUTE)
+				.action(AuditEventAction.REMOVE)
+				.name(attributeTypeId)
+				.subject(entityId)
+				.details(ImmutableMap.of("group", groupPath))
+				.tags(AuditEventTag.USERS));
 	}
 
 	@Override
@@ -216,9 +232,9 @@ public class AttributesManagementImpl implements AttributesManagement
 	public Collection<AttributeExt> getAttributes(EntityParam entity, String groupPath,
 			String attributeTypeId) throws EngineException
 	{
-		Collection<AttributeExt> ret = getAllAttributesInternal(entity, true, groupPath, attributeTypeId, 
-				new AuthzCapability[] {AuthzCapability.read}, false);
-		
+		Collection<AttributeExt> ret = getAllAttributesInternal(entity, true, groupPath,
+				attributeTypeId, new AuthzCapability[] {AuthzCapability.read}, false
+		);
 		return filterSecuritySensitive(ret);
 	}
 
@@ -226,7 +242,7 @@ public class AttributesManagementImpl implements AttributesManagement
 	{
 		return ret.stream()
 				.filter(SensitiveAttributeMatcher::isNotSensitive)
-				.collect(Collectors.toList());
+				.collect(toList());
 	}
 
 
@@ -237,39 +253,110 @@ public class AttributesManagementImpl implements AttributesManagement
 	{
 		try
 		{
-			return getAllAttributesInternal(entity, effective, groupPath, attributeTypeId, 
-					new AuthzCapability[] {AuthzCapability.readHidden, AuthzCapability.read}, true);
+			return getAllAttributesInternal(entity, effective, groupPath, attributeTypeId,
+				new AuthzCapability[] {AuthzCapability.readHidden, AuthzCapability.read}, true);
 		} catch (AuthorizationException e)
 		{
 			if (allowDegrade)
 			{
-				Collection<AttributeExt> ret = getAllAttributesInternal(entity, effective, 
-						groupPath, attributeTypeId, 
-						new AuthzCapability[] {AuthzCapability.read}, false);
-				return ret;
+				return getAllAttributesInternal(entity, effective,
+					groupPath, attributeTypeId,
+					new AuthzCapability[] {AuthzCapability.read}, false);
 			} else
 				throw e;
 		}
 	}
 
-	private Collection<AttributeExt> getAllAttributesInternal(EntityParam entity, boolean effective, 
-			String groupPath,
-			String attributeTypeName, AuthzCapability[] requiredCapability, boolean allowDisabled) 
-					throws EngineException
+	@Override
+	@Transactional
+	public Collection<AttributeExt> getAllAttributes(EntityParam entity, boolean effective,
+			List<GroupPattern> groupPathPatterns, String attributeTypeId, boolean allowDegrade) throws EngineException
+	{
+		try
+		{
+			return getAllAttributesInternal(entity, effective, groupPathPatterns, attributeTypeId,
+				new AuthzCapability[] {AuthzCapability.readHidden, AuthzCapability.read}, true);
+		} catch (AuthorizationException e)
+		{
+			if (allowDegrade)
+			{
+				return getAllAttributesInternal(entity, effective,
+					groupPathPatterns, attributeTypeId,
+					new AuthzCapability[] {AuthzCapability.read}, false);
+			} else
+				throw e;
+		}
+	}
+
+	@Override
+	@Transactional
+	public Collection<AttributeExt> getAllDirectAttributes(EntityParam entity)
+	{
+		authz.checkAuthorizationRT(AuthzCapability.readHidden, AuthzCapability.read);
+		try
+		{
+			long entityId = idResolver.getEntityId(entity);
+			return attributesHelper.getAllEntityAttributesMap(entityId)
+					.values().stream()
+					.map(Map::values)
+					.flatMap(Collection::stream)
+					.collect(toList());
+		} catch (EngineException e)
+		{
+			throw new RuntimeEngineException(e);
+		}
+	}
+
+	private Collection<AttributeExt> getAllAttributesInternal(EntityParam entity, boolean effective,
+			List<GroupPattern> groupPathPatterns, String attributeTypeName, AuthzCapability[] requiredCapability,
+			boolean allowDisabled) throws EngineException
+	{
+		entity.validateInitialization();
+		long entityId = idResolver.getEntityId(entity);
+
+		List<String> groupsPaths = getGroupsPaths(groupPathPatterns, entityId);
+		if(groupsPaths.isEmpty())
+			return emptyList();
+
+		for (String group : groupsPaths)
+		{
+			authz.checkAuthorization(authz.isSelf(entityId), group, requiredCapability);
+		}
+		return attributesHelper.getAttributesInternal(entityId,
+				effective, groupsPaths, attributeTypeName, allowDisabled);
+	}
+
+	private Collection<AttributeExt> getAllAttributesInternal(EntityParam entity, boolean effective,
+			String groupPath, String attributeTypeName, AuthzCapability[] requiredCapability, boolean allowDisabled)
+			throws EngineException
 	{
 		entity.validateInitialization();
 		long entityId = idResolver.getEntityId(entity);
 		authz.checkAuthorization(authz.isSelf(entityId), groupPath, requiredCapability);
-		Collection<AttributeExt> ret = attributesHelper.getAllAttributesInternal(entityId, 
-				effective, groupPath, attributeTypeName, allowDisabled);
-		return ret;
+		return attributesHelper.getAttributesInternal(entityId,
+			effective, groupPath, attributeTypeName, allowDisabled);
 	}
-	
+
+	private List<String> getGroupsPaths(List<GroupPattern> groupPathPatterns, long entityId)
+	{
+		List<Group> entityGroups = membershipDAO.getEntityMembershipGroups(entityId);
+		List<String> groupsPaths = new ArrayList<>();
+		for(GroupPattern groupPathPattern : groupPathPatterns)
+		{
+			groupsPaths.addAll(getMatchingGroups(entityGroups, groupPathPattern.pattern));
+		}
+		return groupsPaths;
+	}
+
+	private List<String> getMatchingGroups(List<Group> entityGroups, String groupPathPattern)
+	{
+		return GroupPatternMatcher.filterMatching(entityGroups, groupPathPattern).stream()
+			.map(Group::getName)
+			.collect(toList());
+	}
+
 	/**
 	 * Verifies if the attribute is allowed wrt attribute classes defined for the entity in the respective group.
-	 * @param entityId
-	 * @param attribute
-	 * @throws EngineException
 	 */
 	private void checkIfAllowed(long entityId, String groupPath, String attributeTypeId) 
 			throws EngineException
@@ -282,9 +369,6 @@ public class AttributesManagementImpl implements AttributesManagement
 
 	/**
 	 * Verifies if the attribute is allowed wrt attribute classes defined for the entity in the respective group.
-	 * @param entityId
-	 * @param attribute
-	 * @throws EngineException
 	 */
 	private void checkIfMandatory(long entityId, String groupPath, String attributeTypeId) 
 			throws EngineException

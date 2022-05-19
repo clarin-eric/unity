@@ -4,16 +4,15 @@
  */
 package pl.edu.icm.unity.engine.authz;
 
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.Set;
-
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
-
 import pl.edu.icm.unity.exceptions.AuthorizationException;
 import pl.edu.icm.unity.exceptions.AuthorizationExceptionRT;
 import pl.edu.icm.unity.types.basic.Attribute;
+
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Set;
 
 
 /**
@@ -23,7 +22,7 @@ import pl.edu.icm.unity.types.basic.Attribute;
  */
 @Component("noauthz")
 @Qualifier("insecure")
-public class InternalNoAuthzImpl implements AuthorizationManager
+public class InternalNoAuthzImpl implements InternalAuthorizationManager
 {
 	@Override
 	public Set<String> getRoleNames()
@@ -33,6 +32,11 @@ public class InternalNoAuthzImpl implements AuthorizationManager
 
 	@Override
 	public void checkAuthorization(AuthzCapability... requiredCapabilities)
+	{
+	}
+
+	@Override
+	public void checkAuthorizationRT(AuthzCapability... requiredCapabilities)
 	{
 	}
 
@@ -87,5 +91,12 @@ public class InternalNoAuthzImpl implements AuthorizationManager
 	@Override
 	public void clearCache()
 	{
+	}
+
+	@Override
+	public Set<AuthzRole> getRoles() throws AuthorizationException
+	{
+		Set<AuthzRole> ret = new HashSet<AuthzRole>();
+		return ret;
 	}
 }

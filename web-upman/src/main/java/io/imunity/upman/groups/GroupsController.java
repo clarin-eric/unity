@@ -16,11 +16,12 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import io.imunity.upman.common.ServerFaultException;
+import pl.edu.icm.unity.MessageSource;
 import pl.edu.icm.unity.base.utils.Log;
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
 import pl.edu.icm.unity.engine.api.project.DelegatedGroup;
 import pl.edu.icm.unity.engine.api.project.DelegatedGroupContents;
 import pl.edu.icm.unity.engine.api.project.DelegatedGroupManagement;
+import pl.edu.icm.unity.engine.api.project.SubprojectGroupDelegationConfiguration;
 import pl.edu.icm.unity.types.I18nString;
 import pl.edu.icm.unity.webui.exceptions.ControllerException;
 
@@ -33,13 +34,13 @@ import pl.edu.icm.unity.webui.exceptions.ControllerException;
 @Component
 public class GroupsController
 {
-	private static final Logger log = Log.getLogger(Log.U_SERVER, GroupsController.class);
+	private static final Logger log = Log.getLogger(Log.U_SERVER_UPMAN, GroupsController.class);
 
-	private DelegatedGroupManagement delGroupMan;
-	private UnityMessageSource msg;
+	private final DelegatedGroupManagement delGroupMan;
+	private final MessageSource msg;
 
 	@Autowired
-	public GroupsController(UnityMessageSource msg, DelegatedGroupManagement delGroupMan)
+	public GroupsController(MessageSource msg, DelegatedGroupManagement delGroupMan)
 	{
 		this.msg = msg;
 		this.delGroupMan = delGroupMan;
@@ -54,7 +55,7 @@ public class GroupsController
 			groupAndSubgroups = delGroupMan.getGroupAndSubgroups(projectPath, rootPath);
 		} catch (Exception e)
 		{
-			log.debug("Can not get group " + projectPath, e);
+			log.warn("Can not get group " + projectPath, e);
 			throw new ServerFaultException(msg);
 		}
 
@@ -77,15 +78,15 @@ public class GroupsController
 		return groupTree;
 	}
 
-	public void addGroup(String projectPath, String parentPath, I18nString groupName,
-			boolean isPublic) throws ControllerException
+	public String addGroup(String projectPath, String parentPath, GroupWithAccessMode group)
+			throws ControllerException
 	{
 		try
 		{
-			delGroupMan.addGroup(projectPath, parentPath, groupName, isPublic);
+			return delGroupMan.addGroup(projectPath, parentPath, group.name, group.isOpen);
 		} catch (Exception e)
 		{
-			log.debug("Can not add group " + parentPath, e);
+			log.warn("Can not add group " + parentPath, e);
 			throw new ServerFaultException(msg);
 		}
 	}
@@ -97,29 +98,37 @@ public class GroupsController
 			delGroupMan.removeGroup(projectPath, groupPath);
 		} catch (Exception e)
 		{
-
-			log.debug("Can not remove group " + groupPath, e);
+			log.warn("Can not remove group " + groupPath, e);
 			throw new ServerFaultException(msg);
 		}
-
 	}
-
-	public void setGroupAccessMode(String projectPath, String groupPath, boolean isOpen)
-			throws ControllerException
+	
+	public void deleteSubProjectGroup(String projectPath, String groupPath) throws ControllerException
 	{
 		try
 		{
+			delGroupMan.removeProject(projectPath, groupPath);
+		} catch (Exception e)
+		{
+			log.warn("Can not remove sub-project group " + groupPath, e);
+			throw new ServerFaultException(msg);
+		}
+	}
 
+	public void setGroupAccessMode(String projectPath, String groupPath, boolean isOpen) throws ControllerException
+	{
+		try
+		{
 			delGroupMan.setGroupAccessMode(projectPath, groupPath, isOpen);
 
 		} catch (Exception e)
 		{
-			log.debug("Can not set group access mode for " + groupPath, e);
-			
+			log.warn("Can not set group access mode for " + groupPath, e);
+
 			if (!projectPath.equals(groupPath))
 			{
 				throw new ServerFaultException(msg);
-			}else
+			} else
 			{
 				throw new ControllerException(
 						msg.getMessage("GroupsController.projectGroupAccessModeChangeError"),
@@ -140,8 +149,25 @@ public class GroupsController
 
 		} catch (Exception e)
 		{
-			log.debug("Can not rename group " + groupPath, e);
+			log.warn("Can not rename group " + groupPath, e);
 			throw new ServerFaultException(msg);
 		}
+	}
+
+	public void setGroupDelegationConfiguration(String projectPath, String path,
+			SubprojectGroupDelegationConfiguration groupDelegationConfig) throws ControllerException
+	{
+		try
+		{
+
+			delGroupMan.setGroupDelegationConfiguration(projectPath, path,
+					groupDelegationConfig);
+
+		} catch (Exception e)
+		{
+			log.warn("Can not set group delegation configuration in " + path, e);
+			throw new ServerFaultException(msg);
+		}
+
 	}
 }

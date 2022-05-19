@@ -8,9 +8,7 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.security.cert.X509Certificate;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Properties;
 
 import org.apache.commons.codec.digest.DigestUtils;
@@ -26,11 +24,11 @@ import eu.emi.security.authn.x509.impl.CertificateUtils;
 import eu.emi.security.authn.x509.impl.CertificateUtils.Encoding;
 import eu.emi.security.authn.x509.impl.X500NameUtils;
 import eu.unicore.samly2.SAMLConstants;
+import pl.edu.icm.unity.MessageSource;
 import pl.edu.icm.unity.base.utils.Log;
 import pl.edu.icm.unity.engine.api.PKIManagement;
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
+import pl.edu.icm.unity.engine.api.pki.NamedCertificate;
 import pl.edu.icm.unity.exceptions.EngineException;
-import pl.edu.icm.unity.exceptions.WrongArgumentException;
 import pl.edu.icm.unity.saml.SamlProperties;
 import pl.edu.icm.unity.saml.SamlProperties.Binding;
 import xmlbeans.org.oasis.saml2.assertion.AttributeType;
@@ -41,19 +39,14 @@ import xmlbeans.org.oasis.saml2.metadata.EntityDescriptorType;
 import xmlbeans.org.oasis.saml2.metadata.ExtensionsType;
 import xmlbeans.org.oasis.saml2.metadata.KeyDescriptorType;
 import xmlbeans.org.oasis.saml2.metadata.KeyTypes;
-import xmlbeans.org.oasis.saml2.metadata.LocalizedNameType;
-import xmlbeans.org.oasis.saml2.metadata.OrganizationType;
-import xmlbeans.org.oasis.saml2.metadata.SSODescriptorType;
 import xmlbeans.org.oasis.saml2.metadata.extattribute.EntityAttributesDocument;
 import xmlbeans.org.oasis.saml2.metadata.extattribute.EntityAttributesType;
-import xmlbeans.org.oasis.saml2.metadata.extui.LogoType;
-import xmlbeans.org.oasis.saml2.metadata.extui.UIInfoDocument;
-import xmlbeans.org.oasis.saml2.metadata.extui.UIInfoType;
 import xmlbeans.org.w3.x2000.x09.xmldsig.X509DataType;
 
 /**
  * Base for converters of SAML metadata into a series of property statements.
- *  
+ * 
+ * TODO: this class to be dropped after refactoring of SAML IDP code to be based on non Properties config.
  * @author K. Benedyczak
  */
 public abstract class AbstractMetaToConfigConverter
@@ -61,9 +54,9 @@ public abstract class AbstractMetaToConfigConverter
 	
 	private static final Logger log = Log.getLogger(Log.U_SERVER_SAML, AbstractMetaToConfigConverter.class);
 	protected PKIManagement pkiManagement;
-	protected UnityMessageSource msg;
+	protected MessageSource msg;
 	
-	public AbstractMetaToConfigConverter(PKIManagement pkiManagement, UnityMessageSource msg)
+	public AbstractMetaToConfigConverter(PKIManagement pkiManagement, MessageSource msg)
 	{
 		this.pkiManagement = pkiManagement;
 		this.msg = msg;
@@ -98,23 +91,14 @@ public abstract class AbstractMetaToConfigConverter
 		{
 			for (EntityDescriptorType entity: entities)
 			{
-				convertToProperties(entity, properties, realConfig, configKey);
+				convertToProperties(meta, entity, properties, realConfig, configKey);
 			}
 		}
 	}
 	
-	protected abstract void convertToProperties(EntityDescriptorType meta, Properties properties, 
+	protected abstract void convertToProperties(EntitiesDescriptorType parentMeta, EntityDescriptorType meta, Properties properties, 
 			SamlProperties realConfig, String configKey);
 	
-	protected boolean supportsSaml2(SSODescriptorType idpDef)
-	{
-		List<?> supportedProtocols = idpDef.getProtocolSupportEnumeration();
-		for (Object supported: supportedProtocols)
-			if (SAMLConstants.PROTOCOL_NS.equals(supported))
-				return true;
-		return false;
-	}
-
 	/**
 	 * 
 	 * @param entityAttributes
@@ -188,15 +172,20 @@ public abstract class AbstractMetaToConfigConverter
 				String pkiKey = getCertificateKey(cert, entityId, prefix);
 				try
 				{
-					X509Certificate existingCert = pkiManagement
-							.getCertificate(pkiKey);
+					X509Certificate existingCert = pkiManagement.getCertificate(pkiKey).value;
 					if (!existingCert.equals(cert))
 					{
-						pkiManagement.updateCertificate(pkiKey, cert);
+						pkiManagement.updateCertificate(new NamedCertificate(pkiKey, cert));
+						log.debug("Updated already installed certificate of SAML entity {}, DN: {}, serial: {}",
+								entityId, cert.getSubjectX500Principal().getName(), 
+								cert.getSerialNumber());
 					}
-				} catch (WrongArgumentException e)
+				} catch (IllegalArgumentException e)
 				{
-					pkiManagement.addCertificate(pkiKey, cert);
+					pkiManagement.addVolatileCertificate(pkiKey, cert);
+					log.debug("Installed a new certificate for SAML entity {}, DN: {}, serial: {}",
+							entityId, cert.getSubjectX500Principal().getName(), 
+							cert.getSerialNumber());
 				}
 			}
 		}
@@ -204,117 +193,10 @@ public abstract class AbstractMetaToConfigConverter
 
 	protected String getCertificateKey(X509Certificate cert, String entityId, String prefix)
 	{
-		String dn = X500NameUtils.getComparableForm(cert.getSubjectX500Principal()
-				.getName());
-		String key = prefix + DigestUtils.md5Hex(entityId) + "#" + DigestUtils.md5Hex(dn);
+		String dn = X500NameUtils.getComparableForm(cert.getSubjectX500Principal().getName());
+		String serial = cert.getSerialNumber().toString();
+		String key = prefix + DigestUtils.md5Hex(entityId) + "#" + DigestUtils.md5Hex(dn) + "#" + serial;
 		return key;
-	}
-
-	protected Map<String, String> getLocalizedNames(UIInfoType uiInfo, SSODescriptorType idpDesc, 
-			EntityDescriptorType mainDescriptor)
-	{
-		Map<String, String> ret = new HashMap<String, String>();
-		OrganizationType mainOrg = mainDescriptor.getOrganization();
-		if (mainOrg != null)
-		{
-			addLocalizedNames(mainOrg.getOrganizationNameArray(), ret);
-			addLocalizedNames(mainOrg.getOrganizationDisplayNameArray(), ret);
-		}
-		OrganizationType org = idpDesc.getOrganization();
-		if (org != null)
-		{
-			addLocalizedNames(org.getOrganizationNameArray(), ret);
-			addLocalizedNames(org.getOrganizationDisplayNameArray(), ret);
-		}
-		if (uiInfo != null)
-		{
-			addLocalizedNames(uiInfo.getDisplayNameArray(), ret);
-		}
-		return ret;
-	}
-
-	protected Map<String, LogoType> getLocalizedLogos(UIInfoType uiInfo)
-	{
-		Map<String, LogoType> ret = new HashMap<String, LogoType>();
-		if (uiInfo != null)
-		{
-			LogoType[] logos = uiInfo.getLogoArray();
-			if (logos == null)
-				return ret;
-			for (LogoType logo: logos)
-			{
-				String key = logo.getLang() == null ? "" : "." + logo.getLang();
-				LogoType e = ret.get(key);
-				if (e == null)
-				{
-					ret.put(key, logo);
-				} else
-				{
-					if (e.getHeight().longValue() < logo.getHeight().longValue())
-						ret.put(key, logo);
-				}
-			}
-		}	
-		return ret;
-	}
-	
-	/**
-	 * Converts SAML names to a language key->value map. All language keys are prefixed with dot.
-	 * The empty key is used to provide a default value, for the default system locale. If such default 
-	 * was not found in the SAML names, then the 'en' locale is tried. Not fully correct, but this is 
-	 * de facto standard default locale for international federations.
-	 *  
-	 * @param names
-	 * @param ret
-	 */
-	protected void addLocalizedNames(LocalizedNameType[] names, Map<String, String> ret)
-	{
-		if (names == null)
-			return;
-		String enName = null;
-		for (LocalizedNameType name: names)
-		{
-			String lang = name.getLang();
-			if (lang != null)
-			{
-				ret.put("." + lang, name.getStringValue());
-				if (lang.equals(msg.getDefaultLocaleCode()))
-					ret.put("", name.getStringValue());
-				if (lang.equals("en"))
-					enName = name.getStringValue();
-			} else
-			{
-				ret.put("", name.getStringValue());
-			}
-		}
-		if (enName != null && !ret.containsKey(""))
-			ret.put("", enName);
-	}
-	
-	protected UIInfoType parseMDUIInfo(ExtensionsType extensions, String entityId)
-	{
-		if (extensions == null)
-			return null;
-		NodeList nl = extensions.getDomNode().getChildNodes();
-		for (int i=0; i<nl.getLength(); i++)
-		{
-			Node elementN = nl.item(i);
-			if (elementN.getNodeType() != Node.ELEMENT_NODE)
-				continue;
-			Element element = (Element) elementN;
-			if ("UIInfo".equals(element.getLocalName()) && 
-					"urn:oasis:names:tc:SAML:metadata:ui".equals(element.getNamespaceURI()))
-			{
-				try
-				{
-					return UIInfoDocument.Factory.parse(element).getUIInfo();
-				} catch (XmlException e)
-				{
-					log.warn("Can not parse UIInfo metadata extension for " + entityId, e);
-				}
-			}
-		}
-		return null;
 	}
 
 	protected EntityAttributesType parseMDAttributes(ExtensionsType extensions, String entityId)

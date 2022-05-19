@@ -40,7 +40,10 @@
 	<update id="shutdown">
 		SHUTDOWN;
 	</update>
-	
+
+	<sql id="sql-auditEventsTimestampDescIdx">
+		CREATE INDEX AUDIT_EVENTS_TIMESTAMP_DESC_IDX ON AUDIT_EVENTS(TIMESTAMP DESC);
+	</sql>
 	
 	<update id="resetIndex-00">
 		ALTER TABLE TOKENS ALTER COLUMN ID RESTART WITH 1;
@@ -65,6 +68,11 @@
 	</update>
 	<update id="resetIndex-07">
 		ALTER TABLE ATTRIBUTE_TYPES ALTER COLUMN ID RESTART WITH 1;
+	</update>
+	<update id="resetIndex-08">
+		ALTER TABLE AUDIT_ENTITIES ALTER COLUMN ID RESTART WITH 1;
+		ALTER TABLE AUDIT_EVENTS ALTER COLUMN ID RESTART WITH 1;
+		ALTER TABLE AUDIT_TAGS ALTER COLUMN ID RESTART WITH 1;
 	</update>
 	
 </mapper>

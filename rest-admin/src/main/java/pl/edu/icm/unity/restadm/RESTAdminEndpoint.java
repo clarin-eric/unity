@@ -5,7 +5,7 @@
 package pl.edu.icm.unity.restadm;
 
 import java.util.Collections;
-import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 import javax.ws.rs.ApplicationPath;
@@ -15,14 +15,19 @@ import org.springframework.beans.factory.ObjectFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import com.google.common.collect.Sets;
+
+import pl.edu.icm.unity.MessageSource;
+import pl.edu.icm.unity.engine.api.EntityManagement;
 import pl.edu.icm.unity.engine.api.authn.AuthenticationProcessor;
 import pl.edu.icm.unity.engine.api.endpoint.EndpointFactory;
 import pl.edu.icm.unity.engine.api.endpoint.EndpointInstance;
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
+import pl.edu.icm.unity.engine.api.server.AdvertisedAddressProvider;
 import pl.edu.icm.unity.engine.api.server.NetworkServer;
 import pl.edu.icm.unity.engine.api.session.SessionManagement;
 import pl.edu.icm.unity.engine.api.utils.PrototypeComponent;
 import pl.edu.icm.unity.rest.RESTEndpoint;
+import pl.edu.icm.unity.rest.RestEndpointHelper;
 import pl.edu.icm.unity.rest.authn.JAXRSAuthentication;
 import pl.edu.icm.unity.types.endpoint.EndpointTypeDescription;
 
@@ -41,15 +46,19 @@ public class RESTAdminEndpoint extends RESTEndpoint
 			JAXRSAuthentication.NAME,
 			Collections.singletonMap(V1_PATH, "The REST management base path"));
 	
-	private ObjectFactory<RESTAdmin> factory;
+	private final ObjectFactory<List<RESTAdminHandler>> factories;
 	
 	@Autowired
-	public RESTAdminEndpoint(UnityMessageSource msg, SessionManagement sessionMan,
-			NetworkServer server, AuthenticationProcessor authnProcessor, 
-			ObjectFactory<RESTAdmin> factory)
+	public RESTAdminEndpoint(MessageSource msg,
+			SessionManagement sessionMan,
+			NetworkServer server,
+			AuthenticationProcessor authnProcessor,
+			ObjectFactory<List<RESTAdminHandler>> factories,
+			AdvertisedAddressProvider advertisedAddrProvider,
+			EntityManagement entityMan)
 	{
-		super(msg, sessionMan, authnProcessor, server, "");
-		this.factory = factory;
+		super(msg, sessionMan, authnProcessor, server, advertisedAddrProvider, "", entityMan);
+		this.factories = factories;
 	}
 
 	@Override
@@ -64,9 +73,8 @@ public class RESTAdminEndpoint extends RESTEndpoint
 		@Override 
 		public Set<Object> getSingletons() 
 		{
-			HashSet<Object> ret = new HashSet<>();
-			ret.add(factory.getObject());
-			installExceptionHandlers(ret);
+			Set<Object> ret = Sets.newHashSet(factories.getObject());
+			RestEndpointHelper.installExceptionHandlers(ret);
 			return ret;
 		}
 	}

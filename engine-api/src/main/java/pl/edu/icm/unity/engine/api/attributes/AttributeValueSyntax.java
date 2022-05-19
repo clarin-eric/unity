@@ -143,6 +143,13 @@ public interface AttributeValueSyntax<T>
 	 */
 	boolean isUserVerifiable();
 
+	/**
+	 * @return max size of attribute values
+	 */
+	default int getMaxSize()
+	{
+		return 0;
+	}
 	
 	/**
 	 * If syntax is verifiable by email return confirmation configuration
@@ -153,4 +160,12 @@ public interface AttributeValueSyntax<T>
 		return Optional.empty();
 	}
 	
+	/**
+	 * When non empty all attributes values with this syntax ban can be
+	 * accessed publicly.
+	 */
+	default Optional<PublicAttributeSpec> publicExposureSpec()
+	{
+		return Optional.empty();
+	}
 }

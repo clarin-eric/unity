@@ -13,7 +13,6 @@ import org.apache.http.HttpResponse;
 import org.apache.http.client.HttpClient;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.protocol.HttpContext;
-import org.junit.Test;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
@@ -38,7 +37,7 @@ public class TstPerfLogin extends PerformanceTestBase
 	public final int USERS = 1000; 
 	public final int WARM_SIZE = 10;
 	
-	@Test
+	//@Test
 	public void testLogin() throws Exception
 	{
 		
@@ -54,7 +53,7 @@ public class TstPerfLogin extends PerformanceTestBase
 		EndpointConfiguration cfg = new EndpointConfiguration(new I18nString("endpoint1"), "desc",
 				Lists.newArrayList(AUTHENTICATION_FLOW_PASS), "", realm.getName());
 		endpointMan.deploy(MockRESTEndpoint.NAME, "endpoint1", "/mock", cfg);
-		List<ResolvedEndpoint> endpoints = endpointMan.getEndpoints();
+		List<ResolvedEndpoint> endpoints = endpointMan.getDeployedEndpoints();
 		assertEquals(1, endpoints.size());
 		httpServer.start();
 		HttpHost host = new HttpHost("localhost", 53456, "https");

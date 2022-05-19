@@ -4,6 +4,8 @@
  */
 package pl.edu.icm.unity.store.impl.membership;
 
+import pl.edu.icm.unity.store.impl.groups.GroupBean;
+
 import java.util.List;
 
 
@@ -14,6 +16,8 @@ import java.util.List;
 public interface MembershipMapper
 {
 	long create(GroupElementBean obj);
+
+	void createList(List<GroupElementBean> objs);
 	
 	void deleteByKey(GroupElementBean param);
 
@@ -21,7 +25,12 @@ public interface MembershipMapper
 
 	List<GroupElementBean> getEntityMembership(long entityId);
 
+	List<GroupElementBean> getEntityMemberships(List<Long> entityId);
+
 	List<GroupElementBean> getMembers(long groupId);
 	
 	List<GroupElementBean> getAll();
+	
+	List<GroupBean> getEntityGroups(long entityId);
+
 }

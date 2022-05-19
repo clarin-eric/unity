@@ -16,6 +16,7 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.function.Consumer;
 
 import org.junit.After;
 import org.junit.Before;
@@ -25,11 +26,14 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 
+import com.google.common.collect.Lists;
+
 import pl.edu.icm.unity.store.StorageCleanerImpl;
 import pl.edu.icm.unity.store.api.BasicCRUDDAO;
 import pl.edu.icm.unity.store.api.ImportExport;
 import pl.edu.icm.unity.store.api.tx.TransactionalRunner;
 import pl.edu.icm.unity.store.tx.TransactionTL;
+import pl.edu.icm.unity.types.basic.DBDumpContentElements;
 
 @RunWith(SpringJUnit4ClassRunner.class)
 @ContextConfiguration(locations={"classpath*:META-INF/components.xml"})
@@ -47,7 +51,7 @@ public abstract class AbstractBasicDAOTest<T>
 	@Before
 	public void cleanDB()
 	{
-		dbCleaner.reset();
+		dbCleaner.cleanOrDelete();
 	}
 
 	
@@ -221,30 +225,63 @@ public abstract class AbstractBasicDAOTest<T>
 	@Test
 	public void importExportIsIdempotent()
 	{
+		importExportIsIdempotent(id -> {});
+	}
+	
+	protected void insertedListIsReturned()
+	{
+		tx.runInTransaction(() -> {
+			T obj1 = getObject("name1");
+			T obj2 = getObject("name2");
+			BasicCRUDDAO<T> dao = getDAO();
+			List<Long> ids = dao.createList(Lists.newArrayList(obj1, obj2));
+
+			List<T> ret = dao.getAll();
+
+			assertThat(ret, is(notNullValue()));
+			assertThat(ret.size(), is(2));
+			assertThat(ids.size(), is(2));
+			assertThat(ids.get(0), is(notNullValue()));
+			assertThat(ids.get(1), is(notNullValue()));
+		});
+	}
+	
+	protected T importExportIsIdempotent(Consumer<Long> preExportEntityIdConsumer)
+	{
+		// given
 		T obj = getObject("name1");
+		ByteArrayOutputStream os = export(obj,  preExportEntityIdConsumer);
+		cleanDb();
 		
-		ByteArrayOutputStream os = tx.runInTransactionRet(() -> {
-			BasicCRUDDAO<T> dao = getDAO();
-			dao.create(obj);
-			
-			ByteArrayOutputStream baos = new ByteArrayOutputStream();
-			try
-			{
-				ie.store(baos);
-			} catch (Exception e)
-			{
-				e.printStackTrace();
-				fail("Export failed " + e);
-			}
-			return baos;
-		});
+		// when
+		load(os);
 		
+		// then
+		assertImportWasSuccessful(obj);
+		
+		return obj;
+	}
+	
+	private void cleanDb()
+	{
 		tx.runInTransaction(() -> {
-			dbCleaner.reset();
+			dbCleaner.cleanOrDelete();
 		});
-		
+	}
+
+	private void assertImportWasSuccessful(T obj)
+	{
 		tx.runInTransaction(() -> {
 			BasicCRUDDAO<T> dao = getDAO();
+			List<T> all = dao.getAll();
+			assertThat(all.size(), is(1));
+			assertThat(all.get(0), is(obj));
+		});
+	}
+	
+	private void load(ByteArrayOutputStream os)
+	{
+		tx.runInTransaction(() -> {
 			String dump = new String(os.toByteArray(), StandardCharsets.UTF_8);
 			ByteArrayInputStream is = new ByteArrayInputStream(os.toByteArray());
 			try
@@ -256,11 +293,26 @@ public abstract class AbstractBasicDAOTest<T>
 				
 				fail("Import failed " + e + "\nDump:\n" + dump);
 			}
-
-			List<T> all = dao.getAll();
-
-			assertThat(all.size(), is(1));
-			assertThat(all.get(0), is(obj));
+		});
+	}
+	
+	private ByteArrayOutputStream export(T obj, Consumer<Long> beforeExportEntityIdConsumer)
+	{
+		return tx.runInTransactionRet(() -> {
+			BasicCRUDDAO<T> dao = getDAO();
+			long id = dao.create(obj);
+			beforeExportEntityIdConsumer.accept(id);
+			
+			ByteArrayOutputStream baos = new ByteArrayOutputStream();
+			try
+			{
+				ie.store(baos, new DBDumpContentElements());
+			} catch (Exception e)
+			{
+				e.printStackTrace();
+				fail("Export failed " + e);
+			}
+			return baos;
 		});
 	}
 }

@@ -17,15 +17,16 @@ import java.util.stream.Collectors;
 import org.apache.logging.log4j.Logger;
 
 import eu.unicore.samly2.SAMLConstants;
+import pl.edu.icm.unity.MessageSource;
 import pl.edu.icm.unity.base.utils.Log;
 import pl.edu.icm.unity.engine.api.PKIManagement;
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
 import pl.edu.icm.unity.exceptions.EngineException;
 import pl.edu.icm.unity.saml.SamlProperties;
 import pl.edu.icm.unity.saml.idp.SamlIdpProperties;
 import pl.edu.icm.unity.saml.idp.SamlIdpProperties.RequestAcceptancePolicy;
 import xmlbeans.org.oasis.saml2.metadata.EndpointType;
 import xmlbeans.org.oasis.saml2.metadata.EntitiesDescriptorDocument;
+import xmlbeans.org.oasis.saml2.metadata.EntitiesDescriptorType;
 import xmlbeans.org.oasis.saml2.metadata.EntityDescriptorType;
 import xmlbeans.org.oasis.saml2.metadata.IndexedEndpointType;
 import xmlbeans.org.oasis.saml2.metadata.KeyDescriptorType;
@@ -47,7 +48,7 @@ public class MetaToIDPConfigConverter extends AbstractMetaToConfigConverter
 	private static final Logger log = Log.getLogger(Log.U_SERVER_SAML, MetaToIDPConfigConverter.class);
 	private static final String IDP_META_CERT = "_IDP_METADATA_CERT_";
 	
-	public MetaToIDPConfigConverter(PKIManagement pkiManagement, UnityMessageSource msg)
+	public MetaToIDPConfigConverter(PKIManagement pkiManagement, MessageSource msg)
 	{
 		super(pkiManagement, msg);
 	}
@@ -67,7 +68,7 @@ public class MetaToIDPConfigConverter extends AbstractMetaToConfigConverter
 	
 	
 	@Override
-	protected void convertToProperties(EntityDescriptorType meta, Properties properties,
+	protected void convertToProperties(EntitiesDescriptorType parentMeta, EntityDescriptorType meta, Properties properties,
 			SamlProperties realConfigG, String configKey)
 	{
 		SamlIdpProperties realConfig = (SamlIdpProperties) realConfigG;
@@ -81,7 +82,7 @@ public class MetaToIDPConfigConverter extends AbstractMetaToConfigConverter
 		Random r = new Random(); 
 		for (SPSSODescriptorType spDef: spDefs)
 		{
-			if (!supportsSaml2(spDef))
+			if (!MetaToConfigConverterHelper.supportsSaml2(spDef))
 			{
 				log.trace("SP of entity " + entityId +	" doesn't support SAML2 - ignoring.");
 				continue;
@@ -99,7 +100,7 @@ public class MetaToIDPConfigConverter extends AbstractMetaToConfigConverter
 			{
 				try
 				{
-					updatePKICerts(certs, entityId, IDP_META_CERT );
+					updatePKICerts(certs, entityId, IDP_META_CERT);
 				} catch (EngineException e)
 				{
 					log.error("Adding remote SPs certs to local certs store failed, "
@@ -127,9 +128,9 @@ public class MetaToIDPConfigConverter extends AbstractMetaToConfigConverter
 			EndpointType soapSLOEndpoint = selectEndpointByBinding(spDef.getSingleLogoutServiceArray(), 
 					SAMLConstants.BINDING_SOAP);
 		
-			UIInfoType uiInfo = parseMDUIInfo(spDef.getExtensions(), entityId);
-			Map<String, String> names = getLocalizedNames(uiInfo, spDef, meta);
-			Map<String, LogoType> logos = getLocalizedLogos(uiInfo);
+			UIInfoType uiInfo = MetaToConfigConverterHelper.parseMDUIInfo(spDef.getExtensions(), entityId);
+			Map<String, String> names = MetaToConfigConverterHelper.getLocalizedNames(msg, uiInfo, spDef, meta);
+			Map<String, LogoType> logos = MetaToConfigConverterHelper.getLocalizedLogos(uiInfo);
 				
 			addEntryToProperties(entityId, defaultEndpoint, endpointURLs, 
 					soapSLOEndpoint, postSLOEndpoint, redirectSLOEndpoint,
@@ -209,7 +210,7 @@ public class MetaToIDPConfigConverter extends AbstractMetaToConfigConverter
 						logo.getValue().getStringValue());
 		}
 					
-		log.debug("Added an accepted SP loaded from SAML metadata: " + entityId + " with " + 
+		log.info("Added an accepted SP loaded from SAML metadata: " + entityId + " with " + 
 				defaultServiceEndpoint + " default return url");		
 	}
 		

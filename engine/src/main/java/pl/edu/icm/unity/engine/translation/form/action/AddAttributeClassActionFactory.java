@@ -13,6 +13,9 @@ import org.mvel2.MVEL;
 import org.springframework.stereotype.Component;
 
 import pl.edu.icm.unity.base.utils.Log;
+import pl.edu.icm.unity.engine.api.mvel.MVELExpressionContext;
+import pl.edu.icm.unity.engine.api.translation.form.RegistrationContext;
+import pl.edu.icm.unity.engine.api.translation.form.RegistrationMVELContextKey;
 import pl.edu.icm.unity.engine.api.translation.form.RegistrationTranslationAction;
 import pl.edu.icm.unity.engine.api.translation.form.TranslatedRegistrationRequest;
 import pl.edu.icm.unity.exceptions.EngineException;
@@ -36,9 +39,11 @@ public class AddAttributeClassActionFactory extends AbstractRegistrationTranslat
 				new ActionParameterDefinition("group", 
 						"RegTranslationAction.addAttributeClass.paramDesc.group", 
 						Type.UNITY_GROUP, true),
-				new ActionParameterDefinition("attribute class", 
-						"RegTranslationAction.addAttributeClass.paramDesc.ac", 
-						Type.EXPRESSION, true)
+				new ActionParameterDefinition("attribute class", "RegTranslationAction.addAttributeClass.paramDesc.ac",
+						Type.EXPRESSION, true,
+						MVELExpressionContext.builder().withTitleKey("RegTranslationAction.addAttributeClass.editor.title")
+								.withEvalToKey("RegTranslationAction.addAttributeClass.editor.evalTo")
+								.withVars(RegistrationMVELContextKey.toMap()).build())
 		});
 	}
 
@@ -62,7 +67,7 @@ public class AddAttributeClassActionFactory extends AbstractRegistrationTranslat
 		}
 
 		@Override
-		protected void invokeWrapped(TranslatedRegistrationRequest state, Object mvelCtx,
+		protected void invokeWrapped(TranslatedRegistrationRequest state, Object mvelCtx, RegistrationContext context,
 				String currentProfile) throws EngineException
 		{
 			Object result = MVEL.executeExpression(expression, mvelCtx, new HashMap<>());

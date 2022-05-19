@@ -28,6 +28,7 @@ public class StringAttributeSyntax extends AbstractStringAttributeSyntax
 	private int minLength = 0;
 	private int maxLength = 10240;
 	private Pattern pattern = null;
+	private boolean editWithTextArea;
 	
 	
 	public StringAttributeSyntax()
@@ -54,6 +55,7 @@ public class StringAttributeSyntax extends AbstractStringAttributeSyntax
 		main.put("regexp", getRegexp());
 		main.put("minLength", getMinLength());
 		main.put("maxLength", getMaxLength());
+		main.put("editWithTextArea", String.valueOf(editWithTextArea));
 		return main;
 	}
 
@@ -67,6 +69,7 @@ public class StringAttributeSyntax extends AbstractStringAttributeSyntax
 		setRegexp(jsonN.get("regexp").asText());
 		minLength = jsonN.get("minLength").asInt();
 		maxLength = jsonN.get("maxLength").asInt();
+		editWithTextArea = jsonN.has("editWithTextArea") && jsonN.get("editWithTextArea").asBoolean();
 	}
 
 	/**
@@ -86,7 +89,7 @@ public class StringAttributeSyntax extends AbstractStringAttributeSyntax
 		if (pattern != null)
 			if (!pattern.matcher(value).matches())
 				throw new IllegalAttributeValueException("Value must match the " +
-						"regualr expression: " + getRegexp());
+						"regular expression: " + getRegexp());
 	}
 
 
@@ -133,6 +136,12 @@ public class StringAttributeSyntax extends AbstractStringAttributeSyntax
 	{
 		return maxLength;
 	}
+	
+	@Override
+	public int getMaxSize()
+	{
+		return maxLength;
+	}
 
 	/**
 	 * @param maxLength the maxLength to set
@@ -146,6 +155,17 @@ public class StringAttributeSyntax extends AbstractStringAttributeSyntax
 	}
 	
 	
+	public boolean isEditWithTextArea()
+	{
+		return editWithTextArea;
+	}
+
+	public void setEditWithTextArea(boolean editWithTextArea)
+	{
+		this.editWithTextArea = editWithTextArea;
+	}
+
+
 	@Component
 	public static class Factory extends AbstractAttributeValueSyntaxFactory<String>
 	{

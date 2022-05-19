@@ -50,6 +50,7 @@ import pl.edu.icm.unity.base.utils.Log;
 import pl.edu.icm.unity.engine.api.PKIManagement;
 import pl.edu.icm.unity.engine.api.TranslationProfileManagement;
 import pl.edu.icm.unity.engine.api.identity.IdentityTypesRegistry;
+import pl.edu.icm.unity.engine.api.translation.ExternalDataParser;
 import pl.edu.icm.unity.engine.api.translation.TranslationCondition;
 import pl.edu.icm.unity.engine.api.translation.in.IdentityEffectMode;
 import pl.edu.icm.unity.engine.translation.in.InputTranslationRule;
@@ -70,13 +71,14 @@ import pl.edu.icm.unity.types.translation.TranslationProfile;
 
 public class TestECP extends AbstractTestIdpBase
 {
-	private static final Logger log = Log.getLogger(Log.U_SERVER, TestECP.class);
+	private static final Logger log = Log.getLogger(Log.U_SERVER_SAML, TestECP.class);
 	
 	private static final String ECP_ENDP_CFG = 
 			"unity.saml.requester.requesterEntityId=http://ecpSP.example.com\n" +
 			"unity.saml.requester.metadataPath=metadata\n" +
 			"unity.saml.requester.remoteIdp.1.address=http://localhost:52443/\n" +
 			"unity.saml.requester.remoteIdp.1.samlId=http://example-saml-idp.org\n" +
+			"unity.saml.requester.remoteIdp.1.binding=SOAP\n" +
 			"unity.saml.requester.remoteIdp.1.certificate=MAIN\n" +
 			"unity.saml.requester.remoteIdp.1.translationProfile=testP\n" + 
 			"unity.saml.requester.jwt.credential=MAIN\n" +
@@ -88,6 +90,8 @@ public class TestECP extends AbstractTestIdpBase
 	private PKIManagement pkiMan;
 	@Autowired
 	private IdentityTypesRegistry idTypesReg;
+	@Autowired
+	private ExternalDataParser parser;
 	
 	@Before
 	@Override
@@ -99,12 +103,12 @@ public class TestECP extends AbstractTestIdpBase
 					"desc",	Lists.newArrayList(), ECP_ENDP_CFG, REALM_NAME);
 		
 		endpointMan.deploy(ECPEndpointFactory.NAME, "endpointECP", "/ecp", cfg);
-		List<ResolvedEndpoint> endpoints = endpointMan.getEndpoints();
+		List<ResolvedEndpoint> endpoints = endpointMan.getDeployedEndpoints();
 		assertEquals(2, endpoints.size());
 		log.info("Deployed endpoints: {}", endpoints);
 		
 		List<InputTranslationRule> rules = new ArrayList<>();
-		MapIdentityActionFactory factory = new MapIdentityActionFactory(idTypesReg);
+		MapIdentityActionFactory factory = new MapIdentityActionFactory(idTypesReg, parser);
 			
 		InputTranslationRule mapId = new InputTranslationRule(
 				factory.getInstance("userName", "attr['unity:identity:userName']", 
@@ -121,8 +125,6 @@ public class TestECP extends AbstractTestIdpBase
 		EnvelopeDocument samlReqDoc = getSamlRequest();
 		EnvelopeDocument samlRespDoc = sendToIdP(samlReqDoc);
 		sendResponseToSP(samlRespDoc, samlReqDoc);
-		
-		
 	}
 
 	private void sendResponseToSP(EnvelopeDocument samlRespDoc, EnvelopeDocument samlReqDoc) throws Exception
@@ -158,7 +160,7 @@ public class TestECP extends AbstractTestIdpBase
 			String resp = EntityUtils.toString(entity);
 			System.out.println(resp);
 			JWTClaimsSet claims = JWTUtils.parseAndValidate(resp, pkiMan.getCredential("MAIN"));
-			System.out.println("GOT:\n" + claims.toJSONObject().toJSONString());
+			System.out.println("GOT:\n" + claims.toString());
 			Assert.assertTrue(claims.getIssuer().contains("https://localhost:52443"));
 		} else
 			Assert.fail("No HTTP response");
@@ -196,7 +198,7 @@ public class TestECP extends AbstractTestIdpBase
 		
 		httpPost.setEntity(new StringEntity(envDoc2.xmlText(), ContentType.APPLICATION_XML));
 		
-		List<ResolvedEndpoint> endpoints = endpointMan.getEndpoints();
+		List<ResolvedEndpoint> endpoints = endpointMan.getDeployedEndpoints();
 		log.info("Deployed endpoints: {}", endpoints);
 		
 		HttpResponse response = httpclient.execute(targetHost, httpPost, context);

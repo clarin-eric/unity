@@ -6,6 +6,7 @@ package pl.edu.icm.unity.engine.msgtemplate;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.Charset;
 import java.util.AbstractMap;
 import java.util.Collection;
 import java.util.HashSet;
@@ -17,7 +18,7 @@ import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 import org.apache.commons.io.FileUtils;
-import org.apache.log4j.Logger;
+import org.apache.logging.log4j.Logger;
 
 import eu.unicore.util.configuration.ConfigIncludesProcessor;
 import eu.unicore.util.configuration.ConfigurationException;
@@ -32,7 +33,7 @@ import pl.edu.icm.unity.types.I18nMessage;
 import pl.edu.icm.unity.types.I18nString;
 import pl.edu.icm.unity.types.basic.MessageTemplate;
 import pl.edu.icm.unity.types.basic.MessageType;
-import pl.edu.icm.unity.types.basic.NotificationChannel;
+import pl.edu.icm.unity.types.basic.NotificationChannelInfo;
 
 /**
  * Loads message templates from file configuration
@@ -41,7 +42,7 @@ import pl.edu.icm.unity.types.basic.NotificationChannel;
  */
 class MessageTemplateLoader
 {
-	private static final Logger logLegacy = Log.getLegacyLogger(Log.U_SERVER_CFG, 
+	private static final Logger logLegacy = Log.getLogger(Log.U_SERVER_CFG, 
 			MessageTemplateLoader.class);
 	private static final org.apache.logging.log4j.Logger log = Log.getLogger(Log.U_SERVER_CFG, MessageTemplateLoader.class);
 	
@@ -77,7 +78,7 @@ class MessageTemplateLoader
 	
 	void initializeMsgTemplates(Properties props, Predicate<String> filter)
 	{
-		Map<String, NotificationChannel> notificationChannels;
+		Map<String, NotificationChannelInfo> notificationChannels;
 		try
 		{
 			notificationChannels = notificationMan.getNotificationChannels();
@@ -124,7 +125,7 @@ class MessageTemplateLoader
 		}
 	}
 	
-	private void addMessageTemplate(String key, Map<String, NotificationChannel> notificationChannels,
+	private void addMessageTemplate(String key, Map<String, NotificationChannelInfo> notificationChannels,
 			Map<String, MessageTemplate> existingTemplates, Properties props) throws EngineException
 	{
 		if (existingTemplates.containsKey(key))
@@ -136,7 +137,7 @@ class MessageTemplateLoader
 		msgTemplatesManagement.addTemplate(templ);
 	}
 
-	private void addOrUpdateMessageTemplate(String key, Map<String, NotificationChannel> notificationChannels,
+	private void addOrUpdateMessageTemplate(String key, Map<String, NotificationChannelInfo> notificationChannels,
 			Map<String, MessageTemplate> existingTemplates, Properties props) throws EngineException
 	{
 		MessageTemplate templ = loadTemplate(props, key);
@@ -154,12 +155,12 @@ class MessageTemplateLoader
 	}
 	
 	private boolean verifyNotificationChannelExists(MessageTemplate templ, 
-			Map<String, NotificationChannel> notificationChannels)
+			Map<String, NotificationChannelInfo> notificationChannels)
 	{
 		String channel = templ.getNotificationChannel();
 		if (!channel.isEmpty() && !notificationChannels.keySet().contains(channel))
 		{
-			log.debug("Skip adding message template {}: configured notification channel {} does not exist",
+			log.info("Skip adding message template {}: configured notification channel {} does not exist",
 					templ.getName(), channel);
 			return false;
 		}
@@ -223,7 +224,7 @@ class MessageTemplateLoader
 	{
 		try
 		{
-			return FileUtils.readFileToString(new File(bodyFile));
+			return FileUtils.readFileToString(new File(bodyFile), Charset.defaultCharset());
 		} catch (IOException e)
 		{
 			throw new ConfigurationException("Problem loading template " + id + " bodyFile "

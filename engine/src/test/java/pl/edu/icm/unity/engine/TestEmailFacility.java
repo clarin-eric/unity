@@ -13,7 +13,7 @@ import java.util.List;
 import org.junit.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
-import pl.edu.icm.unity.engine.notifications.EmailFacility;
+import pl.edu.icm.unity.engine.notifications.email.EmailFacility;
 import pl.edu.icm.unity.stdext.attr.StringAttribute;
 import pl.edu.icm.unity.stdext.attr.StringAttributeSyntax;
 import pl.edu.icm.unity.stdext.attr.VerifiableEmailAttribute;
@@ -84,7 +84,7 @@ public class TestEmailFacility extends DBIntegrationTestBase
 		setupPasswordAuthn();
 
 		Identity entity = idsMan.addEntity(new IdentityParam(EmailIdentity.ID, "email2@ex.com"), 
-				DBIntegrationTestBase.CRED_REQ_PASS, EntityState.valid, false);
+				DBIntegrationTestBase.CRED_REQ_PASS, EntityState.valid);
 		EntityParam entityP = new EntityParam(entity);
 
 		Attribute attribute = StringAttribute.of(InitializerCommon.EMAIL_ATTR, 
@@ -114,7 +114,7 @@ public class TestEmailFacility extends DBIntegrationTestBase
 		setupPasswordAuthn();
 
 		Identity entity = idsMan.addEntity(new IdentityParam(IdentifierIdentity.ID, "123"), 
-				DBIntegrationTestBase.CRED_REQ_PASS, EntityState.valid, false);
+				DBIntegrationTestBase.CRED_REQ_PASS, EntityState.valid);
 		EntityParam entityP = new EntityParam(entity);
 
 		Attribute attribute = StringAttribute.of(InitializerCommon.EMAIL_ATTR, 
@@ -131,7 +131,7 @@ public class TestEmailFacility extends DBIntegrationTestBase
 		setupPasswordAuthn();
 		
 		Identity entity = idsMan.addEntity(new IdentityParam(IdentifierIdentity.ID, "123"), 
-				DBIntegrationTestBase.CRED_REQ_PASS, EntityState.valid, false);
+				DBIntegrationTestBase.CRED_REQ_PASS, EntityState.valid);
 		EntityParam entityP = new EntityParam(entity);
 		
 		setEmailAttr(entityP, plainA);
@@ -148,13 +148,13 @@ public class TestEmailFacility extends DBIntegrationTestBase
 		setupPasswordAuthn();
 		
 		Identity entity = idsMan.addEntity(new IdentityParam(EmailIdentity.ID, plainI.getValue()), 
-				DBIntegrationTestBase.CRED_REQ_PASS, EntityState.valid, false);
+				DBIntegrationTestBase.CRED_REQ_PASS, EntityState.valid);
 		EntityParam entityP = new EntityParam(entity);
 
 		setEmailAttr(entityP, plainA);
 		check(entityP, plainI.getValue());
 		
-		idsMan.addIdentity(EmailIdentity.toIdentityParam(onlyConfirmedI, null, null), entityP, false);
+		idsMan.addIdentity(EmailIdentity.toIdentityParam(onlyConfirmedI, null, null), entityP);
 		check(entityP, onlyConfirmedI.getValue());
 	}
 	
@@ -165,13 +165,13 @@ public class TestEmailFacility extends DBIntegrationTestBase
 		setupPasswordAuthn();
 		
 		Identity entity = idsMan.addEntity(new IdentityParam(EmailIdentity.ID, plainI.getValue()), 
-				DBIntegrationTestBase.CRED_REQ_PASS, EntityState.valid, false);
+				DBIntegrationTestBase.CRED_REQ_PASS, EntityState.valid);
 		EntityParam entityP = new EntityParam(entity);
 
 		setEmailAttr(entityP, plainA, onlyConfirmedA);
 		check(entityP, onlyConfirmedA.getValue());
 		
-		idsMan.addIdentity(EmailIdentity.toIdentityParam(onlyConfirmedI, null, null), entityP, false);
+		idsMan.addIdentity(EmailIdentity.toIdentityParam(onlyConfirmedI, null, null), entityP);
 		check(entityP, onlyConfirmedI.getValue());
 	}
 

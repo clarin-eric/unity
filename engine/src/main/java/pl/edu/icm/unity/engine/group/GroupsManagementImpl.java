@@ -4,6 +4,10 @@
  */
 package pl.edu.icm.unity.engine.group;
 
+import static java.util.Objects.nonNull;
+import static pl.edu.icm.unity.types.basic.audit.AuditEventTag.GROUPS;
+import static pl.edu.icm.unity.types.basic.audit.AuditEventTag.MEMBERS;
+
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -17,17 +21,24 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
 
+import com.google.common.collect.ImmutableMap;
+
+import pl.edu.icm.unity.MessageSource;
+import pl.edu.icm.unity.base.capacityLimit.CapacityLimitName;
 import pl.edu.icm.unity.engine.api.GroupsManagement;
 import pl.edu.icm.unity.engine.api.attributes.AttributeClassHelper;
 import pl.edu.icm.unity.engine.api.authn.InvocationContext;
 import pl.edu.icm.unity.engine.api.confirmation.EmailConfirmationManager;
 import pl.edu.icm.unity.engine.api.identity.EntityResolver;
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
 import pl.edu.icm.unity.engine.api.registration.GroupPatternMatcher;
 import pl.edu.icm.unity.engine.attribute.AttributeClassUtil;
 import pl.edu.icm.unity.engine.attribute.AttributesHelper;
-import pl.edu.icm.unity.engine.authz.AuthorizationManager;
+import pl.edu.icm.unity.engine.audit.AuditEventTrigger;
+import pl.edu.icm.unity.engine.audit.AuditEventTrigger.AuditEventTriggerBuilder;
+import pl.edu.icm.unity.engine.audit.AuditPublisher;
 import pl.edu.icm.unity.engine.authz.AuthzCapability;
+import pl.edu.icm.unity.engine.authz.InternalAuthorizationManager;
+import pl.edu.icm.unity.engine.capacityLimits.InternalCapacityLimitVerificator;
 import pl.edu.icm.unity.engine.events.InvocationEventProducer;
 import pl.edu.icm.unity.exceptions.AuthorizationException;
 import pl.edu.icm.unity.exceptions.EngineException;
@@ -45,8 +56,11 @@ import pl.edu.icm.unity.types.basic.AttributeExt;
 import pl.edu.icm.unity.types.basic.AttributeType;
 import pl.edu.icm.unity.types.basic.EntityParam;
 import pl.edu.icm.unity.types.basic.Group;
+import pl.edu.icm.unity.types.basic.GroupsChain;
 import pl.edu.icm.unity.types.basic.GroupContents;
 import pl.edu.icm.unity.types.basic.GroupMembership;
+import pl.edu.icm.unity.types.basic.audit.AuditEventAction;
+import pl.edu.icm.unity.types.basic.audit.AuditEventType;
 
 
 /**
@@ -66,22 +80,25 @@ public class GroupsManagementImpl implements GroupsManagement
 	private AttributeDAO dbAttributes;
 	private AttributeTypeDAO attributeTypeDAO;
 	private AttributeClassDB acDB;
-	private AuthorizationManager authz;
+	private InternalAuthorizationManager authz;
 	private AttributesHelper attributesHelper;
 	private EntityResolver idResolver;
 	private EmailConfirmationManager confirmationManager;
 	private TransactionalRunner tx;
 	private AttributeClassUtil acUtil;
-	private UnityMessageSource msg;
+	private MessageSource msg;
+	private AuditPublisher audit;
+	private InternalCapacityLimitVerificator capacityLimitVerificator;
 
 	
 	@Autowired
 	public GroupsManagementImpl(GroupDAO dbGroups, MembershipDAO membershipDAO,
 			GroupHelper groupHelper, AttributeDAO dbAttributes,
 			AttributeTypeDAO attributeTypeDAO, AttributeClassDB acDB,
-			AuthorizationManager authz, AttributesHelper attributesHelper,
+			InternalAuthorizationManager authz, AttributesHelper attributesHelper,
 			EntityResolver idResolver, EmailConfirmationManager confirmationManager,
-			AttributeClassUtil acUtil, TransactionalRunner tx, UnityMessageSource msg)
+			AttributeClassUtil acUtil, TransactionalRunner tx, MessageSource msg,
+			AuditPublisher audit, InternalCapacityLimitVerificator capacityLimitVerificator)
 	{
 		this.dbGroups = dbGroups;
 		this.membershipDAO = membershipDAO;
@@ -96,24 +113,72 @@ public class GroupsManagementImpl implements GroupsManagement
 		this.acUtil = acUtil;
 		this.tx = tx;
 		this.msg = msg;
+		this.audit = audit;
+		this.capacityLimitVerificator = capacityLimitVerificator;
 	}
 
 	@Override
 	@Transactional
-	public void addGroup(Group toAdd) throws EngineException
+	public void addGroup(Group toAdd, boolean withParents) throws EngineException
 	{
 		authz.checkAuthorization(toAdd.getParentPath(), AuthzCapability.groupModify);
+		capacityLimitVerificator.assertInSystemLimitForSingleAdd(CapacityLimitName.GroupsCount, () -> dbGroups.getCount());
 		groupHelper.validateGroupStatements(toAdd);
 		AttributeClassUtil.validateAttributeClasses(toAdd.getAttributesClasses(), acDB);
-		if (!dbGroups.exists(toAdd.getParentPath()))
+
+		boolean groupExists = dbGroups.exists(toAdd.getParentPath());
+		if (!groupExists && withParents)
+			addGroup(new Group(toAdd.getParentPath()), withParents);
+		else if (!groupExists)
 			throw new IllegalArgumentException("Parent group " + toAdd.getParentPath() + " does not exist");
-		
+
 		if (toAdd.isPublic())
-		{	
+		{
 			assertParentIsPrivate(toAdd);
 		}
-		
+
 		dbGroups.create(toAdd);
+		audit.log(AuditEventTrigger.builder()
+			.type(AuditEventType.GROUP)
+			.action(AuditEventAction.ADD)
+			.name(toAdd.getName())
+			.tags(GROUPS));
+	}
+	
+	@Override
+	@Transactional
+	public void addGroups(Set<Group> toAdd) throws EngineException
+	{
+		Set<Group> onlyParentGroups = Group.getRootsOfSet(toAdd);
+		for (Group parent : onlyParentGroups)
+		{
+			authz.checkAuthorization(parent.getParentPath(), AuthzCapability.groupModify);
+		}
+		capacityLimitVerificator.assertInSystemLimit(CapacityLimitName.GroupsCount,
+				() -> dbGroups.getCount() + toAdd.size());
+		List<Group> groupsSortedByPath = toAdd.stream().sorted()
+				.collect(Collectors.toList());
+
+		for (Group groupToAdd : groupsSortedByPath)
+		{
+			if (!dbGroups.exists(groupToAdd.getParentPath()))
+			{
+				throw new IllegalArgumentException("Parent group " + groupToAdd.getParentPath() + " does not exist");
+			}
+				
+			if (groupToAdd.isPublic())
+			{
+				assertParentIsPrivate(groupToAdd);
+			}
+			dbGroups.create(groupToAdd);
+		}
+		
+		for (Group addedGroup : groupsSortedByPath)
+		{
+			audit.log(AuditEventTrigger.builder().type(AuditEventType.GROUP).action(AuditEventAction.ADD)
+					.name(addedGroup.getName()).tags(GROUPS));
+		}
+		
 	}
 
 	@Override
@@ -126,6 +191,11 @@ public class GroupsManagementImpl implements GroupsManagement
 		if (!recursive && !getSubGroups(path).isEmpty())
 			throw new IllegalGroupValueException("The group contains subgroups");
 		dbGroups.delete(path);
+		audit.log(AuditEventTrigger.builder()
+				.type(AuditEventType.GROUP)
+				.action(AuditEventAction.REMOVE)
+				.name(path)
+				.tags(GROUPS));
 	}
 
 	@Override
@@ -182,6 +252,12 @@ public class GroupsManagementImpl implements GroupsManagement
 			if (Group.isChildOrSame(group, path))
 			{
 				membershipDAO.deleteByKey(entityId, group);
+				audit.log(AuditEventTrigger.builder()
+						.type(AuditEventType.MEMBERSHIP)
+						.action(AuditEventAction.REMOVE)
+						.name(group)
+						.subject(entityId)
+						.tags(MEMBERS, GROUPS));
 				dbAttributes.deleteAttributesInGroup(entityId, group);
 			}
 		}
@@ -269,10 +345,17 @@ public class GroupsManagementImpl implements GroupsManagement
 		}
 		return ret;
 	}
-	
+
 	@Override
 	@Transactional
 	public void updateGroup(String path, Group group) throws EngineException
+	{
+		updateGroup(path, group, null, null);
+	}
+	
+	@Override
+	@Transactional
+	public void updateGroup(String path, Group group, String changedProperty, String newValue) throws EngineException
 	{
 		authz.checkAuthorization(path, AuthzCapability.groupModify);
 		if (!path.equals(group.toString()))
@@ -305,6 +388,15 @@ public class GroupsManagementImpl implements GroupsManagement
 		}
 		
 		dbGroups.updateByName(path, group);
+		AuditEventTriggerBuilder auditEvent = AuditEventTrigger.builder()
+				.type(AuditEventType.GROUP)
+				.action(AuditEventAction.UPDATE)
+				.name(group.getName())
+				.tags(GROUPS);
+		if (nonNull(changedProperty) && nonNull(newValue)) {
+			auditEvent.details(ImmutableMap.of("action", changedProperty, "value", newValue));
+		}
+		audit.log(auditEvent);
 	}
 	
 	
@@ -334,11 +426,34 @@ public class GroupsManagementImpl implements GroupsManagement
 
 	@Transactional
 	@Override
+	public void addGroup(Group toAdd) throws EngineException
+	{
+		addGroup(toAdd, false);
+	}
+
+	@Transactional
+	@Override
+	public GroupsChain getGroupsChain(String path)
+	{
+		authz.checkAuthorizationRT("/", AuthzCapability.read);
+		return new GroupsChain(dbGroups.getGroupChain(path));
+	}
+	
+	@Transactional
+	@Override
 	public List<Group> getGroupsByWildcard(String pathWildcard)
 	{
 		authz.checkAuthorizationRT("/", AuthzCapability.read);
 		List<Group> all = dbGroups.getAll();
 		return GroupPatternMatcher.filterMatching(all, pathWildcard);
+	}
+	
+	@Transactional
+	@Override
+	public Map<String, Group> getAllGroups()
+	{
+		authz.checkAuthorizationRT("/", AuthzCapability.read);
+		return dbGroups.getAllAsMap();
 	}
 	
 	private Set<String> getSubGroupsInclusive(String root)

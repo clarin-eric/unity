@@ -8,7 +8,6 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
-import java.util.Set;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
@@ -17,17 +16,21 @@ import org.springframework.beans.factory.ObjectFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import pl.edu.icm.unity.MessageSource;
 import pl.edu.icm.unity.engine.api.authn.AbstractCredentialRetrieval;
 import pl.edu.icm.unity.engine.api.authn.AbstractCredentialRetrievalFactory;
+import pl.edu.icm.unity.engine.api.authn.AuthenticationStepContext;
+import pl.edu.icm.unity.engine.api.authn.AuthenticatorStepContext;
 import pl.edu.icm.unity.engine.api.authn.CredentialExchange;
-import pl.edu.icm.unity.engine.api.endpoint.SharedEndpointManagement;
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
-import pl.edu.icm.unity.engine.api.server.NetworkServer;
+import pl.edu.icm.unity.engine.api.files.URIAccessService;
 import pl.edu.icm.unity.engine.api.utils.PrototypeComponent;
 import pl.edu.icm.unity.saml.SamlProperties.Binding;
 import pl.edu.icm.unity.saml.sp.SAMLExchange;
-import pl.edu.icm.unity.saml.sp.SAMLSPProperties;
 import pl.edu.icm.unity.saml.sp.SamlContextManagement;
+import pl.edu.icm.unity.saml.sp.config.TrustedIdPConfiguration;
+import pl.edu.icm.unity.saml.sp.config.TrustedIdPKey;
+import pl.edu.icm.unity.saml.sp.config.TrustedIdPs;
+import pl.edu.icm.unity.types.authn.AuthenticationOptionKey;
 import pl.edu.icm.unity.webui.authn.ProxyAuthenticationCapable;
 import pl.edu.icm.unity.webui.authn.VaadinAuthentication;
 
@@ -43,20 +46,20 @@ public class SAMLRetrieval extends AbstractCredentialRetrieval<SAMLExchange>
 {
 	public static final String NAME = "web-saml2";
 	public static final String DESC = "WebSAMLRetrievalFactory.desc";
-	public static final String REMOTE_AUTHN_CONTEXT = SAMLRetrieval.class.getName() + ".REMOTE_AUTHN_CONTEXT";
 	
-	private UnityMessageSource msg;
+	private MessageSource msg;
 	private SamlContextManagement samlContextManagement;
 	private SAMLProxyAuthnHandler proxyAuthnHandler;
+	private URIAccessService uriAccessService;
 	
 	@Autowired
-	public SAMLRetrieval(UnityMessageSource msg, NetworkServer jettyServer, 
-			SharedEndpointManagement sharedEndpointMan,
-			SamlContextManagement samlContextManagement)
+	public SAMLRetrieval(MessageSource msg,
+			SamlContextManagement samlContextManagement, URIAccessService uriAccessService)
 	{
 		super(VaadinAuthentication.NAME);
 		this.msg = msg;
 		this.samlContextManagement = samlContextManagement;
+		this.uriAccessService = uriAccessService;
 	}
 
 	@Override
@@ -71,25 +74,25 @@ public class SAMLRetrieval extends AbstractCredentialRetrieval<SAMLExchange>
 	}
 
 	@Override
-	public Collection<VaadinAuthenticationUI> createUIInstance(Context context)
+	public Collection<VaadinAuthenticationUI> createUIInstance(Context context, AuthenticatorStepContext authnStepContext)
 	{
 		List<VaadinAuthenticationUI> ret = new ArrayList<>();
-		SAMLSPProperties samlProperties = credentialExchange.getSamlValidatorSettings();
-		Set<String> allIdps = samlProperties.getStructuredListKeys(SAMLSPProperties.IDP_PREFIX);
-		for (String configKey: allIdps)
-			if (samlProperties.isIdPDefinitionComplete(configKey))
+		TrustedIdPs trustedIdps = credentialExchange.getTrustedIdPs();
+		for (TrustedIdPConfiguration idp: trustedIdps.getAll())
+		{
+			TrustedIdPKey idpKey = idp.key;
+			Binding binding = idp.binding;
+			if (binding == Binding.HTTP_POST || binding == Binding.HTTP_REDIRECT)
 			{
-				String idpKey = configKey.substring(SAMLSPProperties.IDP_PREFIX.length(), 
-						configKey.length()-1);
-				Binding binding = samlProperties.getEnumValue(configKey + 
-						SAMLSPProperties.IDP_BINDING, Binding.class);
-				if (binding == Binding.HTTP_POST || binding == Binding.HTTP_REDIRECT)
-				{
-					ret.add(new SAMLRetrievalUI(msg, credentialExchange, 
-							samlContextManagement, idpKey, 
-							configKey, getAuthenticatorId(), context));
-				}
+				AuthenticationOptionKey authenticationOptionKey = 
+						new AuthenticationOptionKey(getAuthenticatorId(), idpKey.asString());
+
+				ret.add(new SAMLRetrievalUI(msg, uriAccessService, credentialExchange, 
+						samlContextManagement, 
+						idp.key, context,
+						new AuthenticationStepContext(authnStepContext, authenticationOptionKey)));
 			}
+		}
 		return ret;
 	}
 
@@ -98,7 +101,14 @@ public class SAMLRetrieval extends AbstractCredentialRetrieval<SAMLExchange>
 	{
 		return true;
 	}
-	
+
+
+	@Override
+	public boolean isMultiOption()
+	{
+		return true;
+	}
+
 	@Override
 	public void setCredentialExchange(CredentialExchange e, String id)
 	{
@@ -109,11 +119,18 @@ public class SAMLRetrieval extends AbstractCredentialRetrieval<SAMLExchange>
 	
 	@Override
 	public boolean triggerAutomatedAuthentication(HttpServletRequest httpRequest,
-			HttpServletResponse httpResponse, String endpointPath) throws IOException
+			HttpServletResponse httpResponse, String endpointPath, AuthenticatorStepContext context) throws IOException
 	{
-		return proxyAuthnHandler.triggerAutomatedAuthentication(httpRequest, httpResponse, endpointPath);
+		return proxyAuthnHandler.triggerAutomatedAuthentication(httpRequest, httpResponse, endpointPath, context);
 	}
 
+	@Override
+	public void triggerAutomatedUIAuthentication(VaadinAuthenticationUI authenticatorUI)
+	{
+		SAMLRetrievalUI ui = (SAMLRetrievalUI) authenticatorUI;
+		ui.startLogin();
+	}
+	
 	@Override
 	public void destroy()
 	{
@@ -136,13 +153,4 @@ public class SAMLRetrieval extends AbstractCredentialRetrieval<SAMLExchange>
 		return true;
 	}
 }
-
-
-
-
-
-
-
-
-
 

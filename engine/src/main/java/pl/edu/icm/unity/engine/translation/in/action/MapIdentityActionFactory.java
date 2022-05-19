@@ -18,8 +18,11 @@ import pl.edu.icm.unity.base.utils.Log;
 import pl.edu.icm.unity.engine.api.authn.remote.RemotelyAuthenticatedInput;
 import pl.edu.icm.unity.engine.api.identity.IdentityTypeDefinition;
 import pl.edu.icm.unity.engine.api.identity.IdentityTypesRegistry;
+import pl.edu.icm.unity.engine.api.mvel.MVELExpressionContext;
+import pl.edu.icm.unity.engine.api.translation.ExternalDataParser;
 import pl.edu.icm.unity.engine.api.translation.in.IdentityEffectMode;
 import pl.edu.icm.unity.engine.api.translation.in.InputTranslationAction;
+import pl.edu.icm.unity.engine.api.translation.in.InputTranslationMVELContextKey;
 import pl.edu.icm.unity.engine.api.translation.in.MappedIdentity;
 import pl.edu.icm.unity.engine.api.translation.in.MappingResult;
 import pl.edu.icm.unity.exceptions.EngineException;
@@ -38,10 +41,11 @@ public class MapIdentityActionFactory extends AbstractInputTranslationActionFact
 {
 	public static final String NAME = "mapIdentity";
 	
-	private IdentityTypesRegistry idsRegistry;
+	private final IdentityTypesRegistry idsRegistry;
+	private final ExternalDataParser parser;
 	
 	@Autowired
-	public MapIdentityActionFactory(IdentityTypesRegistry idsRegistry)
+	public MapIdentityActionFactory(IdentityTypesRegistry idsRegistry, ExternalDataParser parser)
 	{
 		super(NAME, new ActionParameterDefinition[] {
 				new ActionParameterDefinition(
@@ -51,7 +55,10 @@ public class MapIdentityActionFactory extends AbstractInputTranslationActionFact
 				new ActionParameterDefinition(
 						"expression",
 						"TranslationAction.mapIdentity.paramDesc.expression",
-						Type.EXPRESSION, true),
+						Type.EXPRESSION, true,
+						MVELExpressionContext.builder().withTitleKey("TranslationAction.mapIdentity.editor.title")
+							.withEvalToKey("TranslationAction.mapIdentity.editor.evalTo")
+							.withVars(InputTranslationMVELContextKey.toMap()).build()),
 				new ActionParameterDefinition(
 						"credential requirement",
 						"TranslationAction.mapIdentity.paramDesc.credentialRequirement",
@@ -61,12 +68,13 @@ public class MapIdentityActionFactory extends AbstractInputTranslationActionFact
 						"TranslationAction.mapIdentity.paramDesc.effect",
 						IdentityEffectMode.class, true)});
 		this.idsRegistry = idsRegistry;
+		this.parser = parser;
 	}
 
 	@Override
 	public InputTranslationAction getInstance(String... parameters)
 	{
-		return new MapIdentityAction(parameters, getActionType(), idsRegistry);
+		return new MapIdentityAction(parameters, getActionType(), idsRegistry, parser);
 	}
 	
 	
@@ -78,12 +86,18 @@ public class MapIdentityActionFactory extends AbstractInputTranslationActionFact
 		private Serializable expressionCompiled;
 		private IdentityEffectMode mode;
 		private IdentityTypeDefinition idTypeResolved;
+		private ExternalDataParser parser;
 
-		public MapIdentityAction(String[] params, TranslationActionType desc, IdentityTypesRegistry idsRegistry) 
+		public MapIdentityAction(String[] params, TranslationActionType desc, IdentityTypesRegistry idsRegistry,
+				ExternalDataParser parser) 
 		{
 			super(desc, params);
+			this.parser = parser;
 			setParameters(params);
 			idTypeResolved = idsRegistry.getByName(unityType);
+			if (idTypeResolved.isDynamic() && mode.mayModifyIdentity())
+				throw new IllegalArgumentException("Dynamic identity type '" + idTypeResolved + 
+						"' can be only used with modes which are matching only.");
 		}
 		
 		@Override
@@ -101,7 +115,8 @@ public class MapIdentityActionFactory extends AbstractInputTranslationActionFact
 			
 			for (Object i: iValues)
 			{
-				IdentityParam idParam = idTypeResolved.convertFromString(i.toString(), input.getIdpName(),
+				
+				IdentityParam idParam = parser.parseAsIdentity(idTypeResolved, i, input.getIdpName(),
 						currentProfile);
 				MappedIdentity mi = new MappedIdentity(mode, idParam, credentialRequirement);
 				log.debug("Mapped identity: " + idParam);

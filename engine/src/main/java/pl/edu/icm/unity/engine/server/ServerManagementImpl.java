@@ -10,6 +10,8 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.nio.charset.Charset;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.commons.io.FileUtils;
@@ -25,7 +27,7 @@ import pl.edu.icm.unity.base.utils.Log;
 import pl.edu.icm.unity.engine.api.ServerManagement;
 import pl.edu.icm.unity.engine.api.config.UnityServerConfiguration;
 import pl.edu.icm.unity.engine.api.utils.ExecutorsService;
-import pl.edu.icm.unity.engine.authz.AuthorizationManager;
+import pl.edu.icm.unity.engine.authz.InternalAuthorizationManager;
 import pl.edu.icm.unity.engine.authz.AuthzCapability;
 import pl.edu.icm.unity.engine.bulkops.BulkProcessingInternal;
 import pl.edu.icm.unity.engine.endpoint.InternalEndpointManagement;
@@ -36,6 +38,7 @@ import pl.edu.icm.unity.store.api.ImportExport;
 import pl.edu.icm.unity.store.api.StorageCleaner;
 import pl.edu.icm.unity.store.api.tx.Transactional;
 import pl.edu.icm.unity.store.api.tx.TransactionalRunner;
+import pl.edu.icm.unity.types.basic.DBDumpContentElements;
 
 /**
  * Implementation of general maintenance.
@@ -46,11 +49,11 @@ import pl.edu.icm.unity.store.api.tx.TransactionalRunner;
 @InvocationEventProducer
 public class ServerManagementImpl implements ServerManagement
 {
-	private Logger log = Log.getLogger(Log.U_SERVER, ServerManagementImpl.class);
+	private Logger log = Log.getLogger(Log.U_SERVER_CORE, ServerManagementImpl.class);
 	private ImportExport dbDump;
 	private StorageCleaner initDb;
 	private EngineInitialization engineInit;
-	private AuthorizationManager authz;
+	private InternalAuthorizationManager authz;
 	private UnityServerConfiguration config;
 	private InternalEndpointManagement endpointMan;
 	private TransactionalRunner tx;
@@ -60,7 +63,7 @@ public class ServerManagementImpl implements ServerManagement
 	@Autowired
 	public ServerManagementImpl(TransactionalRunner tx, ImportExport dbDump, StorageCleaner initDb,
 			EngineInitialization engineInit, InternalEndpointManagement endpointMan,
-			AuthorizationManager authz, ExecutorsService executorsService, 
+			InternalAuthorizationManager authz, ExecutorsService executorsService, 
 			UnityServerConfiguration config,
 			BulkProcessingInternal bulkProcessing)
 	{
@@ -81,7 +84,7 @@ public class ServerManagementImpl implements ServerManagement
 	{
 		authz.checkAuthorization(AuthzCapability.maintenance);
 		bulkProcessing.removeAllRules();
-		initDb.reset();
+		initDb.cleanOrDelete();
 		endpointMan.undeployAll();
 		engineInit.initializeDatabaseContents();
 	}
@@ -89,14 +92,14 @@ public class ServerManagementImpl implements ServerManagement
 
 	@Override
 	@Transactional
-	public File exportDb() throws EngineException
+	public File exportDb(DBDumpContentElements content) throws EngineException
 	{
 		authz.checkAuthorization(AuthzCapability.maintenance);
 		try
 		{
 			File exportFile = createExportFile();
 			BufferedOutputStream os = new BufferedOutputStream(new FileOutputStream(exportFile));
-			dbDump.store(os);
+			dbDump.store(os, content);
 			return exportFile;
 		} catch (JsonGenerationException e)
 		{
@@ -114,11 +117,13 @@ public class ServerManagementImpl implements ServerManagement
 		authz.checkAuthorization(AuthzCapability.maintenance);
 		
 		tx.runInTransaction(() -> {
-			initDb.deleteEverything();
 			try
 			{
+			
 				BufferedInputStream is = new BufferedInputStream(new FileInputStream(from));
-				dbDump.load(is);
+				List<String> dbDumpElements = dbDump.getDBDumpElements(is);
+				initDb.deletePreImport(dbDumpElements);	
+				dbDump.load(new BufferedInputStream(is));
 			} catch (Exception e)
 			{
 				throw new InternalException("Database import failed. " +
@@ -184,7 +189,7 @@ public class ServerManagementImpl implements ServerManagement
 		File f = new File(path);
 		try
 		{
-			return FileUtils.readFileToString(f);
+			return FileUtils.readFileToString(f, Charset.defaultCharset());
 		} catch (IOException e)
 		{
 			throw new InternalException("Error loading configuration file " + path, e);
@@ -221,4 +226,5 @@ public class ServerManagementImpl implements ServerManagement
 					"Subsequent dumps can be created in few minutes.");
 		return File.createTempFile(getExportFilePrefix(), getExportFileSuffix(), exportDir);
 	}
+
 }

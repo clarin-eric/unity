@@ -6,9 +6,14 @@
 package pl.edu.icm.unity.engine.api.project;
 
 import java.time.Instant;
+import java.util.Collections;
+import java.util.List;
 
 import com.google.common.base.Objects;
 
+import pl.edu.icm.unity.exceptions.EngineException;
+import pl.edu.icm.unity.types.registration.BaseForm;
+import pl.edu.icm.unity.types.registration.invite.FormPrefill;
 import pl.edu.icm.unity.types.registration.invite.InvitationWithCode;
 
 /**
@@ -26,13 +31,11 @@ public class ProjectInvitation extends ProjectInvitationParam
 	public final int numberOfSends;
 	public final String link;
 
-	public ProjectInvitation(String project, InvitationWithCode org, String link)
+	public ProjectInvitation(String project, BaseForm form, InvitationWithCode org, String link) throws EngineException
 	{
-
-		super(project, org.getInvitation().getContactAddress(), org.getInvitation().getAllowedGroups() != null
-				&& !org.getInvitation().getAllowedGroups().isEmpty()
-						? org.getInvitation().getAllowedGroups().get(0).getSelectedGroups()
-						: null,
+		super(project, org.getInvitation().getContactAddress(), getGroups(org, form),
+				org.getInvitation().getPrefillForForm(form).getAllowedGroups() != null
+						&& !org.getInvitation().getPrefillForForm(form).getAllowedGroups().isEmpty(),
 				org.getInvitation().getExpiration());
 		this.registrationCode = org.getRegistrationCode();
 		this.lastSentTime = org.getLastSentTime();
@@ -46,6 +49,20 @@ public class ProjectInvitation extends ProjectInvitationParam
 		return Objects.hashCode(super.hashCode(), registrationCode, lastSentTime, numberOfSends, link);
 	}
 
+	private static List<String> getGroups(InvitationWithCode org, BaseForm form) throws EngineException
+	{
+		FormPrefill invParam = org.getInvitation().getPrefillForForm(form);
+		
+		if ((invParam.getAllowedGroups() == null || invParam.getAllowedGroups().isEmpty())
+				&& (invParam.getGroupSelections() == null || invParam.getGroupSelections().isEmpty()))
+		{
+			return Collections.emptyList();
+		}
+
+		return !invParam.getAllowedGroups().isEmpty() ? invParam.getAllowedGroups().get(0).getSelectedGroups()
+				: invParam.getGroupSelections().get(0).getEntry().getSelectedGroups();
+	}
+	
 	@Override
 	public boolean equals(Object obj)
 	{

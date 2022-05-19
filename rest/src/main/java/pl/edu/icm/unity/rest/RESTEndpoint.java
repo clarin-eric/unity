@@ -17,13 +17,8 @@ import javax.ws.rs.core.Application;
 
 import org.apache.cxf.Bus;
 import org.apache.cxf.BusFactory;
-import org.apache.cxf.binding.BindingFactoryManager;
 import org.apache.cxf.endpoint.Endpoint;
-import org.apache.cxf.endpoint.Server;
 import org.apache.cxf.interceptor.Interceptor;
-import org.apache.cxf.jaxrs.JAXRSBindingFactory;
-import org.apache.cxf.jaxrs.JAXRSServerFactoryBean;
-import org.apache.cxf.jaxrs.utils.ResourceUtils;
 import org.apache.cxf.message.Message;
 import org.apache.cxf.transport.servlet.CXFNonSpringServlet;
 import org.apache.logging.log4j.Logger;
@@ -33,25 +28,21 @@ import org.eclipse.jetty.servlet.ServletHolder;
 import org.eclipse.jetty.servlets.CrossOriginFilter;
 
 import eu.unicore.util.configuration.ConfigurationException;
+import pl.edu.icm.unity.MessageSource;
 import pl.edu.icm.unity.base.utils.Log;
+import pl.edu.icm.unity.engine.api.EntityManagement;
 import pl.edu.icm.unity.engine.api.authn.AuthenticationFlow;
 import pl.edu.icm.unity.engine.api.authn.AuthenticationProcessor;
 import pl.edu.icm.unity.engine.api.authn.AuthenticatorInstance;
 import pl.edu.icm.unity.engine.api.endpoint.AbstractWebEndpoint;
 import pl.edu.icm.unity.engine.api.endpoint.BindingAuthn;
 import pl.edu.icm.unity.engine.api.endpoint.WebAppEndpointInstance;
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
+import pl.edu.icm.unity.engine.api.server.AdvertisedAddressProvider;
 import pl.edu.icm.unity.engine.api.server.NetworkServer;
 import pl.edu.icm.unity.engine.api.session.SessionManagement;
 import pl.edu.icm.unity.rest.authn.AuthenticationInterceptor;
 import pl.edu.icm.unity.rest.authn.CXFAuthentication;
-import pl.edu.icm.unity.rest.exception.EngineExceptionMapper;
-import pl.edu.icm.unity.rest.exception.IllegalArgumentExceptionMapper;
-import pl.edu.icm.unity.rest.exception.InternalExceptionMapper;
-import pl.edu.icm.unity.rest.exception.JSONExceptionMapper;
-import pl.edu.icm.unity.rest.exception.JSONParseExceptionMapper;
-import pl.edu.icm.unity.rest.exception.JSONParsingExceptionMapper;
-import pl.edu.icm.unity.rest.exception.NPEExceptionMapper;
+import pl.edu.icm.unity.rest.authn.LogContextCleaningInterceptor;
 import pl.edu.icm.unity.types.authn.AuthenticationRealm;
 
 /**
@@ -71,19 +62,26 @@ public abstract class RESTEndpoint extends AbstractWebEndpoint implements WebApp
 	protected RESTEndpointProperties genericEndpointProperties;
 	protected String servletPath;
 	protected SessionManagement sessionMan;
-	protected UnityMessageSource msg;
+	protected MessageSource msg;
+	protected final EntityManagement entityMan;
+
+	protected Set<String> notProtectedPaths = new HashSet<>();
+	protected Set<String> optionallyAuthenticatedPaths = new HashSet<>();
 	
-	protected Set<String> notProtectedPaths = new HashSet<String>();
-	
-	public RESTEndpoint(UnityMessageSource msg, SessionManagement sessionMan, 
+	public RESTEndpoint(MessageSource msg,
+			SessionManagement sessionMan,
 			AuthenticationProcessor authenticationProcessor,
-			NetworkServer server, String servletPath)
+			NetworkServer server,
+			AdvertisedAddressProvider advertisedAddrProvider,
+			String servletPath,
+			EntityManagement entityMan)
 	{
-		super(server);
+		super(server, advertisedAddrProvider);
 		this.authenticationProcessor = authenticationProcessor;
 		this.servletPath = servletPath;
 		this.msg = msg;
 		this.sessionMan = sessionMan;
+		this.entityMan = entityMan;
 	}
 
 	@Override
@@ -110,23 +108,24 @@ public abstract class RESTEndpoint extends AbstractWebEndpoint implements WebApp
 		for (String path: paths)
 			notProtectedPaths.add(description.getEndpoint().getContextAddress() + path);
 	}
+
+	/**
+	 * @param paths paths that should have optional authentication. The paths are relative to the endpoint 
+	 * address (i.e. should start with the servlet's address). Requests to those paths will be authenticated 
+	 * if possible but if no authentication material was given the request will proceed to the handler as an 
+	 * anonymous request.
+	 */
+	protected void addOptionallyAuthenticatedPaths(String... paths)
+	{
+		for (String path: paths)
+			optionallyAuthenticatedPaths.add(description.getEndpoint().getContextAddress() + path);
+	}
 	
 	protected abstract Application getApplication();
 
 	private void deployResources(Bus bus)
-	{
-		JAXRSServerFactoryBean sf = ResourceUtils.createApplication(getApplication(), false);
-		sf.setBus(bus);
-		
-		JAXRSBindingFactory factory = new JAXRSBindingFactory();
-		factory.setBus(bus);
-
-		BindingFactoryManager manager = bus.getExtension(BindingFactoryManager.class);
-		manager.registerBindingFactory(JAXRSBindingFactory.JAXRS_BINDING_ID, factory);
-		
-		Server server = sf.create();
-		
-		Endpoint cxfEndpoint = server.getEndpoint();
+	{		
+		Endpoint cxfEndpoint = RestEndpointHelper.createCxfEndpoint(getApplication(), bus);
 		addInterceptors(cxfEndpoint.getInInterceptors(), cxfEndpoint.getOutInterceptors());
 	}
 	
@@ -183,13 +182,14 @@ public abstract class RESTEndpoint extends AbstractWebEndpoint implements WebApp
 		throw new UnsupportedOperationException();
 	}
 	
-	private void addInterceptors(List<Interceptor<? extends Message>> inInterceptors,
+	protected void addInterceptors(List<Interceptor<? extends Message>> inInterceptors,
 			List<Interceptor<? extends Message>> outInterceptors)
 	{
 		AuthenticationRealm realm = description.getRealm();
 		inInterceptors.add(new AuthenticationInterceptor(msg, authenticationProcessor, 
-				authenticationFlows, realm, sessionMan, notProtectedPaths,
-				getEndpointDescription().getType().getFeatures()));
+				authenticationFlows, realm, sessionMan, notProtectedPaths, optionallyAuthenticatedPaths,
+				getEndpointDescription().getType().getFeatures(), entityMan));
+		inInterceptors.add(new LogContextCleaningInterceptor());
 		installAuthnInterceptors(authenticationFlows, inInterceptors);
 	}
 
@@ -217,19 +217,5 @@ public abstract class RESTEndpoint extends AbstractWebEndpoint implements WebApp
 				interceptors.add(in);
 			added.add(authenticator.getAuthenticatorId());
 		}
-	}
-	
-	/**
-	 * Adds common exception handlers
-	 */
-	public static void installExceptionHandlers(HashSet<Object> ret)
-	{
-		ret.add(new EngineExceptionMapper());
-		ret.add(new NPEExceptionMapper());
-		ret.add(new IllegalArgumentExceptionMapper());
-		ret.add(new InternalExceptionMapper());
-		ret.add(new JSONParseExceptionMapper());
-		ret.add(new JSONParsingExceptionMapper());
-		ret.add(new JSONExceptionMapper());
 	}
 }

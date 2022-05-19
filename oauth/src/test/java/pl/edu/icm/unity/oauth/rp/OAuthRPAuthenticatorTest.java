@@ -5,9 +5,11 @@
 package pl.edu.icm.unity.oauth.rp;
 
 import static org.junit.Assert.assertEquals;
+import static pl.edu.icm.unity.oauth.client.HttpRequestConfigurer.secureRequest;
 
 import java.io.File;
 import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 import org.apache.commons.io.FileUtils;
@@ -34,10 +36,9 @@ import pl.edu.icm.unity.engine.api.AuthenticationFlowManagement;
 import pl.edu.icm.unity.engine.api.AuthenticatorManagement;
 import pl.edu.icm.unity.engine.api.TranslationProfileManagement;
 import pl.edu.icm.unity.engine.api.token.TokensManagement;
-import pl.edu.icm.unity.oauth.as.OAuthProcessor;
 import pl.edu.icm.unity.oauth.as.OAuthTestUtils;
+import pl.edu.icm.unity.oauth.as.OAuthTokenRepository;
 import pl.edu.icm.unity.oauth.as.token.OAuthTokenEndpoint;
-import pl.edu.icm.unity.oauth.client.CustomHTTPSRequest;
 import pl.edu.icm.unity.rest.jwt.endpoint.JWTManagementEndpoint;
 import pl.edu.icm.unity.stdext.identity.UsernameIdentity;
 import pl.edu.icm.unity.types.I18nString;
@@ -76,7 +77,8 @@ public class OAuthRPAuthenticatorTest extends DBIntegrationTestBase
 			+ "unity.oauth2.as.scopes.1.attributes.3=email\n"
 			+ "unity.oauth2.as.scopes.2.name=bar\n"
 			+ "unity.oauth2.as.scopes.2.description=Provides access to bar info\n"
-			+ "unity.oauth2.as.scopes.2.attributes.1=c\n";
+			+ "unity.oauth2.as.scopes.2.attributes.1=c\n" 
+			+ "unity.oauth2.as.refreshTokenIssuePolicy=ALWAYS\n";
 
 	private static final String OAUTH_RP_CFG = 
 			"unity.oauth2-rp.profileEndpoint=https://localhost:52443/oauth/userinfo\n"
@@ -148,10 +150,11 @@ public class OAuthRPAuthenticatorTest extends DBIntegrationTestBase
 			authnMan.createAuthenticator("Apass", "password", null, "credential1");
 			
 			idsMan.addEntity(new IdentityParam(UsernameIdentity.ID, "userA"), 
-					"cr-pass", EntityState.valid, false);
+					"cr-pass", EntityState.valid);
 			profilesMan.addProfile(new TranslationProfile(
 					JsonUtil.parse(FileUtils.readFileToString(
-							new File("src/test/resources/tr-local.json")))));
+							new File("src/test/resources/tr-local.json"), 
+							StandardCharsets.UTF_8))));
 			
 			AuthenticationRealm realm = new AuthenticationRealm(REALM_NAME, "", 
 					10, 100, RememberMePolicy.disallow , 1, 600);
@@ -195,7 +198,7 @@ public class OAuthRPAuthenticatorTest extends DBIntegrationTestBase
 							Lists.newArrayList("flow4"), JWT_ENDP_CFG,
 							REALM_NAME));
 
-			List<ResolvedEndpoint> endpoints = endpointMan.getEndpoints();
+			List<ResolvedEndpoint> endpoints = endpointMan.getDeployedEndpoints();
 			assertEquals(4, endpoints.size());
 
 			httpServer.start();
@@ -209,12 +212,12 @@ public class OAuthRPAuthenticatorTest extends DBIntegrationTestBase
 	private void performAuthentication(String endpoint) throws Exception
 	{
 		AuthorizationSuccessResponse resp1 = OAuthTestUtils.initOAuthFlowHybrid(OAuthTestUtils.getConfig(), 
-				tokensMan);
+				OAuthTestUtils.getOAuthProcessor(tokensMan));
 		AccessToken ac = resp1.getAccessToken();
 		
 		HTTPRequest httpReqRaw = new HTTPRequest(Method.GET, new URL(endpoint));
 		httpReqRaw.setAuthorization(ac.toAuthorizationHeader());
-		HTTPRequest httpReq = new CustomHTTPSRequest(httpReqRaw, new BinaryCertChainValidator(true), 
+		HTTPRequest httpReq = secureRequest(httpReqRaw, new BinaryCertChainValidator(true), 
 				ServerHostnameCheckingMode.NONE);
 		HTTPResponse response = httpReq.send();
 		Assert.assertEquals(200, response.getStatusCode());
@@ -228,7 +231,7 @@ public class OAuthRPAuthenticatorTest extends DBIntegrationTestBase
 		HTTPRequest httpReqRaw = new HTTPRequest(Method.GET, 
 				new URL("https://localhost:52443/jwt-mitre/token"));
 		httpReqRaw.setAuthorization(ac.toAuthorizationHeader());
-		HTTPRequest httpReq = new CustomHTTPSRequest(httpReqRaw, new BinaryCertChainValidator(true), 
+		HTTPRequest httpReq = secureRequest(httpReqRaw, new BinaryCertChainValidator(true), 
 				ServerHostnameCheckingMode.NONE);
 		HTTPResponse response = httpReq.send();
 		Assert.assertEquals(200, response.getStatusCode());
@@ -257,18 +260,18 @@ public class OAuthRPAuthenticatorTest extends DBIntegrationTestBase
 	{
 		//normal
 		AuthorizationSuccessResponse resp1 = OAuthTestUtils.initOAuthFlowHybrid(OAuthTestUtils.getConfig(), 
-				tokensMan);
+				OAuthTestUtils.getOAuthProcessor(tokensMan));
 		AccessToken ac = resp1.getAccessToken();
 		
 		HTTPRequest httpReqRaw = new HTTPRequest(Method.GET, new URL("https://localhost:52443/jwt-int/token"));
 		httpReqRaw.setAuthorization(ac.toAuthorizationHeader());
-		HTTPRequest httpReq = new CustomHTTPSRequest(httpReqRaw, new BinaryCertChainValidator(true), 
+		HTTPRequest httpReq = secureRequest(httpReqRaw, new BinaryCertChainValidator(true), 
 				ServerHostnameCheckingMode.NONE);
 		HTTPResponse response = httpReq.send();
 		Assert.assertEquals(200, response.getStatusCode());
 		
 		//remove
-		tokensMan.removeToken(OAuthProcessor.INTERNAL_ACCESS_TOKEN, ac.getValue());
+		new OAuthTokenRepository(tokensMan, null).removeAccessToken(ac.getValue());
 		
 		//test cached
 		HTTPResponse response2 = httpReq.send();

@@ -20,14 +20,15 @@ public class NavigationInfo
 {
 	public static enum Type
 	{
-		View, ViewGroup, ParameterizedView, DefaultView
+		View, ViewGroup, ParameterizedView, DefaultView, ParameterizedViewWithSubviews
 	};
 
 	public final String id;
-	public final NavigationInfo parent;
+	public final String parent;
 	public final Type type;
 	public final ObjectFactory<?> objectFactory;
 	public final String caption;
+	public final String shortCaption;
 	public final Resource icon;
 	public final int position;
 
@@ -40,17 +41,19 @@ public class NavigationInfo
 		this.objectFactory = builder.objectFactory;
 		this.icon = builder.icon;
 		this.caption = builder.caption;
+		this.shortCaption = builder.shortCaption;
 		this.position = builder.position;
 	}
 
 	public static class NavigationInfoBuilder
 	{
 		private String id;
-		private NavigationInfo parent;
+		private String parent;
 		private Type type;
 
 		private ObjectFactory<?> objectFactory;
 		private String caption;
+		private String shortCaption;
 		private Resource icon;
 		private int position;
 
@@ -87,8 +90,14 @@ public class NavigationInfo
 			this.caption = caption;
 			return this;
 		}
+		
+		public NavigationInfoBuilder withShortCaption(String caption)
+		{
+			this.shortCaption = caption;
+			return this;
+		}
 
-		public NavigationInfoBuilder withParent(NavigationInfo parent)
+		public NavigationInfoBuilder withParent(String parent)
 		{
 			this.parent = parent;
 			return this;

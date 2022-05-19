@@ -22,11 +22,12 @@ import io.imunity.upman.UpManUI;
 import io.imunity.upman.common.UpManView;
 import io.imunity.webelements.navigation.NavigationInfo;
 import io.imunity.webelements.navigation.NavigationInfo.Type;
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
+import pl.edu.icm.unity.MessageSource;
+import pl.edu.icm.unity.engine.api.project.DelegatedGroup;
 import pl.edu.icm.unity.engine.api.utils.PrototypeComponent;
 import pl.edu.icm.unity.webui.common.Images;
 import pl.edu.icm.unity.webui.common.NotificationPopup;
-import pl.edu.icm.unity.webui.common.SidebarStyles;
+import pl.edu.icm.unity.webui.common.Styles;
 import pl.edu.icm.unity.webui.confirmations.ConfirmationInfoFormatter;
 import pl.edu.icm.unity.webui.exceptions.ControllerException;
 
@@ -44,10 +45,10 @@ public class UserUpdatesView extends CustomComponent implements UpManView
 
 	private UpdateRequestsController controller;
 	private ConfirmationInfoFormatter formatter;
-	private UnityMessageSource msg;
+	private MessageSource msg;
 
 	@Autowired
-	public UserUpdatesView(UnityMessageSource msg, UpdateRequestsController controller, ConfirmationInfoFormatter formatter)
+	public UserUpdatesView(MessageSource msg, UpdateRequestsController controller, ConfirmationInfoFormatter formatter)
 	{
 		this.msg = msg;
 		this.controller = controller;
@@ -58,7 +59,15 @@ public class UserUpdatesView extends CustomComponent implements UpManView
 	@Override
 	public void enter(ViewChangeEvent event)
 	{
-		String project = UpManUI.getProjectGroup();
+		DelegatedGroup project;
+		try
+		{
+			project = UpManUI.getProjectGroup();
+		} catch (ControllerException e)
+		{
+			NotificationPopup.showError(e);
+			return;
+		}
 
 		VerticalLayout main = new VerticalLayout();
 		main.setSizeFull();
@@ -68,7 +77,7 @@ public class UserUpdatesView extends CustomComponent implements UpManView
 		UpdateRequestsComponent updateRequestsComponent;
 		try
 		{
-			updateRequestsComponent = new UpdateRequestsComponent(msg, controller, project, formatter);
+			updateRequestsComponent = new UpdateRequestsComponent(msg, controller, project.path, formatter);
 		} catch (ControllerException e)
 		{
 			NotificationPopup.showError(e);
@@ -95,7 +104,7 @@ public class UserUpdatesView extends CustomComponent implements UpManView
 		HorizontalLayout header = new HorizontalLayout();
 		header.setMargin(false);
 		Label name = new Label(getDisplayedName());
-		name.addStyleName(SidebarStyles.viewHeader.toString());
+		name.addStyleName(Styles.viewHeader.toString());
 		header.addComponents(name);
 		header.setComponentAlignment(name, Alignment.MIDDLE_CENTER);
 		return header;
@@ -105,11 +114,10 @@ public class UserUpdatesView extends CustomComponent implements UpManView
 	public class MembersNavigationInfoProvider extends UpManNavigationInfoProviderBase
 	{
 		@Autowired
-		public MembersNavigationInfoProvider(UnityMessageSource msg, UpManRootNavigationInfoProvider parent,
-				ObjectFactory<UserUpdatesView> factory)
+		public MembersNavigationInfoProvider(MessageSource msg, ObjectFactory<UserUpdatesView> factory)
 		{
 			super(new NavigationInfo.NavigationInfoBuilder(VIEW_NAME, Type.View)
-					.withParent(parent.getNavigationInfo()).withObjectFactory(factory)
+					.withParent(UpManRootNavigationInfoProvider.ID).withObjectFactory(factory)
 					.withCaption(msg.getMessage("UpManMenu.userUpdates"))
 					.withIcon(Images.user_check.getResource()).withPosition(3).build());
 

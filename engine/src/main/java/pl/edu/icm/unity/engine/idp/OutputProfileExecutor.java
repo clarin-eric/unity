@@ -7,12 +7,12 @@ package pl.edu.icm.unity.engine.idp;
 import java.util.ArrayList;
 import java.util.List;
 
-import eu.unicore.util.configuration.ConfigurationException;
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
+import pl.edu.icm.unity.MessageSource;
+import pl.edu.icm.unity.engine.api.AttributeValueConverter;
+import pl.edu.icm.unity.engine.api.GroupsManagement;
 import pl.edu.icm.unity.engine.api.translation.out.OutputTranslationActionsRegistry;
 import pl.edu.icm.unity.engine.api.translation.out.TranslationInput;
 import pl.edu.icm.unity.engine.api.translation.out.TranslationResult;
-import pl.edu.icm.unity.engine.attribute.AttributeValueConverter;
 import pl.edu.icm.unity.engine.translation.out.OutputTranslationEngine;
 import pl.edu.icm.unity.engine.translation.out.OutputTranslationProfile;
 import pl.edu.icm.unity.engine.translation.out.OutputTranslationProfileRepository;
@@ -35,37 +35,34 @@ class OutputProfileExecutor
 	private final OutputTranslationEngine translationEngine;
 	private final OutputTranslationProfileRepository outputProfileRepo;
 	private final OutputTranslationActionsRegistry actionsRegistry;
-	private final UnityMessageSource msg;
+	private final MessageSource msg;
 	private final AttributeValueConverter attrValueConverter; 
 	private final OutputTranslationProfile defaultProfile;
+	private final GroupsManagement groupsManagement;
 
 	
 	OutputProfileExecutor(OutputTranslationProfileRepository outputProfileRepo,
 			OutputTranslationEngine translationEngine,
 			OutputTranslationActionsRegistry actionsRegistry,
 			AttributeValueConverter attrValueConverter,
-			UnityMessageSource msg)
+			MessageSource msg, GroupsManagement groupsManagement)
 	{
 		this.translationEngine = translationEngine;
 		this.outputProfileRepo = outputProfileRepo;
 		this.actionsRegistry = actionsRegistry;
 		this.attrValueConverter = attrValueConverter;
 		this.msg = msg;
-
+		this.groupsManagement = groupsManagement;
 		this.defaultProfile = createDefaultOutputProfile();
 	}
 
-	TranslationResult execute(String profile, TranslationInput input) throws EngineException
+	TranslationResult execute(TranslationProfile profile, TranslationInput input) throws EngineException
 	{
 		OutputTranslationProfile profileInstance;
 		if (profile != null)
 		{
-			TranslationProfile translationProfile = outputProfileRepo.listAllProfiles().get(profile);
-			if (translationProfile == null)
-				throw new ConfigurationException("The translation profile '" + profile + 
-					"' configured for the authenticator does not exist");
-			profileInstance = new OutputTranslationProfile(translationProfile, outputProfileRepo, 
-					actionsRegistry, attrValueConverter);
+			profileInstance = new OutputTranslationProfile(profile, outputProfileRepo, 
+					actionsRegistry, attrValueConverter, groupsManagement);
 		} else
 		{
 			profileInstance = defaultProfile;
@@ -88,6 +85,6 @@ class OutputProfileExecutor
 		rules.add(new TranslationRule("true", action2));
 		TranslationProfile profile = new TranslationProfile("DEFAULT OUTPUT PROFILE", "", ProfileType.OUTPUT,
 				rules);
-		return new OutputTranslationProfile(profile, outputProfileRepo, actionsRegistry, attrValueConverter);
+		return new OutputTranslationProfile(profile, outputProfileRepo, actionsRegistry, attrValueConverter, groupsManagement);
 	}
 }

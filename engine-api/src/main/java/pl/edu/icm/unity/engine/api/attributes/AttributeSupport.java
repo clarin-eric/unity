@@ -4,10 +4,13 @@
  */
 package pl.edu.icm.unity.engine.api.attributes;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import pl.edu.icm.unity.exceptions.EngineException;
+import pl.edu.icm.unity.types.basic.Attribute;
 import pl.edu.icm.unity.types.basic.AttributeExt;
 import pl.edu.icm.unity.types.basic.AttributeType;
 import pl.edu.icm.unity.types.basic.EntityParam;
@@ -39,9 +42,28 @@ public interface AttributeSupport
 	 */
 	AttributeExt getAttributeByMetadata(EntityParam entity, String group, String metadataId)
 			throws EngineException;
+
+	/**
+	 * Returns the first value of attribute which has the given metadata set. If there is no such attribute type with this metadata or value,
+	 * then null is returned. The metadata must be singleton, otherwise unchecked exception is thrown.
+	 */
+	Optional<String> getAttributeValueByMetadata(EntityParam entity, String group, String metadataId)
+			throws EngineException;
 	
 	/**
 	 * @return all attribute types as map. Not authorized anyhow 
 	 */
 	Map<String, AttributeType> getAttributeTypesAsMap() throws EngineException;
+	
+	/**
+	 * Returns all attributes linked with given keyword.
+	 * No authorization.
+	 */
+	Collection<Attribute> getAttributesByKeyword(String keyword);
+
+	/**
+	 * Search for all attributes with given type name. Returns map identified by entity Id with list of attributes of given type.
+	 * No authorization.
+	 */
+	Map<Long, List<Attribute>>  getEntitiesWithAttributes(String attributeTypeName);
 }

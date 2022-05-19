@@ -21,6 +21,7 @@ import org.springframework.stereotype.Component;
 import pl.edu.icm.unity.base.utils.Log;
 import pl.edu.icm.unity.engine.api.config.UnityServerConfiguration;
 import pl.edu.icm.unity.engine.api.endpoint.SharedEndpointManagement;
+import pl.edu.icm.unity.engine.api.server.AdvertisedAddressProvider;
 import pl.edu.icm.unity.engine.api.server.NetworkServer;
 import pl.edu.icm.unity.exceptions.EngineException;
 import pl.edu.icm.unity.exceptions.WrongArgumentException;
@@ -33,16 +34,16 @@ import pl.edu.icm.unity.exceptions.WrongArgumentException;
 @Component
 public class SharedEndpointManagementImpl implements SharedEndpointManagement
 {
-	private static final Logger log = Log.getLogger(Log.U_SERVER, SharedEndpointManagementImpl.class);
-	public static final String CONTEXT_PATH = "/unitygw";
+	private static final Logger log = Log.getLogger(Log.U_SERVER_CORE, SharedEndpointManagementImpl.class);
 	public static final String VAADIN_RESOURCE_PATH = "/VAADIN/*";
 	private ServletContextHandler sharedHandler;
 	private URL advertisedAddress;
 	private Set<String> usedPaths;
 	
 	@Autowired
-	public SharedEndpointManagementImpl(NetworkServer httpServer, UnityServerConfiguration config) 
-			throws EngineException
+	public SharedEndpointManagementImpl(NetworkServer httpServer,
+			UnityServerConfiguration config,
+			AdvertisedAddressProvider advertisedAddrProvider) throws EngineException
 	{
 		sharedHandler = new ServletContextHandler(ServletContextHandler.SESSIONS);
 		sharedHandler.setContextPath(CONTEXT_PATH);
@@ -50,9 +51,9 @@ public class SharedEndpointManagementImpl implements SharedEndpointManagement
 		String resourceBase = getWebContentsDir(config);
 		if (resourceBase != null)
 			sharedHandler.setResourceBase(resourceBase);
-		httpServer.deployHandler(sharedHandler);
+		httpServer.deployHandler(sharedHandler, "sys:shared");
 		usedPaths = new HashSet<>();
-		this.advertisedAddress = httpServer.getAdvertisedAddress();
+		this.advertisedAddress = advertisedAddrProvider.get();
 	}
 
 	@Override

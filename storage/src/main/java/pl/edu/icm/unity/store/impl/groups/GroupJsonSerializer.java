@@ -4,13 +4,17 @@
  */
 package pl.edu.icm.unity.store.impl.groups;
 
+import java.time.Duration;
+import java.util.concurrent.ExecutionException;
+
 import org.springframework.stereotype.Component;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
 
 import pl.edu.icm.unity.JsonUtil;
-import pl.edu.icm.unity.store.hz.JsonSerializerForKryo;
 import pl.edu.icm.unity.store.rdbms.RDBMSObjectSerializer;
 import pl.edu.icm.unity.types.basic.Group;
 
@@ -19,21 +23,11 @@ import pl.edu.icm.unity.types.basic.Group;
  * @author K. Benedyczak
  */
 @Component
-public class GroupJsonSerializer implements RDBMSObjectSerializer<Group, GroupBean>, 
-			JsonSerializerForKryo<Group>
+public class GroupJsonSerializer implements RDBMSObjectSerializer<Group, GroupBean>
 {
-	@Override
-	public Group fromJson(ObjectNode main)
-	{
-		return new Group(main);
-	}
-
-	@Override
-	public ObjectNode toJson(Group src)
-	{
-		return src.toJson();
-	}
-
+	private final Cache<GroupBean, Group> resolvedGroupsCache = CacheBuilder.newBuilder()
+			.expireAfterWrite(Duration.ofDays(1)).build();
+	
 	@Override
 	public GroupBean toDB(Group object)
 	{
@@ -44,6 +38,17 @@ public class GroupJsonSerializer implements RDBMSObjectSerializer<Group, GroupBe
 
 	@Override
 	public Group fromDB(GroupBean bean)
+	{
+		try
+		{
+			return resolvedGroupsCache.get(bean, () -> parse(bean)).clone();
+		} catch (ExecutionException e)
+		{
+			throw new IllegalStateException("Error parsing group from DB", e);
+		}
+	}
+	
+	private Group parse(GroupBean bean)
 	{
 		Group ret = new Group(bean.getName());
 		ret.fromJsonBase(JsonUtil.parse(bean.getContents()));
@@ -62,11 +67,5 @@ public class GroupJsonSerializer implements RDBMSObjectSerializer<Group, GroupBe
 		main.putArray("attributeStatements");
 		main.putArray("attributesClasses");
 		return main;
-	}
-
-	@Override
-	public Class<? extends Group> getClazz()
-	{
-		return Group.class;
 	}
 }

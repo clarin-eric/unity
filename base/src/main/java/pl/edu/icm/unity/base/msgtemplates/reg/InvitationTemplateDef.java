@@ -4,14 +4,15 @@
  */
 package pl.edu.icm.unity.base.msgtemplates.reg;
 
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Set;
 
 import org.springframework.stereotype.Component;
 
 import pl.edu.icm.unity.base.msgtemplates.MessageTemplateDefinition;
 import pl.edu.icm.unity.base.msgtemplates.MessageTemplateVariable;
+import pl.edu.icm.unity.base.notifications.CommunicationTechnology;
 
 /**
  * Template definition of a message send with an invitation to fill a registration request. 
@@ -25,6 +26,7 @@ public class InvitationTemplateDef implements MessageTemplateDefinition
 	public static final String CODE = "code";
 	public static final String URL = "url";
 	public static final String EXPIRES = "expires";
+	public static final String PREFILLED_GROUPS = "prefilledGroups";
 	
 	@Override
 	public String getDescriptionKey()
@@ -50,13 +52,15 @@ public class InvitationTemplateDef implements MessageTemplateDefinition
 				"MessageTemplateConsumer.InvitationWithCode.var.url", false));
 		vars.put(EXPIRES, new MessageTemplateVariable(EXPIRES, 
 				"MessageTemplateConsumer.InvitationWithCode.var.expires", false));
+		vars.put(PREFILLED_GROUPS, new MessageTemplateVariable(PREFILLED_GROUPS, 
+				"MessageTemplateConsumer.InvitationWithCode.var.prefilledGroups", false));
 		return vars;
 	}
 	
 	@Override
-	public Set<String> getCompatibleFacilities()
+	public EnumSet<CommunicationTechnology> getCompatibleTechnologies()
 	{
-		return ALL_FACILITIES;
+		return EnumSet.allOf(CommunicationTechnology.class);
 	}
 	
 	@Override

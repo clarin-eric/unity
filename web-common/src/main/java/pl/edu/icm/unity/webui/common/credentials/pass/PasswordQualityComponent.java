@@ -10,7 +10,7 @@ import com.vaadin.ui.Label;
 import com.vaadin.ui.ProgressBar;
 import com.vaadin.ui.VerticalLayout;
 
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
+import pl.edu.icm.unity.MessageSource;
 import pl.edu.icm.unity.stdext.credential.pass.PasswordCredential;
 import pl.edu.icm.unity.stdext.credential.pass.StrengthChecker;
 import pl.edu.icm.unity.stdext.credential.pass.StrengthChecker.StrengthInfo;
@@ -25,7 +25,7 @@ import pl.edu.icm.unity.webui.common.credentials.CredentialEditorContext;
  */
 public class PasswordQualityComponent extends CustomComponent
 {
-	private final UnityMessageSource msg;
+	private final MessageSource msg;
 	private final PasswordCredential config;
 
 	private ProgressBar qualityMeter;
@@ -34,7 +34,7 @@ public class PasswordQualityComponent extends CustomComponent
 	private Label minClassesStatus;
 	private Label sequencesStatus;
 
-	public PasswordQualityComponent(UnityMessageSource msg, PasswordCredential config, 
+	public PasswordQualityComponent(MessageSource msg, PasswordCredential config, 
 			CredentialEditorContext context)
 	{
 		super();
@@ -50,17 +50,17 @@ public class PasswordQualityComponent extends CustomComponent
 		qualityMeter.setCaption(msg.getMessage("PasswordCredentialEditor.qualityMeter"));
 		qualityMeter.setWidth(15, Unit.EM);
 		qualityMeter.addStyleName("u-password-quality");
-		mainInfo = new Label("", ContentMode.HTML);
-		mainInfo.setWidth(16, Unit.EM);
+		mainInfo = new Label("", ContentMode.HTML);	
 		mainInfo.addStyleName(Styles.emphasized.toString());
 		mainInfo.addStyleName("u-password-hint");
+		mainInfo.setWidth(16, Unit.EM);
 		minLengthStatus = new Label("", ContentMode.HTML);
-		minLengthStatus.addStyleNames("u-password-stat", "u-password-minLen");
+		minLengthStatus.addStyleNames("u-password-stat", "u-password-minLen");	
 		minClassesStatus = new Label("", ContentMode.HTML);
-		minClassesStatus.addStyleNames("u-password-stat", "u-password-minClass");
+		minClassesStatus.addStyleNames("u-password-stat", "u-password-minClass");	
 		sequencesStatus = new Label("", ContentMode.HTML);
 		sequencesStatus.addStyleNames("u-password-stat", "u-password-seq");
-		
+			
 		VerticalLayout root = new VerticalLayout();
 		root.addStyleName(Styles.leftMarginSmall.toString());
 		root.addStyleName(Styles.passwordQuality.toString());

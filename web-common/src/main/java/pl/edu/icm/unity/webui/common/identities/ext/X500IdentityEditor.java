@@ -12,7 +12,6 @@ import java.security.cert.X509Certificate;
 import com.vaadin.data.ValidationResult;
 import com.vaadin.data.ValueContext;
 import com.vaadin.server.Sizeable.Unit;
-import com.vaadin.ui.FormLayout;
 import com.vaadin.ui.TextField;
 import com.vaadin.ui.Upload;
 import com.vaadin.ui.Upload.Receiver;
@@ -22,14 +21,14 @@ import com.vaadin.ui.Upload.SucceededListener;
 import eu.emi.security.authn.x509.impl.CertificateUtils;
 import eu.emi.security.authn.x509.impl.CertificateUtils.Encoding;
 import eu.emi.security.authn.x509.impl.X500NameUtils;
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
+import pl.edu.icm.unity.MessageSource;
 import pl.edu.icm.unity.exceptions.IllegalIdentityValueException;
 import pl.edu.icm.unity.stdext.identity.X500Identity;
 import pl.edu.icm.unity.types.basic.IdentityParam;
-import pl.edu.icm.unity.webui.common.CompactFormLayout;
 import pl.edu.icm.unity.webui.common.ComponentsContainer;
 import pl.edu.icm.unity.webui.common.LimitedOuputStream;
 import pl.edu.icm.unity.webui.common.NotificationPopup;
+import pl.edu.icm.unity.webui.common.Styles;
 import pl.edu.icm.unity.webui.common.binding.SingleStringFieldBinder;
 import pl.edu.icm.unity.webui.common.binding.StringBindingValue;
 import pl.edu.icm.unity.webui.common.identities.IdentityEditor;
@@ -41,12 +40,12 @@ import pl.edu.icm.unity.webui.common.identities.IdentityEditorContext;
  */
 public class X500IdentityEditor implements IdentityEditor
 {
-	private UnityMessageSource msg;
+	private MessageSource msg;
 	private TextField field;
 	private IdentityEditorContext context;
 	private SingleStringFieldBinder binder;
 	
-	public X500IdentityEditor(UnityMessageSource msg)
+	public X500IdentityEditor(MessageSource msg)
 	{
 		this.msg = msg;
 	}
@@ -60,15 +59,14 @@ public class X500IdentityEditor implements IdentityEditor
 		if (context.isCustomWidth())
 			field.setWidth(context.getCustomWidth(), context.getCustomWidthUnit());
 		else
-			field.setWidth(80, Unit.PERCENTAGE);
+			field.setWidth(100, Unit.PERCENTAGE);
 		Upload upload = new Upload();
-		upload.setCaption(msg.getMessage("X500IdentityEditor.certUploadCaption"));
+		upload.setButtonCaption(msg.getMessage("X500IdentityEditor.certUploadCaption"));
+		upload.addStyleName(Styles.vButtonLink.toString());
 		CertUploader uploader = new CertUploader(); 
 		upload.setReceiver(uploader);
 		upload.addSucceededListener(uploader);
 		
-		FormLayout wrapper = new CompactFormLayout(upload);
-		wrapper.setMargin(false);
 		setLabel(new X500Identity().getHumanFriendlyName(msg));
 		
 		binder.forField(field, context.isRequired())
@@ -76,7 +74,7 @@ public class X500IdentityEditor implements IdentityEditor
 			.bind("value");
 		binder.setBean(new StringBindingValue(""));
 		
-		return new ComponentsContainer(field, wrapper);
+		return new ComponentsContainer(field, upload);
 	}
 
 	private ValidationResult validate(String value, ValueContext context)

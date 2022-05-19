@@ -7,7 +7,6 @@ package pl.edu.icm.unity.saml.sp.web;
 import java.io.IOException;
 import java.util.Set;
 
-import javax.servlet.http.Cookie;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import javax.servlet.http.HttpSession;
@@ -15,11 +14,17 @@ import javax.servlet.http.HttpSession;
 import org.apache.logging.log4j.Logger;
 
 import pl.edu.icm.unity.base.utils.Log;
+import pl.edu.icm.unity.engine.api.authn.AuthenticationStepContext;
+import pl.edu.icm.unity.engine.api.authn.AuthenticatorStepContext;
+import pl.edu.icm.unity.engine.api.authn.RememberMeToken.LoginMachineDetails;
+import pl.edu.icm.unity.engine.api.authn.remote.AuthenticationTriggeringContext;
 import pl.edu.icm.unity.saml.sp.RemoteAuthnContext;
 import pl.edu.icm.unity.saml.sp.SAMLExchange;
-import pl.edu.icm.unity.saml.sp.SAMLSPProperties;
 import pl.edu.icm.unity.saml.sp.SamlContextManagement;
+import pl.edu.icm.unity.saml.sp.config.TrustedIdPKey;
+import pl.edu.icm.unity.types.authn.AuthenticationOptionKey;
 import pl.edu.icm.unity.types.authn.AuthenticationOptionKeyUtils;
+import pl.edu.icm.unity.webui.authn.LoginMachineDetailsExtractor;
 import pl.edu.icm.unity.webui.authn.PreferredAuthenticationHelper;
 import pl.edu.icm.unity.webui.authn.ProxyAuthenticationFilter;
 
@@ -46,17 +51,16 @@ class SAMLProxyAuthnHandler
 	}
 	
 	boolean triggerAutomatedAuthentication(HttpServletRequest httpRequest,
-			HttpServletResponse httpResponse, String endpointPath) throws IOException
+			HttpServletResponse httpResponse, String endpointPath, AuthenticatorStepContext context) throws IOException
 	{
-		String idpKey = getIdpConfigKey(httpRequest);
-		return startLogin(idpKey, httpRequest, httpResponse, endpointPath);
+		TrustedIdPKey idpKey = getIdpConfigKey(httpRequest);
+		return startLogin(idpKey, httpRequest, httpResponse, context);
 	}
 
-	private String getIdpConfigKey(HttpServletRequest httpRequest)
+	private TrustedIdPKey getIdpConfigKey(HttpServletRequest httpRequest)
 	{
 		String requestedIdP = httpRequest.getParameter(PreferredAuthenticationHelper.IDP_SELECT_PARAM);
-		SAMLSPProperties clientProperties = credentialExchange.getSamlValidatorSettings();
-		Set<String> keys = clientProperties.getStructuredListKeys(SAMLSPProperties.IDP_PREFIX);
+		Set<TrustedIdPKey> keys = credentialExchange.getTrustedIdpKeysWithWebBindings();
 		
 		if (requestedIdP == null)
 		{
@@ -68,8 +72,7 @@ class SAMLProxyAuthnHandler
 			return keys.iterator().next();
 		}
 		
-		String authnOption = SAMLSPProperties.IDP_PREFIX + 
-				AuthenticationOptionKeyUtils.decodeOption(requestedIdP) + ".";
+		TrustedIdPKey authnOption = new TrustedIdPKey(AuthenticationOptionKeyUtils.decodeOption(requestedIdP));
 		if (!keys.contains(authnOption))
 			throw new IllegalStateException("Client requested authN option " + authnOption 
 					+", which is not available in "
@@ -78,27 +81,24 @@ class SAMLProxyAuthnHandler
 		return authnOption;
 	}
 	
-	private boolean startLogin(String idpConfigKey, HttpServletRequest httpRequest,
-			HttpServletResponse httpResponse, String endpointPath) throws IOException
+	private boolean startLogin(TrustedIdPKey idpConfigKey, HttpServletRequest httpRequest,
+			HttpServletResponse httpResponse, AuthenticatorStepContext authnContext) throws IOException
 	{
 		HttpSession session = httpRequest.getSession();
-		RemoteAuthnContext context = (RemoteAuthnContext) session.getAttribute(
-				SAMLRetrieval.REMOTE_AUTHN_CONTEXT);
-		if (context != null)
-		{
-			log.debug("Ignoring automated login as the previous remote SAML authentication "
-					+ "is still in progress.");
-			return false;
-		}
 		
 		String currentRelativeURI = ProxyAuthenticationFilter.getCurrentRelativeURL(httpRequest);
-		log.debug("Starting automatic proxy authentication with remote SAML IdP "
+		log.info("Starting automatic proxy authentication with remote SAML IdP "
 				+ "configured under {}, current relative URI is {}", idpConfigKey, currentRelativeURI);	
-
+		LoginMachineDetails loginMachineDetails = LoginMachineDetailsExtractor.getLoginMachineDetailsFromCurrentRequest();
+		RemoteAuthnContext context;
 		try
 		{
-			context = credentialExchange.createSAMLRequest(idpConfigKey, currentRelativeURI);
-			session.setAttribute(SAMLRetrieval.REMOTE_AUTHN_CONTEXT, context);
+			AuthenticationStepContext authnStepContext = new AuthenticationStepContext(authnContext, 
+					getAuthnOptionId(idpConfigKey));
+			context = credentialExchange.createSAMLRequest(idpConfigKey, currentRelativeURI, authnStepContext, 
+					loginMachineDetails,
+					currentRelativeURI,
+					AuthenticationTriggeringContext.authenticationTriggeredFirstFactor());
 			session.setAttribute(ProxyAuthenticationFilter.AUTOMATED_LOGIN_FIRED, "true");
 			samlContextManagement.addAuthnContext(context);
 		} catch (Exception e)
@@ -106,18 +106,12 @@ class SAMLProxyAuthnHandler
 			throw new IllegalStateException("Can not create SAML authN request", e);
 		}
 		
-		setLastIdpCookie(httpResponse, idpConfigKey, endpointPath);
-		
 		RedirectRequestHandler.handleRequest(context, httpResponse);
 		return true;
 	}
 	
-	private void setLastIdpCookie(HttpServletResponse httpResponse, String idpConfigKey, String endpointPath)
+	private AuthenticationOptionKey getAuthnOptionId(TrustedIdPKey idpConfigKey)
 	{
-		String optionId = idpConfigKey.substring(SAMLSPProperties.IDP_PREFIX.length(), idpConfigKey.length()-1);
-		String selectedAuthn = AuthenticationOptionKeyUtils.encode(authenticatorId, optionId);
-		Cookie lastIdpCookie = PreferredAuthenticationHelper.createLastIdpCookie(
-				endpointPath, selectedAuthn);
-		httpResponse.addCookie(lastIdpCookie);
+		return new AuthenticationOptionKey(authenticatorId, idpConfigKey.asString());
 	}
 }

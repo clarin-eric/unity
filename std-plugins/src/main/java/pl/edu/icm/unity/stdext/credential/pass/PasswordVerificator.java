@@ -10,6 +10,7 @@ import java.util.Deque;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.ForkJoinPool;
 
 import org.apache.logging.log4j.Logger;
 import org.springframework.beans.factory.ObjectFactory;
@@ -43,23 +44,19 @@ import pl.edu.icm.unity.base.utils.Log;
 import pl.edu.icm.unity.engine.api.authn.AuthenticatedEntity;
 import pl.edu.icm.unity.engine.api.authn.AuthenticationException;
 import pl.edu.icm.unity.engine.api.authn.AuthenticationResult;
-import pl.edu.icm.unity.engine.api.authn.AuthenticationResult.Status;
+import pl.edu.icm.unity.engine.api.authn.AuthenticationResult.ResolvableError;
 import pl.edu.icm.unity.engine.api.authn.CredentialReset;
 import pl.edu.icm.unity.engine.api.authn.EntityWithCredential;
+import pl.edu.icm.unity.engine.api.authn.LocalAuthenticationResult;
 import pl.edu.icm.unity.engine.api.authn.local.AbstractLocalCredentialVerificatorFactory;
 import pl.edu.icm.unity.engine.api.authn.local.AbstractLocalVerificator;
 import pl.edu.icm.unity.engine.api.authn.local.CredentialHelper;
-import pl.edu.icm.unity.engine.api.authn.local.LocalSandboxAuthnContext;
-import pl.edu.icm.unity.engine.api.authn.remote.SandboxAuthnResultCallback;
+import pl.edu.icm.unity.engine.api.authn.remote.AuthenticationTriggeringContext;
 import pl.edu.icm.unity.engine.api.notification.NotificationProducer;
 import pl.edu.icm.unity.engine.api.utils.PrototypeComponent;
 import pl.edu.icm.unity.exceptions.CredentialRecentlyUsedException;
 import pl.edu.icm.unity.exceptions.EngineException;
-import pl.edu.icm.unity.exceptions.IllegalAttributeTypeException;
-import pl.edu.icm.unity.exceptions.IllegalAttributeValueException;
 import pl.edu.icm.unity.exceptions.IllegalCredentialException;
-import pl.edu.icm.unity.exceptions.IllegalGroupValueException;
-import pl.edu.icm.unity.exceptions.IllegalTypeException;
 import pl.edu.icm.unity.exceptions.InternalException;
 import pl.edu.icm.unity.stdext.identity.EmailIdentity;
 import pl.edu.icm.unity.stdext.identity.UsernameIdentity;
@@ -79,7 +76,8 @@ import pl.edu.icm.unity.types.basic.EntityParam;
 @PrototypeComponent
 public class PasswordVerificator extends AbstractLocalVerificator implements PasswordExchange
 { 	
-	private static final Logger log = Log.getLogger(Log.U_SERVER, PasswordVerificator.class);
+	private static final ResolvableError GENERIC_ERROR = new ResolvableError("WebPasswordRetrieval.wrongPassword");
+	private static final Logger log = Log.getLogger(Log.U_SERVER_AUTHN, PasswordVerificator.class);
 	public static final String NAME = "password";
 	public static final String DESC = "Verifies passwords";
 	public static final String[] IDENTITY_TYPES = {UsernameIdentity.ID, EmailIdentity.ID};
@@ -91,12 +89,15 @@ public class PasswordVerificator extends AbstractLocalVerificator implements Pas
 	private PasswordCredential credential = new PasswordCredential();
 
 	@Autowired
-	public PasswordVerificator(NotificationProducer notificationProducer, CredentialHelper credentialHelper)
+	public PasswordVerificator(NotificationProducer notificationProducer, CredentialHelper credentialHelper,
+			Optional<PasswordEncodingPoolProvider> threadPoolProvider)
 	{
 		super(NAME, DESC, PasswordExchange.ID, true);
 		this.notificationProducer = notificationProducer;
 		this.credentialHelper = credentialHelper;
-		this.passwordEngine = new PasswordEngine();
+		this.passwordEngine = new PasswordEngine(threadPoolProvider
+				.map(pp->pp.pool)
+				.orElse(ForkJoinPool.commonPool()));
 	}
 
 	@Override
@@ -252,12 +253,10 @@ public class PasswordVerificator extends AbstractLocalVerificator implements Pas
 	 */
 	@Override
 	public AuthenticationResult checkPassword(String username, String password, 
-			SandboxAuthnResultCallback sandboxCallback)
+			String formForUnknown, boolean enableAssociation, 
+			AuthenticationTriggeringContext triggeringContext)
 	{
-		AuthenticationResult authenticationResult = checkPasswordInternal(username, password);
-		if (sandboxCallback != null)
-			sandboxCallback.sandboxedAuthenticationDone(new LocalSandboxAuthnContext(authenticationResult));
-		return authenticationResult;
+		return checkPasswordInternal(username, password);
 	}
 
 	private AuthenticationResult checkPasswordInternal(String username, String password)
@@ -269,8 +268,8 @@ public class PasswordVerificator extends AbstractLocalVerificator implements Pas
 					IDENTITY_TYPES, credentialName);
 		} catch (Exception e)
 		{
-			log.debug("The user for password authN can not be found: " + username, e);
-			return new AuthenticationResult(Status.deny, null);
+			log.info("The user for password authN can not be found: " + username, e);
+			return LocalAuthenticationResult.failed(GENERIC_ERROR);
 		}
 		
 		try
@@ -280,23 +279,23 @@ public class PasswordVerificator extends AbstractLocalVerificator implements Pas
 			Deque<PasswordInfo> credentials = credState.getPasswords();
 			if (credentials.isEmpty())
 			{
-				log.debug("The user has no password set: " + username);
-				return new AuthenticationResult(Status.deny, null);
+				log.info("The user has no password set: {}", username);
+				return LocalAuthenticationResult.failed(GENERIC_ERROR);
 			}
 			PasswordInfo current = credentials.getFirst();
 			if (!passwordEngine.verify(current, password))
 			{
-				log.debug("Password provided by " + username + " is invalid");
-				return new AuthenticationResult(Status.deny, null);
+				log.info("Password provided by {} is invalid", username);
+				return LocalAuthenticationResult.failed(GENERIC_ERROR);
 			}
 			boolean isOutdated = isCurrentPasswordOutdated(password, credState, resolved);
 			AuthenticatedEntity ae = new AuthenticatedEntity(resolved.getEntityId(), username, 
 					isOutdated ? resolved.getCredentialName() : null);
-			return new AuthenticationResult(Status.success, ae);
+			return LocalAuthenticationResult.successful(ae);
 		} catch (Exception e)
 		{
-			log.debug("Error during password verification for " + username, e);
-			return new AuthenticationResult(Status.deny, null);
+			log.warn("Error during password verification for " + username, e);
+			return LocalAuthenticationResult.failed(GENERIC_ERROR);
 		}
 	}
 
@@ -306,7 +305,8 @@ public class PasswordVerificator extends AbstractLocalVerificator implements Pas
 		return new PasswordCredentialResetImpl(notificationProducer, identityResolver, 
 				this, credentialHelper,
 				credentialName, credential.getSerializedConfiguration(), 
-				credential.getPasswordResetSettings());
+				credential.getPasswordResetSettings(),
+				passwordEngine);
 	}
 
 	/**
@@ -316,13 +316,6 @@ public class PasswordVerificator extends AbstractLocalVerificator implements Pas
 	 * <p>
 	 * Additionally, if it is detected that the credential is outdated by checking the password, 
 	 * this newly received information is stored in DB: credential is updated to be manually outdated.
-	 *   
-	 * @param password
-	 * @throws AuthenticationException 
-	 * @throws IllegalGroupValueException 
-	 * @throws IllegalAttributeTypeException 
-	 * @throws IllegalTypeException 
-	 * @throws IllegalAttributeValueException 
 	 */
 	private boolean isCurrentPasswordOutdated(String password, PasswordCredentialDBState credState, 
 			EntityWithCredential resolved) throws AuthenticationException
@@ -350,8 +343,10 @@ public class PasswordVerificator extends AbstractLocalVerificator implements Pas
 		}
 		
 		if (storedPasswordRequiresRehash(credState))
+		{
+			log.debug("Password hash of user {} is outdated: hashing parameters were changed", resolved.getEntityId());
 			rehashPassword(password, credState, resolved);
-		
+		}
 		return false;
 	}
 
@@ -388,28 +383,24 @@ public class PasswordVerificator extends AbstractLocalVerificator implements Pas
 	{
 		if (credState.isOutdated())
 		{
-			log.debug("Password is outdated: was previously set to outdated state");
 			return new PasswordStatus(true, "set as");
 		}
 		if (credState.getSecurityQuestion() == null && 
 				credential.getPasswordResetSettings().isEnabled() && 
 				credential.getPasswordResetSettings().isRequireSecurityQuestion())
 		{
-			log.debug("Password is outdated: security question is not set while it is required now");
 			return new PasswordStatus(true, "no question");
 		}
 		PasswordInfo current = credState.getPasswords().getFirst();
 		Date validityEnd = new Date(current.getTime().getTime() + credential.getMaxAge());
 		if (new Date().after(validityEnd))
 		{
-			log.debug("Password is outdated: its validity expired on {}", validityEnd);
 			return new PasswordStatus(true, "expired");
 		}
 		if (credential.getPasswordResetSettings().isEnabled() && 
 				credential.getPasswordResetSettings().isRequireSecurityQuestion() &&
 				!passwordEngine.checkParamsUpToDate(credential, credState.getAnswer()))
 		{
-			log.debug("Password is outdated: security question answers do not meet current requirements");
 			return new PasswordStatus(true, "question outdated");
 		}
 		return new PasswordStatus(false, null);
@@ -422,12 +413,7 @@ public class PasswordVerificator extends AbstractLocalVerificator implements Pas
 	private boolean storedPasswordRequiresRehash(PasswordCredentialDBState credState)
 	{
 		PasswordInfo password = credState.getPasswords().getFirst();
-		if (!passwordEngine.checkParamsUpToDate(credential, password))
-		{
-			log.debug("Password hash is outdated: hashing parameters were changed");
-			return true;
-		}
-		return false;
+		return !passwordEngine.checkParamsUpToDate(credential, password);
 	}
 	
 	private void verifyNewPassword(String password, Deque<PasswordInfo> currentCredentials, int historyLookback) 
@@ -478,6 +464,15 @@ public class PasswordVerificator extends AbstractLocalVerificator implements Pas
 		return new PasswordValidator(ruleList);
 	}
 
+
+	@Override
+	public boolean isCredentialDefinitionChagneOutdatingCredentials(String newCredentialDefinition)
+	{
+		PasswordCredential updated = new PasswordCredential();
+		updated.setSerializedConfiguration(JsonUtil.parse(newCredentialDefinition));
+		return updated.hasStrongerRequirementsThen(credential);
+	}
+	
 	public static List<CharacterRule> getCharacteristicsRules()
 	{
 		return Lists.newArrayList(

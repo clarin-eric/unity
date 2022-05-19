@@ -4,12 +4,15 @@
  */
 package pl.edu.icm.unity.oauth.as.webauthz;
 
-import java.awt.image.BufferedImage;
+import java.util.Arrays;
 import java.util.Collection;
+import java.util.HashSet;
+import java.util.Optional;
 import java.util.function.BiConsumer;
 
 import org.apache.logging.log4j.Logger;
 
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.nimbusds.oauth2.sdk.AuthorizationErrorResponse;
 import com.nimbusds.oauth2.sdk.OAuth2Error;
@@ -21,26 +24,28 @@ import com.vaadin.ui.CustomComponent;
 import com.vaadin.ui.Label;
 import com.vaadin.ui.VerticalLayout;
 
+import pl.edu.icm.unity.MessageSource;
+import pl.edu.icm.unity.attr.UnityImage;
 import pl.edu.icm.unity.base.utils.Log;
 import pl.edu.icm.unity.engine.api.PreferencesManagement;
 import pl.edu.icm.unity.engine.api.attributes.AttributeTypeSupport;
 import pl.edu.icm.unity.engine.api.identity.IdentityTypeSupport;
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
-import pl.edu.icm.unity.engine.api.session.SessionManagement;
 import pl.edu.icm.unity.exceptions.EngineException;
 import pl.edu.icm.unity.oauth.as.OAuthAuthzContext;
-import pl.edu.icm.unity.oauth.as.OAuthAuthzContext.ScopeInfo;
+import pl.edu.icm.unity.oauth.as.OAuthAuthzContext.Prompt;
+import pl.edu.icm.unity.oauth.as.OAuthScope;
 import pl.edu.icm.unity.oauth.as.preferences.OAuthPreferences;
 import pl.edu.icm.unity.oauth.as.preferences.OAuthPreferences.OAuthClientSettings;
-import pl.edu.icm.unity.stdext.attr.JpegImageAttributeSyntax;
+import pl.edu.icm.unity.stdext.attr.ImageAttributeSyntax;
 import pl.edu.icm.unity.types.basic.Attribute;
 import pl.edu.icm.unity.types.basic.DynamicAttribute;
 import pl.edu.icm.unity.types.basic.IdentityParam;
-import pl.edu.icm.unity.webui.authn.StandardWebAuthenticationProcessor;
+import pl.edu.icm.unity.types.basic.idpStatistic.IdpStatistic.Status;
+import pl.edu.icm.unity.webui.authn.StandardWebLogoutHandler;
 import pl.edu.icm.unity.webui.common.Label100;
 import pl.edu.icm.unity.webui.common.Styles;
 import pl.edu.icm.unity.webui.common.attributes.AttributeHandlerRegistry;
-import pl.edu.icm.unity.webui.common.attributes.ext.JpegImageAttributeHandler;
+import pl.edu.icm.unity.webui.common.attributes.image.SimpleImageSource;
 import pl.edu.icm.unity.webui.common.safehtml.HtmlTag;
 import pl.edu.icm.unity.webui.common.safehtml.SafePanel;
 import pl.edu.icm.unity.webui.idpcommon.ExposedAttributesComponent;
@@ -57,64 +62,63 @@ import pl.edu.icm.unity.webui.idpcommon.SPInfoComponent;
 class OAuthConsentScreen extends CustomComponent 
 {
 	private static Logger log = Log.getLogger(Log.U_SERVER_OAUTH, OAuthConsentScreen.class);
-	private UnityMessageSource msg;
+	private MessageSource msg;
 	
-	private AttributeHandlerRegistry handlersRegistry;
-	private PreferencesManagement preferencesMan;
-	private StandardWebAuthenticationProcessor authnProcessor;
-	private SessionManagement sessionMan;
-	private OAuthResponseHandler oauthResponseHandler;
-	private IdentityTypeSupport idTypeSupport;
-	private AttributeTypeSupport aTypeSupport; 
+	private final AttributeHandlerRegistry handlersRegistry;
+	private final PreferencesManagement preferencesMan;
+	private final StandardWebLogoutHandler authnProcessor;
+	private final OAuthResponseHandler oauthResponseHandler;
+	private final IdentityTypeSupport idTypeSupport;
+	private final AttributeTypeSupport aTypeSupport; 
+	
+	private final IdentityParam identity;
+	private final Collection<DynamicAttribute> attributes;
+
+	private final Runnable declineHandler;
+	private final BiConsumer<IdentityParam, Collection<DynamicAttribute>> acceptHandler;
 	
 	private IdentitySelectorComponent idSelector;
 	private ExposedAttributesComponent attrsPresenter;
 	private CheckBox rememberCB;
-	private IdentityParam identity;
-	private Collection<DynamicAttribute> attributes;
 	
-	private Runnable declineHandler;
-	private BiConsumer<IdentityParam, Collection<DynamicAttribute>> acceptHandler; 
-	
-	OAuthConsentScreen(UnityMessageSource msg, 
+	OAuthConsentScreen(MessageSource msg, 
 			AttributeHandlerRegistry handlersRegistry,
 			PreferencesManagement preferencesMan,
-			StandardWebAuthenticationProcessor authnProcessor, 
+			StandardWebLogoutHandler authnProcessor, 
 			IdentityTypeSupport idTypeSupport, 
 			AttributeTypeSupport aTypeSupport,
-			SessionManagement sessionMan,
 			IdentityParam identity,
 			Collection<DynamicAttribute> attributes,
 			Runnable declineHandler,
-			BiConsumer<IdentityParam, Collection<DynamicAttribute>> acceptHandler)
+			BiConsumer<IdentityParam, Collection<DynamicAttribute>> acceptHandler,
+			OAuthResponseHandler oAuthResponseHandler)
 	{
 		this.msg = msg;
 		this.handlersRegistry = handlersRegistry;
 		this.preferencesMan = preferencesMan;
 		this.authnProcessor = authnProcessor;
-		this.sessionMan = sessionMan;
 		this.identity = identity;
 		this.attributes = attributes;
 		this.idTypeSupport = idTypeSupport;
 		this.aTypeSupport = aTypeSupport;
 		this.declineHandler = declineHandler;
 		this.acceptHandler = acceptHandler;
+		this.oauthResponseHandler = oAuthResponseHandler;
 		initUI();
 	}
 
 	private void initUI()
 	{
-		OAuthAuthzContext ctx = OAuthContextUtils.getContext();
-		oauthResponseHandler = new OAuthResponseHandler(sessionMan);
+		OAuthAuthzContext ctx = OAuthSessionService.getVaadinContext();
 		
 		VerticalLayout vmain = new VerticalLayout();
 		vmain.setMargin(false);
 		vmain.setSpacing(false);
 		
 		VerticalLayout contents = new VerticalLayout();
-		contents.addStyleName(Styles.maxWidthColumn.toString());
+		contents.addStyleName("u-consentMainColumn");
 		vmain.addComponent(contents);
-		vmain.setComponentAlignment(contents, Alignment.TOP_CENTER);
+		vmain.setComponentAlignment(contents, Alignment.MIDDLE_CENTER);
 		
 		
 		createInfoPart(ctx, contents);
@@ -137,23 +141,15 @@ class OAuthConsentScreen extends CustomComponent
 
 		Resource clientLogo = null;
 		Attribute logoAttr = oauthCtx.getClientLogo();
-		if (logoAttr != null && JpegImageAttributeSyntax.ID.equals(logoAttr.getValueSyntax()))
+		if (logoAttr != null && ImageAttributeSyntax.ID.equals(logoAttr.getValueSyntax()))
 		{
-			JpegImageAttributeSyntax syntax = (JpegImageAttributeSyntax) aTypeSupport.getSyntax(logoAttr);
-			BufferedImage image = syntax.convertFromString(logoAttr.getValues().get(0));
-			clientLogo = new JpegImageAttributeHandler.SimpleImageSource(
-					image, 
-					syntax, "jpg").getResource();
+			ImageAttributeSyntax syntax = (ImageAttributeSyntax) aTypeSupport.getSyntax(logoAttr);
+			UnityImage image = syntax.convertFromString(logoAttr.getValues().get(0));
+			clientLogo = new SimpleImageSource(image).getResource();
 		}
-		Label info1 = new Label100(msg.getMessage("OAuthAuthzUI.info1"));
-		info1.addStyleName(Styles.vLabelH1.toString());
-		
 		SPInfoComponent spInfo = new SPInfoComponent(msg, clientLogo, oauthRequester, returnAddress);
 		
-		Label spc1 = HtmlTag.br();
-		Label info2 = new Label100(msg.getMessage("OAuthAuthzUI.info2"));
-		
-		contents.addComponents(info1, spInfo, spc1, info2);
+		contents.addComponents(spInfo);
 	}
 
 	private void createExposedDataPart(OAuthAuthzContext ctx, VerticalLayout contents,
@@ -166,32 +162,30 @@ class OAuthConsentScreen extends CustomComponent
 		eiLayout.setSpacing(true);
 		exposedInfoPanel.setContent(eiLayout);
 
-		for (ScopeInfo si: ctx.getEffectiveRequestedScopes())
+		for (OAuthScope si : ctx.getEffectiveRequestedScopes())
 		{
-			Label scope = new Label100(si.getName());
-			Label scopeDesc = new Label100(si.getDescription());
-			scopeDesc.addStyleName(Styles.vLabelSmall.toString());
-			eiLayout.addComponents(scope, scopeDesc);
+			String label = Strings.isNullOrEmpty(si.description) ? si.name : si.description;
+			Label scope = new Label100("\u25CF " + label);
+			eiLayout.addComponents(scope);
 		}
+
 		Label spacer = HtmlTag.br();
 		spacer.addStyleName(Styles.vLabelSmall.toString());
 		eiLayout.addComponent(spacer);
 
 		createIdentityPart(identity, eiLayout);
-		attrsPresenter = new ExposedAttributesComponent(msg, handlersRegistry, attributes);
+		attrsPresenter = new ExposedAttributesComponent(msg, idTypeSupport, handlersRegistry, attributes,
+				Optional.of(identity));
 		eiLayout.addComponent(attrsPresenter);
-		
+
 		rememberCB = new CheckBox(msg.getMessage("OAuthAuthzUI.rememberSettings"));
 		contents.addComponent(rememberCB);
-		
-		if (ctx.getClientType() == ClientType.PUBLIC)
-			rememberCB.setVisible(false);
+		rememberCB.setVisible(!(ctx.getClientType() == ClientType.PUBLIC) && !ctx.getPrompts().contains(Prompt.CONSENT));
 	}
 	
 	private void createIdentityPart(IdentityParam validIdentity, VerticalLayout contents)
 	{
 		idSelector = new IdentitySelectorComponent(msg, idTypeSupport, Lists.newArrayList(validIdentity));
-		contents.addComponent(idSelector);
 	}
 	
 	private void createButtonsPart(VerticalLayout contents)
@@ -204,7 +198,7 @@ class OAuthConsentScreen extends CustomComponent
 				decline();
 		});
 		contents.addComponent(buttons);
-		contents.setComponentAlignment(buttons, Alignment.MIDDLE_CENTER);
+		contents.setComponentAlignment(buttons, Alignment.BOTTOM_RIGHT);
 	}
 
 	private void loadPreferences(OAuthAuthzContext ctx)
@@ -221,7 +215,7 @@ class OAuthConsentScreen extends CustomComponent
 			AuthorizationErrorResponse oauthResponse = new AuthorizationErrorResponse(ctx.getReturnURI(), 
 					OAuth2Error.SERVER_ERROR, ctx.getRequest().getState(),
 					ctx.getRequest().impliedResponseMode());
-			oauthResponseHandler.returnOauthResponseNotThrowing(oauthResponse, true);
+			oauthResponseHandler.returnOauthResponseNotThrowingAndReportStatistic(oauthResponse, true, ctx, Status.FAILED);
 		}
 	}
 	
@@ -233,7 +227,8 @@ class OAuthConsentScreen extends CustomComponent
 		String selId = settings.getSelectedIdentity();
 		idSelector.setSelected(selId);
 		
-		if (settings.isDoNotAsk() && ctx.getClientType() != ClientType.PUBLIC)
+		if (settings.isDoNotAsk() && ctx.getClientType() != ClientType.PUBLIC && settings.getEffectiveRequestedScopes()
+				.containsAll(Arrays.asList(ctx.getEffectiveRequestedScopesList())) && !ctx.getPrompts().contains(Prompt.CONSENT) )
 		{
 			setCompositionRoot(new VerticalLayout());
 			if (settings.isDefaultAccept())
@@ -245,10 +240,6 @@ class OAuthConsentScreen extends CustomComponent
 	
 	/**
 	 * Applies UI selected values to the given preferences object
-	 * @param preferences
-	 * @param ctx
-	 * @param defaultAccept
-	 * @throws EngineException
 	 */
 	private void updatePreferencesFromUI(OAuthPreferences preferences, OAuthAuthzContext ctx, boolean defaultAccept) 
 			throws EngineException
@@ -259,17 +250,19 @@ class OAuthConsentScreen extends CustomComponent
 		OAuthClientSettings settings = preferences.getSPSettings(reqIssuer);
 		settings.setDefaultAccept(defaultAccept);
 		settings.setDoNotAsk(true);
+		settings.setEffectiveRequestedScopes(new HashSet<>(Arrays.asList((ctx.getEffectiveRequestedScopesList()))));
 		String identityValue = idSelector.getSelectedIdentityForPreferences();
 		if (identityValue != null)
 			settings.setSelectedIdentity(identityValue);
 		preferences.setSPSettings(reqIssuer, settings);
+		
 	}
 	
 	private void storePreferences(boolean defaultAccept)
 	{
 		try
 		{
-			OAuthAuthzContext ctx = OAuthContextUtils.getContext();
+			OAuthAuthzContext ctx = OAuthSessionService.getVaadinContext();
 			OAuthPreferences preferences = OAuthPreferences.getPreferences(preferencesMan);
 			updatePreferencesFromUI(preferences, ctx, defaultAccept);
 			OAuthPreferences.savePreferences(preferencesMan, preferences);

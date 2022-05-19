@@ -4,7 +4,7 @@
  */
 package pl.edu.icm.unity.webui.authn.outdated;
 
-import org.apache.logging.log4j.util.Strings;
+import java.util.Optional;
 
 import com.vaadin.event.ShortcutAction.KeyCode;
 import com.vaadin.server.Resource;
@@ -17,9 +17,9 @@ import com.vaadin.ui.Image;
 import com.vaadin.ui.Label;
 import com.vaadin.ui.VerticalLayout;
 
+import pl.edu.icm.unity.MessageSource;
 import pl.edu.icm.unity.engine.api.EntityCredentialManagement;
 import pl.edu.icm.unity.engine.api.EntityManagement;
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
 import pl.edu.icm.unity.engine.api.session.AdditionalAuthenticationMisconfiguredException;
 import pl.edu.icm.unity.engine.api.session.AdditionalAuthenticationRequiredException;
 import pl.edu.icm.unity.exceptions.IllegalCredentialException;
@@ -29,23 +29,24 @@ import pl.edu.icm.unity.types.basic.EntityParam;
 import pl.edu.icm.unity.webui.authn.additional.AdditionalAuthnHandler;
 import pl.edu.icm.unity.webui.authn.additional.AdditionalAuthnHandler.AuthnResult;
 import pl.edu.icm.unity.webui.common.ComponentsContainer;
-import pl.edu.icm.unity.webui.common.ImageUtils;
 import pl.edu.icm.unity.webui.common.NotificationPopup;
 import pl.edu.icm.unity.webui.common.Styles;
 import pl.edu.icm.unity.webui.common.credentials.CredentialEditor;
 import pl.edu.icm.unity.webui.common.credentials.CredentialEditorContext;
 import pl.edu.icm.unity.webui.common.credentials.CredentialEditorRegistry;
 import pl.edu.icm.unity.webui.common.credentials.MissingCredentialException;
+import pl.edu.icm.unity.webui.common.file.ImageAccessService;
 
 /**
  * Panel allowing to set a credential.
  */
 class CredentialChangePanel extends CustomComponent
 {
+	private ImageAccessService imageAccessService;
 	private EntityCredentialManagement ecredMan;
 	private EntityManagement entityMan;
 	private CredentialEditorRegistry credEditorReg;
-	private UnityMessageSource msg;
+	private MessageSource msg;
 	private boolean changed = false;
 	private Entity entity;
 	private final long entityId;
@@ -54,13 +55,14 @@ class CredentialChangePanel extends CustomComponent
 	private CredentialDefinition toEdit;
 	private final AdditionalAuthnHandler additionalAuthnHandler;
 	
-	CredentialChangePanel(UnityMessageSource msg, long entityId,
+	CredentialChangePanel(MessageSource msg, long entityId, ImageAccessService imageAccessService,
 			EntityCredentialManagement ecredMan, 
 			EntityManagement entityMan, CredentialEditorRegistry credEditorReg,
 			CredentialDefinition toEdit, AdditionalAuthnHandler additionalAuthnHandler,
 			CredentialChangeConfiguration uiConfig, Runnable updatedCallback, Runnable cancelHandler)
 	{
 		this.msg = msg;
+		this.imageAccessService = imageAccessService;
 		this.ecredMan = ecredMan;
 		this.entityId = entityId;
 		this.entityMan = entityMan;
@@ -87,13 +89,13 @@ class CredentialChangePanel extends CustomComponent
 		wrapper.setWidthUndefined();
 		wrapper.setMargin(false);
 		
-		if (!Strings.isEmpty(uiConfig.logoURL))
+		Optional<Resource> logo = imageAccessService.getConfiguredImageResourceFromNullableUri(uiConfig.logoURL);
+		if (logo.isPresent())
 		{
-			Resource logoResource = ImageUtils.getConfiguredImageResource(uiConfig.logoURL);
-			Image image = new Image(null, logoResource);
+			Image image = new Image(null, logo.get());
 			image.addStyleName("u-authn-logo");
 			wrapper.addComponent(image);
-			wrapper.setComponentAlignment(image, Alignment.TOP_CENTER);
+			wrapper.setComponentAlignment(image, Alignment.TOP_CENTER);	
 		}
 		
 		Label info = new Label(msg.getMessage("OutdatedCredentialDialog.info"));

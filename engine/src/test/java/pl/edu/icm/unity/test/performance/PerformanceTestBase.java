@@ -25,6 +25,8 @@ import org.junit.Before;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 
+import pl.edu.icm.unity.attr.ImageType;
+import pl.edu.icm.unity.attr.UnityImage;
 import pl.edu.icm.unity.engine.SecuredDBIntegrationTestBase;
 import pl.edu.icm.unity.engine.api.AttributeTypeManagement;
 import pl.edu.icm.unity.engine.api.AttributesManagement;
@@ -33,15 +35,14 @@ import pl.edu.icm.unity.engine.api.EntityManagement;
 import pl.edu.icm.unity.engine.api.GroupsManagement;
 import pl.edu.icm.unity.engine.api.authn.InvocationContext;
 import pl.edu.icm.unity.engine.api.authn.LoginSession;
-import pl.edu.icm.unity.engine.api.identity.IdentityResolver;
 import pl.edu.icm.unity.engine.api.session.SessionManagement;
 import pl.edu.icm.unity.exceptions.EngineException;
 import pl.edu.icm.unity.stdext.attr.FloatingPointAttribute;
 import pl.edu.icm.unity.stdext.attr.FloatingPointAttributeSyntax;
+import pl.edu.icm.unity.stdext.attr.ImageAttribute;
+import pl.edu.icm.unity.stdext.attr.ImageAttributeSyntax;
 import pl.edu.icm.unity.stdext.attr.IntegerAttribute;
 import pl.edu.icm.unity.stdext.attr.IntegerAttributeSyntax;
-import pl.edu.icm.unity.stdext.attr.JpegImageAttribute;
-import pl.edu.icm.unity.stdext.attr.JpegImageAttributeSyntax;
 import pl.edu.icm.unity.stdext.attr.StringAttribute;
 import pl.edu.icm.unity.stdext.attr.StringAttributeSyntax;
 import pl.edu.icm.unity.stdext.credential.pass.PasswordToken;
@@ -101,8 +102,6 @@ public abstract class PerformanceTestBase extends SecuredDBIntegrationTestBase
 	protected AttributeTypeManagement attrTypesMan;
 	@Autowired
 	protected SessionManagement sessionMan;
-	@Autowired
-	protected IdentityResolver identityResolver;
 	
 	@Before
 	public void setup() throws Exception
@@ -154,7 +153,7 @@ public abstract class PerformanceTestBase extends SecuredDBIntegrationTestBase
 		for (int i = 0; i < n; i++)
 		{
 			Identity added1 = idsMan.addEntity(new IdentityParam(UsernameIdentity.ID,
-					"user" + i), CR_MOCK, EntityState.valid, false);
+					"user" + i), CR_MOCK, EntityState.valid);
 
 			eCredMan.setEntityCredential(new EntityParam(added1), "credential1",
 					new PasswordToken("PassWord8743#%$^&*").toJson());
@@ -382,8 +381,8 @@ public abstract class PerformanceTestBase extends SecuredDBIntegrationTestBase
 
 		for (int i = 0; i < n; i++)
 		{
-			AttributeType type = new AttributeType("jpeg_" + i,
-					JpegImageAttributeSyntax.ID);
+			AttributeType type = new AttributeType("img_" + i,
+					ImageAttributeSyntax.ID);
 			attrTypesMan.addAttributeType(type);
 		}
 		
@@ -424,9 +423,8 @@ public abstract class PerformanceTestBase extends SecuredDBIntegrationTestBase
 		for (int i = 0; i < imageAttr; i++)
 		{
 			BufferedImage im = new BufferedImage(1000, 1000, 1);
-			String typeName = "jpeg_" + r.nextInt((nDefAttr / 4) - 2);
-			Attribute a = JpegImageAttribute.of(typeName, enInGroup.get(i%NU),
-					Collections.singletonList(im));
+			String typeName = "img_" + r.nextInt((nDefAttr / 4) - 2);
+			Attribute a = ImageAttribute.of(typeName, enInGroup.get(i%NU), new UnityImage(im, ImageType.JPG));
 			EntityParam par = new EntityParam(entities.get(i%NU).getId());
 			attrsMan.setAttribute(par, a);
 			op++;
@@ -446,7 +444,7 @@ public abstract class PerformanceTestBase extends SecuredDBIntegrationTestBase
 		{
 			String typeName = "int_" + r.nextInt((nDefAttr / 4) - 2);
 			Attribute a = IntegerAttribute.of(typeName, enInGroup.get(i%NU),
-					Collections.singletonList(new Long(i + 100)));
+					Collections.singletonList(i + 100));
 			EntityParam par = new EntityParam(entities.get(i%NU).getId());
 			attrsMan.setAttribute(par, a);
 			op++;
@@ -456,7 +454,7 @@ public abstract class PerformanceTestBase extends SecuredDBIntegrationTestBase
 		{
 			String typeName = "float_" + r.nextInt((nDefAttr / 4) - 2);
 			Attribute a = FloatingPointAttribute.of(typeName, enInGroup.get(i%NU),
-					Collections.singletonList(new Double(i + 100)));
+					Collections.singletonList(i + 100.0));
 			EntityParam par = new EntityParam(entities.get(i%NU).getId());
 			attrsMan.setAttribute(par, a);
 			op++;

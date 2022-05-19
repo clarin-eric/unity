@@ -20,13 +20,13 @@ import net.sf.ehcache.config.PersistenceConfiguration;
 import net.sf.ehcache.config.Searchable;
 import net.sf.ehcache.search.Query;
 import net.sf.ehcache.search.Results;
+import pl.edu.icm.unity.MessageSource;
 import pl.edu.icm.unity.base.msgtemplates.confirm.MobileNumberConfirmationTemplateDef;
 import pl.edu.icm.unity.base.utils.Log;
 import pl.edu.icm.unity.engine.api.attributes.AttributeValueSyntax;
 import pl.edu.icm.unity.engine.api.config.UnityServerConfiguration;
 import pl.edu.icm.unity.engine.api.confirmation.MobileNumberConfirmationManager;
 import pl.edu.icm.unity.engine.api.confirmation.SMSCode;
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
 import pl.edu.icm.unity.engine.api.notification.NotificationProducer;
 import pl.edu.icm.unity.engine.api.utils.CacheProvider;
 import pl.edu.icm.unity.engine.api.utils.CodeGenerator;
@@ -44,18 +44,18 @@ import pl.edu.icm.unity.types.confirmation.MobileNumberConfirmationConfiguration
 @Component
 public class MobileNumberConfirmationManagerImpl implements MobileNumberConfirmationManager
 {
-	private static final Logger log = Log.getLogger(Log.U_SERVER, MobileNumberConfirmationManagerImpl.class);
+	private static final Logger log = Log.getLogger(Log.U_SERVER_CONFIRMATION, MobileNumberConfirmationManagerImpl.class);
 	private static final String CACHE_ID = "MobileConfirmationCache";
 	
 	private NotificationProducer notificationProducer;
-	private UnityMessageSource msg;
+	private MessageSource msg;
 	private AttributeTypeHelper attrTypeHelper;
 	private Ehcache confirmationReqCache;
 	private int requestLimit;
 	
 	@Autowired
 	public MobileNumberConfirmationManagerImpl(NotificationProducer notificationProducer,
-			UnityMessageSource msg, AttributeTypeHelper attrTypeHelper,
+			MessageSource msg, AttributeTypeHelper attrTypeHelper,
 			CacheProvider cacheProvider, UnityServerConfiguration mainConf)
 	{
 		this.notificationProducer = notificationProducer;
@@ -95,7 +95,7 @@ public class MobileNumberConfirmationManagerImpl implements MobileNumberConfirma
 		HashMap<String, String> params = new HashMap<>();
 		params.put(MobileNumberConfirmationTemplateDef.CONFIRMATION_CODE, code);
 
-		log.debug("Send sms confirmation request to mobile " + mobileToConfirm + " with code = "
+		log.info("Send sms confirmation request to mobile " + mobileToConfirm + " with code = "
 				+ code);
 
 		notificationProducer.sendNotification(mobileToConfirm,

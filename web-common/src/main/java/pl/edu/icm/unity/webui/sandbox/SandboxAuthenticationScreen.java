@@ -4,71 +4,137 @@
  */
 package pl.edu.icm.unity.webui.sandbox;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+import static pl.edu.icm.unity.webui.VaadinEndpointProperties.AUTHN_ADD_ALL;
+import static pl.edu.icm.unity.webui.VaadinEndpointProperties.AUTHN_COLUMNS_PFX;
+import static pl.edu.icm.unity.webui.VaadinEndpointProperties.AUTHN_COLUMN_CONTENTS;
+import static pl.edu.icm.unity.webui.VaadinEndpointProperties.AUTHN_COLUMN_WIDTH;
+import static pl.edu.icm.unity.webui.VaadinEndpointProperties.AUTHN_GRIDS_PFX;
+import static pl.edu.icm.unity.webui.VaadinEndpointProperties.AUTHN_GRID_CONTENTS;
+import static pl.edu.icm.unity.webui.VaadinEndpointProperties.AUTHN_GRID_ROWS;
 import static pl.edu.icm.unity.webui.VaadinEndpointProperties.AUTHN_SHOW_LAST_OPTION_ONLY;
 import static pl.edu.icm.unity.webui.VaadinEndpointProperties.AUTHN_TITLE;
 import static pl.edu.icm.unity.webui.VaadinEndpointProperties.PREFIX;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Properties;
 import java.util.stream.Collectors;
 
-import com.vaadin.ui.Component;
+import org.apache.logging.log4j.Logger;
 
+import com.vaadin.ui.Component;
+import com.vaadin.ui.HorizontalLayout;
+
+import pl.edu.icm.unity.MessageSource;
+import pl.edu.icm.unity.base.utils.Log;
 import pl.edu.icm.unity.engine.api.EntityManagement;
 import pl.edu.icm.unity.engine.api.authn.AuthenticationFlow;
-import pl.edu.icm.unity.engine.api.authn.AuthenticationResult;
-import pl.edu.icm.unity.engine.api.authn.SandboxAuthnContext;
-import pl.edu.icm.unity.engine.api.authn.remote.SandboxAuthnResultCallback;
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
+import pl.edu.icm.unity.engine.api.authn.AuthenticationStepContext;
+import pl.edu.icm.unity.engine.api.authn.InteractiveAuthenticationProcessor;
+import pl.edu.icm.unity.engine.api.authn.PartialAuthnState;
+import pl.edu.icm.unity.engine.api.authn.RemoteAuthenticationResult.UnknownRemotePrincipalResult;
+import pl.edu.icm.unity.engine.api.authn.sandbox.SandboxAuthnRouter;
 import pl.edu.icm.unity.engine.api.utils.ExecutorsService;
+import pl.edu.icm.unity.types.authn.AuthenticationOptionKey;
+import pl.edu.icm.unity.types.authn.AuthenticationRealm;
+import pl.edu.icm.unity.types.authn.RememberMePolicy;
 import pl.edu.icm.unity.types.endpoint.ResolvedEndpoint;
 import pl.edu.icm.unity.webui.VaadinEndpointProperties;
 import pl.edu.icm.unity.webui.authn.CancelHandler;
 import pl.edu.icm.unity.webui.authn.CredentialResetLauncher;
 import pl.edu.icm.unity.webui.authn.LocaleChoiceComponent;
+import pl.edu.icm.unity.webui.authn.UnknownUserDialog;
+import pl.edu.icm.unity.webui.authn.VaadinAuthentication;
+import pl.edu.icm.unity.webui.authn.VaadinAuthentication.AuthenticationCallback;
 import pl.edu.icm.unity.webui.authn.column.ColumnInstantAuthenticationScreen;
-import pl.edu.icm.unity.webui.authn.remote.UnknownUserDialog;
+import pl.edu.icm.unity.webui.authn.column.FirstFactorAuthNPanel;
+import pl.edu.icm.unity.webui.authn.column.SecondFactorAuthNPanel;
+import pl.edu.icm.unity.webui.common.file.ImageAccessService;
 
 /**
  * Extends authentication screen, reconfiguring it to work as sandbox one.  
  *  
  * @author Roman Krysinski
  */
-class SandboxAuthenticationScreen extends ColumnInstantAuthenticationScreen
+public class SandboxAuthenticationScreen extends ColumnInstantAuthenticationScreen
 {
-	private SandboxAuthnRouter sandboxRouter;
+	private static final Logger log = Log.getLogger(Log.U_SERVER_WEB, SandboxAuthenticationScreen.class);
+	private final SandboxAuthnRouter sandboxRouter;
 
-	public SandboxAuthenticationScreen(UnityMessageSource msg, 
+	public SandboxAuthenticationScreen(MessageSource msg, 
+			ImageAccessService imageAccessService,
 			VaadinEndpointProperties config,
 			ResolvedEndpoint endpointDescription,
 			CancelHandler cancelHandler,
 			EntityManagement idsMan,
 			ExecutorsService execService, 
-			SandboxAuthenticationProcessor authnProcessor,
-			LocaleChoiceComponent localeChoice,
+			InteractiveAuthenticationProcessor authnProcessor,
+			Optional<LocaleChoiceComponent> localeChoice,
 			List<AuthenticationFlow> authenticators,
 			String title,
-			SandboxAuthnRouter sandboxRouter)
+			SandboxAuthnRouter sandboxRouter,
+			boolean baseOnOriginalEndpointConfig)
 	{
-		super(msg, prepareConfiguration(config.getProperties(), title), 
+		super(msg, imageAccessService, baseOnOriginalEndpointConfig ? 
+				prepareConfigurationBasingOnEndpoint(config.getProperties(), title) : 
+				prepareFreshConfigurationWithAllOptions(title, authenticators), 
 				endpointDescription, 
-				() -> false,
 				new NoOpCredentialRestLauncher(),
 				() -> {},
 				cancelHandler, idsMan, 
 				execService, false, 
 				SandboxAuthenticationScreen::disabledUnknownUserProvider, 
-				authnProcessor, 
 				localeChoice, 
-				authenticators);
+				authenticators,
+				authnProcessor);
 		this.sandboxRouter = sandboxRouter;
+		init();
+		checkNotNull(sandboxRouter);
 	}
 
-	/**
-	 * @return configuration of the sandbox based on the properties of the base endpoint
-	 */
-	private static VaadinEndpointProperties prepareConfiguration(Properties endpointProperties, String title)
+	private static VaadinEndpointProperties prepareFreshConfigurationWithAllOptions(String title,
+			List<AuthenticationFlow> authenticators)
+	{
+		Properties sandboxConfig = new Properties();
+		sandboxConfig.setProperty(PREFIX + AUTHN_TITLE, title);
+		sandboxConfig.setProperty(PREFIX + AUTHN_SHOW_LAST_OPTION_ONLY, "false");
+		sandboxConfig.setProperty(PREFIX + AUTHN_ADD_ALL, "true");
+		
+		String gridAuthnsSpec = getGridFlowsSpec(authenticators);
+		String nonGridAuthnsSpec = getNonGridFlowsSpec(authenticators);
+		
+		sandboxConfig.setProperty(PREFIX + AUTHN_GRIDS_PFX + "G1." + AUTHN_GRID_CONTENTS, gridAuthnsSpec);
+		sandboxConfig.setProperty(PREFIX + AUTHN_GRIDS_PFX + "G1." + AUTHN_GRID_ROWS, "15");
+		sandboxConfig.setProperty(PREFIX + AUTHN_COLUMNS_PFX + "1." + AUTHN_COLUMN_CONTENTS, "_GRID_G1 " + nonGridAuthnsSpec);
+		sandboxConfig.setProperty(PREFIX + AUTHN_COLUMNS_PFX + "1." + AUTHN_COLUMN_WIDTH, "28");
+		
+		log.debug("Configuration for the sandbox screen with all options:\n{}", sandboxConfig);
+		return new VaadinEndpointProperties(sandboxConfig);
+	}
+
+	private static String getGridFlowsSpec(List<AuthenticationFlow> authenticators)
+	{
+		return authenticators.stream()
+			.filter(flow -> flow.getFirstFactorAuthenticators().stream()
+					.filter(authenticator -> ((VaadinAuthentication)authenticator.getRetrieval()).supportsGrid())
+					.findAny().isPresent())
+			.map(flow -> flow.getId())
+			.collect(Collectors.joining(" "));
+	}
+
+	private static String getNonGridFlowsSpec(List<AuthenticationFlow> authenticators)
+	{
+		return authenticators.stream()
+			.flatMap(flow -> flow.getFirstFactorAuthenticators().stream())
+			.filter(ai -> !((VaadinAuthentication)ai.getRetrieval()).supportsGrid())
+			.map(ai -> ai.getMetadata().getId())
+			.collect(Collectors.joining(" "));
+	}
+	
+	
+	private static VaadinEndpointProperties prepareConfigurationBasingOnEndpoint(Properties endpointProperties, String title)
 	{
 		Properties stripDown = new Properties();
 		Map<Object, Object> reduced = endpointProperties.entrySet().stream().filter(entry -> {
@@ -83,27 +149,48 @@ class SandboxAuthenticationScreen extends ColumnInstantAuthenticationScreen
 		stripDown.setProperty(PREFIX + AUTHN_SHOW_LAST_OPTION_ONLY, "false");
 		return new VaadinEndpointProperties(stripDown);
 	}
-	
+
+	@Override
+	protected AuthenticationCallback createFirstFactorAuthnCallback(AuthenticationOptionKey optionId,
+			FirstFactorAuthNPanel authNPanel, AuthenticationStepContext stepContext)
+	{
+		return new FirstFactorSandboxAuthnCallback(msg, interactiveAuthnProcessor, stepContext, sandboxRouter,
+				new PrimaryAuthenticationListenerImpl(optionId.toStringEncodedKey(), authNPanel));
+	}
 	
 	@Override
-	protected void init() 
+	protected AuthenticationCallback createSecondFactorAuthnCallback(AuthenticationOptionKey optionId,
+			SecondFactorAuthNPanel authNPanel, AuthenticationStepContext stepContext, 
+			PartialAuthnState partialAuthnState)
 	{
-		setSandboxCallbackForAuthenticators(new StandardSandboxAuthnResultCallback());
-		super.init();
+		return new SecondFactorSandboxAuthnCallback(msg, interactiveAuthnProcessor, stepContext, 
+				new SecondaryAuthenticationListenerImpl(), 
+				sandboxRouter, 
+				partialAuthnState);
 	}
 	
-	private static UnknownUserDialog disabledUnknownUserProvider(AuthenticationResult authnResult)
+	@Override
+	protected RememberMePolicy getRememberMePolicy()
 	{
-		throw new IllegalStateException("Showing unknown user dialog on sandbox screen - should never happen");
+		if (endpointDescription.getRealm() == null)
+			return RememberMePolicy.disallow;
+		return super.getRememberMePolicy();
 	}
 	
-	private class StandardSandboxAuthnResultCallback implements SandboxAuthnResultCallback
+	@Override
+	protected Component getRememberMeComponent(AuthenticationRealm realm)
 	{
-		@Override
-		public void sandboxedAuthenticationDone(SandboxAuthnContext ctx)
+		if (realm == null)
 		{
-			sandboxRouter.firePartialEvent(new SandboxAuthnEvent(ctx));
+			return new HorizontalLayout();
 		}
+
+		return super.getRememberMeComponent(realm);
+	}
+	
+	private static UnknownUserDialog disabledUnknownUserProvider(UnknownRemotePrincipalResult authnResult)
+	{
+		throw new IllegalStateException("Showing unknown user dialog on sanbox screen - should never happen");
 	}
 	
 	private static class NoOpCredentialRestLauncher implements CredentialResetLauncher

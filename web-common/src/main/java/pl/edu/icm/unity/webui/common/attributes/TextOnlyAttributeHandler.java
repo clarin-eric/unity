@@ -17,8 +17,8 @@ import com.vaadin.ui.TextArea;
 import com.vaadin.ui.TextField;
 import com.vaadin.ui.VerticalLayout;
 
+import pl.edu.icm.unity.MessageSource;
 import pl.edu.icm.unity.engine.api.attributes.AttributeValueSyntax;
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
 import pl.edu.icm.unity.exceptions.IllegalAttributeValueException;
 import pl.edu.icm.unity.stdext.attr.StringAttributeSyntax;
 import pl.edu.icm.unity.webui.common.ComponentsContainer;
@@ -36,11 +36,9 @@ import pl.edu.icm.unity.webui.common.binding.StringBindingValue;
 public abstract class TextOnlyAttributeHandler implements WebAttributeHandler
 {
 	protected AttributeValueSyntax<?> syntax;
-	protected UnityMessageSource msg;
-	
-	public static final int LARGE_STRING = 1000;
-	
-	public TextOnlyAttributeHandler(UnityMessageSource msg, AttributeValueSyntax<?> syntax)
+	protected MessageSource msg;
+		
+	public TextOnlyAttributeHandler(MessageSource msg, AttributeValueSyntax<?> syntax)
 	{
 		this.syntax = syntax;
 		this.msg = msg;
@@ -88,18 +86,17 @@ public abstract class TextOnlyAttributeHandler implements WebAttributeHandler
 			
 			this.required = context.isRequired();
 			this.context = context;
-			boolean large = false;
+			boolean editWithTextArea = false;
 			if (syntax instanceof StringAttributeSyntax)
 			{
 				StringAttributeSyntax sas = (StringAttributeSyntax) syntax;
-				if (sas.getMaxLength() > LARGE_STRING)
-					large = true;
+				editWithTextArea = sas.isEditWithTextArea();
 				this.required = required && sas.getMinLength() > 0;
 			}
 			
-			field = large ? new TextArea() : new TextField();
-			if (large)
-				field.setWidth(60, Unit.PERCENTAGE);
+			field = editWithTextArea ? new TextArea() : new TextField();
+			if (editWithTextArea)
+				field.setWidth(100, Unit.PERCENTAGE);
 			setLabel(label);
 			
 			StringBuilder sb = new StringBuilder();

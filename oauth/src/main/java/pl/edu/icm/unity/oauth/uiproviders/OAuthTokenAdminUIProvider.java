@@ -8,10 +8,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 
 import com.vaadin.ui.Component;
 
+import pl.edu.icm.unity.MessageSource;
 import pl.edu.icm.unity.engine.api.EntityManagement;
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
 import pl.edu.icm.unity.engine.api.token.SecuredTokensManagement;
 import pl.edu.icm.unity.engine.api.utils.PrototypeComponent;
+import pl.edu.icm.unity.oauth.as.OAuthTokenRepository;
 import pl.edu.icm.unity.webui.providers.AdminUITabProvider;
 
 /**
@@ -23,14 +24,17 @@ public class OAuthTokenAdminUIProvider implements AdminUITabProvider
 {	
 	public static final String ID = "oauthAdminTokens";
 	private SecuredTokensManagement tokenMan;
-	private UnityMessageSource msg;
+	private MessageSource msg;
 	private EntityManagement entityManagement;
+	private OAuthTokenRepository tokenDAO;
 	
 	@Autowired
-	public OAuthTokenAdminUIProvider(SecuredTokensManagement tokenMan, UnityMessageSource msg,
+	public OAuthTokenAdminUIProvider(SecuredTokensManagement tokenMan, OAuthTokenRepository tokenDAO,
+			MessageSource msg,
 			EntityManagement entityManagement)
 	{
 		this.tokenMan = tokenMan;
+		this.tokenDAO = tokenDAO;
 		this.msg = msg;
 		this.entityManagement = entityManagement;
 	}
@@ -38,7 +42,7 @@ public class OAuthTokenAdminUIProvider implements AdminUITabProvider
 	@Override
 	public Component getUI()
 	{
-		return new AdminTokensComponent(tokenMan, msg, entityManagement, true);
+		return new AdminTokensComponent(tokenMan, tokenDAO, msg, entityManagement, true);
 	}
 
 	@Override

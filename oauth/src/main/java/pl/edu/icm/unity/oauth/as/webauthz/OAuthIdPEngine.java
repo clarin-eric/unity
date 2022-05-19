@@ -28,6 +28,7 @@ import pl.edu.icm.unity.oauth.as.OAuthErrorResponseException;
 import pl.edu.icm.unity.oauth.as.OAuthSystemAttributesProvider.GrantFlow;
 import pl.edu.icm.unity.types.basic.EntityParam;
 import pl.edu.icm.unity.types.basic.IdentityParam;
+import pl.edu.icm.unity.types.translation.TranslationProfile;
 
 /**
  * Wraps {@link IdPEngine} with code used by OAuth AS. In the first place provides standard error handling.
@@ -52,7 +53,7 @@ public class OAuthIdPEngine
 			return getUserInfoUnsafe(ctx);
 		} catch (ExecutionFailException e)
 		{
-			log.debug("Authentication failed due to profile's decision, returning error");
+			log.info("Authentication failed due to profile's decision, returning error");
 			ErrorObject eo = new ErrorObject("access_denied", 
 					e.getMessage(), HTTPResponse.SC_FORBIDDEN);
 			
@@ -61,7 +62,7 @@ public class OAuthIdPEngine
 			throw new OAuthErrorResponseException(oauthResponse, true);
 		} catch (IllegalGroupValueException igve)
 		{
-			log.debug("Entity trying to access OAuth resource is not a member of required group");
+			log.warn("Entity trying to access OAuth resource is not a member of required group");
 			ErrorObject eo = new ErrorObject("access_denied", 
 					"Not a member of required group " + ctx.getUsersGroup(), 
 					HTTPResponse.SC_FORBIDDEN);
@@ -98,16 +99,15 @@ public class OAuthIdPEngine
 		EntityInGroup requesterEntity = new EntityInGroup(
 				ctx.getConfig().getValue(OAuthASProperties.CLIENTS_GROUP), 
 				new EntityParam(ctx.getClientEntityId()));
-		return getUserInfoUnsafe(ae.getEntityId(),
-				ctx.getRequest().getClientID().getValue(), 
-				Optional.of(requesterEntity), 
-				ctx.getUsersGroup(),
-				ctx.getTranslationProfile(), flow, ctx.getConfig());
+		return getUserInfoUnsafe(ae.getEntityId(), ctx.getRequest().getClientID().getValue(),
+				Optional.of(requesterEntity), ctx.getUsersGroup(),
+				ctx.getTranslationProfile() ,
+				flow, ctx.getConfig());
 	}
 
 	public TranslationResult getUserInfoUnsafe(long entityId, String clientId, 
 			Optional<EntityInGroup> requesterEntity, 
-			String userGroup, String translationProfile, String flow,
+			String userGroup, TranslationProfile translationProfile, String flow,
 			OAuthASProperties config) throws EngineException
 	{
 		return idpEngine.obtainUserInformationWithEnrichingImport(

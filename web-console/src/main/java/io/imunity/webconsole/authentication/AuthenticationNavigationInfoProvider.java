@@ -8,11 +8,11 @@ package io.imunity.webconsole.authentication;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
-import io.imunity.webconsole.WebConsoleRootNavigationInfoProvider;
 import io.imunity.webconsole.WebConsoleNavigationInfoProviderBase;
+import io.imunity.webconsole.WebConsoleRootNavigationInfoProvider;
 import io.imunity.webelements.navigation.NavigationInfo;
 import io.imunity.webelements.navigation.NavigationInfo.Type;
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
+import pl.edu.icm.unity.MessageSource;
 import pl.edu.icm.unity.webui.common.Images;
 
 /**
@@ -27,13 +27,12 @@ public class AuthenticationNavigationInfoProvider extends WebConsoleNavigationIn
 	public static final String ID = "Authentication";
 
 	@Autowired
-	public AuthenticationNavigationInfoProvider(UnityMessageSource msg,
-			WebConsoleRootNavigationInfoProvider parent)
+	public AuthenticationNavigationInfoProvider(MessageSource msg)
 	{
 		super(new NavigationInfo.NavigationInfoBuilder(ID, Type.ViewGroup)
-				.withParent(parent.getNavigationInfo())
+				.withParent(WebConsoleRootNavigationInfoProvider.ID)
 				.withCaption(msg.getMessage("WebConsoleMenu.authentication"))
-				.withIcon(Images.key_o.getResource()).withPosition(1).build());
+				.withIcon(Images.key_o.getResource()).withPosition(40).build());
 
 	}
 

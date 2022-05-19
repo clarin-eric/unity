@@ -8,71 +8,88 @@ import java.io.IOException;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
-import javax.servlet.http.HttpSession;
 
 import org.apache.logging.log4j.Logger;
 
+import eu.unicore.samly2.binding.SAMLMessageType;
 import eu.unicore.samly2.exceptions.SAMLServerException;
+import eu.unicore.security.dsig.DSigException;
 import pl.edu.icm.unity.base.utils.Log;
 import pl.edu.icm.unity.engine.api.utils.FreemarkerAppHandler;
 import pl.edu.icm.unity.saml.SamlProperties.Binding;
+import pl.edu.icm.unity.saml.idp.SamlIdpStatisticReporter;
+import pl.edu.icm.unity.saml.idp.SamlIdpStatisticReporter.SamlIdpStatisticReporterFactory;
+import pl.edu.icm.unity.saml.idp.ctx.SAMLAuthnContext;
 import pl.edu.icm.unity.saml.idp.processor.AuthnResponseProcessor;
-import pl.edu.icm.unity.saml.web.ResponseHandlerBase;
+import pl.edu.icm.unity.saml.idp.web.SamlSessionService;
+import pl.edu.icm.unity.saml.slo.SamlMessageHandler;
+import pl.edu.icm.unity.saml.slo.SamlRoutableMessage;
+import pl.edu.icm.unity.saml.slo.SamlRoutableUnsignedMessage;
+import pl.edu.icm.unity.types.basic.idpStatistic.IdpStatistic.Status;
+import pl.edu.icm.unity.types.endpoint.Endpoint;
+import pl.edu.icm.unity.webui.LoginInProgressService.HttpContextSession;
 import pl.edu.icm.unity.webui.idpcommon.EopException;
 import xmlbeans.org.oasis.saml2.protocol.ResponseDocument;
 
 /**
- * Helper to send responses in SSO authn case, when working in non-Vaadin environment (plain servlets).
+ * Helper to send responses in SSO authn case, when working in non-Vaadin
+ * environment (plain servlets).
+ * 
  * @author K. Benedyczak
  */
-public class SSOResponseHandler extends ResponseHandlerBase
+public class SSOResponseHandler
 {
 	private static final Logger log = Log.getLogger(Log.U_SERVER_SAML, SSOResponseHandler.class);
-	
-	public SSOResponseHandler(FreemarkerAppHandler freemarker)
+	private final SamlMessageHandler messageHandler;
+	private final SamlIdpStatisticReporter reporter;
+
+	public SSOResponseHandler(FreemarkerAppHandler freemarker, SamlIdpStatisticReporterFactory reporterFactory,
+			Endpoint endpoint)
 	{
-		super(freemarker);
+		messageHandler = new SamlMessageHandler(freemarker);
+		this.reporter = reporterFactory.getForEndpoint(endpoint);
 	}
 
-	public void sendResponse(Binding binding, ResponseDocument responseDoc, String serviceUrl, 
-			String relayState, HttpServletRequest request, HttpServletResponse response) 
-					throws IOException, EopException
+	public void sendResponse(SAMLAuthnContext samlCtx, SamlRoutableMessage response, Binding binding,
+			HttpServletRequest httpRequest, HttpServletResponse httpResponse)
+			throws IOException, EopException, DSigException
 	{
 		try
 		{
-			super.sendResponse(binding, responseDoc, serviceUrl, relayState,
-				response, "SSO Authentication response");
+			messageHandler.sendResponse(binding, response, httpResponse, "SSO Authentication response");
+			reporter.reportStatus(samlCtx, Status.SUCCESSFUL);
 		} finally
 		{
-			cleanContext(request.getSession(), false);
+			cleanContext(httpRequest, false);
 		}
 	}
-	
-	public void handleException(AuthnResponseProcessor samlProcessor,
-			Exception e, Binding binding, String serviceUrl, 
-			String relayState, HttpServletRequest request, HttpServletResponse response,
-			 boolean invalidate) 
-					throws EopException, IOException
+
+	public void handleException(AuthnResponseProcessor samlProcessor, Exception e, Binding binding, String serviceUrl,
+			SAMLAuthnContext samlCtx, HttpServletRequest httpRequest, HttpServletResponse httpResponse,
+			boolean invalidate) throws EopException, IOException
 	{
 		SAMLServerException convertedException = samlProcessor.convert2SAMLError(e, null, true);
 		ResponseDocument respDoc = samlProcessor.getErrorResponse(convertedException);
-
-		log.debug("Sending SAML error to " + serviceUrl + 
-				" in effect of exception handling", e);
+		SamlRoutableUnsignedMessage response = new SamlRoutableUnsignedMessage(respDoc, SAMLMessageType.SAMLResponse,
+				samlCtx.getRelayState(), serviceUrl);
+		log.warn("Sending SAML error to {} in effect of exception handling", serviceUrl, e);
 		try
 		{
-			super.sendResponse(binding, respDoc, serviceUrl, relayState, response,
-				"SSO Authentication error response");
+			messageHandler.sendResponse(binding, response, httpResponse, "SSO Authentication error response");
+			reporter.reportStatus(samlCtx, Status.FAILED);
+		} catch (DSigException e1)
+		{
+			throw new IllegalStateException("DSIG on unsigned request shouldn't happen", e);
 		} finally
 		{
-			cleanContext(request.getSession(), invalidate);
+			cleanContext(httpRequest, invalidate);
 		}
 	}
-	
-	protected void cleanContext(HttpSession httpSession, boolean invalidate)
+
+	private void cleanContext(HttpServletRequest httpRequest, boolean invalidate)
 	{
-		httpSession.removeAttribute(SamlParseServlet.SESSION_SAML_CONTEXT);
+		SamlSessionService.cleanContext(new HttpContextSession(httpRequest));
 		if (invalidate)
-			httpSession.invalidate();
+			httpRequest.getSession().invalidate();
 	}
 }

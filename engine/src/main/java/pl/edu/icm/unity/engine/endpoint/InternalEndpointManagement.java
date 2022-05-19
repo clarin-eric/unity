@@ -19,6 +19,7 @@ import pl.edu.icm.unity.exceptions.EngineException;
 import pl.edu.icm.unity.store.api.generic.EndpointDB;
 import pl.edu.icm.unity.store.api.tx.Transactional;
 import pl.edu.icm.unity.types.endpoint.Endpoint;
+import pl.edu.icm.unity.types.endpoint.Endpoint.EndpointState;
 
 /**
  * Implementation of the internal endpoint management. 
@@ -30,7 +31,7 @@ import pl.edu.icm.unity.types.endpoint.Endpoint;
 @Component
 public class InternalEndpointManagement
 {
-	private static final Logger log = Log.getLogger(Log.U_SERVER, InternalEndpointManagement.class);
+	private static final Logger log = Log.getLogger(Log.U_SERVER_CORE, InternalEndpointManagement.class);
 	private EndpointDB endpointDB;
 	
 	private Map<String, EndpointInstance> deployedEndpoints = new LinkedHashMap<>();
@@ -54,12 +55,22 @@ public class InternalEndpointManagement
 		List<Endpoint> fromDb = endpointDB.getAll();
 		for (Endpoint endpoint: fromDb)
 		{
-			EndpointInstance instance = loader.createEndpointInstance(endpoint);
-			deploy(instance);
-			log.debug(" - " + endpoint.getName() + ": " + endpoint.getTypeId() + 
+			if (endpoint.getState().equals(EndpointState.UNDEPLOYED))
+				continue;
+			
+			try
+			{
+				EndpointInstance instance = loader.createEndpointInstance(endpoint);
+				deploy(instance);
+				log.info(" - " + endpoint.getName() + ": " + endpoint.getTypeId() + 
 					" " + endpoint.getConfiguration().getDescription());
+			} catch (Exception e)
+			{
+				log.error("Can't load endpoint " + endpoint.getName() + 
+						" of type " + endpoint.getTypeId(), e);
+			}
 		}
-	}
+	}	
 
 	@Transactional
 	public synchronized void removeAllPersistedEndpoints() throws EngineException

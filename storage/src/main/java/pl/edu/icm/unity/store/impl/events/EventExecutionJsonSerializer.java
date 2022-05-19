@@ -11,9 +11,8 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import pl.edu.icm.unity.Constants;
 import pl.edu.icm.unity.JsonUtil;
-import pl.edu.icm.unity.base.event.Event;
 import pl.edu.icm.unity.base.event.EventExecution;
-import pl.edu.icm.unity.store.hz.JsonSerializerForKryo;
+import pl.edu.icm.unity.base.event.PersistableEvent;
 import pl.edu.icm.unity.store.rdbms.RDBMSObjectSerializer;
 
 /**
@@ -21,8 +20,7 @@ import pl.edu.icm.unity.store.rdbms.RDBMSObjectSerializer;
  * @author K. Benedyczak
  */
 @Component
-public class EventExecutionJsonSerializer implements RDBMSObjectSerializer<EventExecution, EventBean>, 
-		JsonSerializerForKryo<EventExecution>
+class EventExecutionJsonSerializer implements RDBMSObjectSerializer<EventExecution, EventBean>
 {
 	@Override
 	public EventBean toDB(EventExecution object)
@@ -37,15 +35,14 @@ public class EventExecutionJsonSerializer implements RDBMSObjectSerializer<Event
 	@Override
 	public EventExecution fromDB(EventBean bean)
 	{
-		Event deserialized = new Event(JsonUtil.parse(bean.getContents()));
+		PersistableEvent deserialized = new PersistableEvent(JsonUtil.parse(bean.getContents()));
 		EventExecution ret = new EventExecution(deserialized, bean.getNextProcessing(), 
 				bean.getListenerId(), bean.getFailures());
 		ret.setId(bean.getId());
 		return ret;
 	}
 	
-	@Override
-	public EventExecution fromJson(ObjectNode src)
+	EventExecution fromJson(ObjectNode src)
 	{
 		try
 		{
@@ -54,17 +51,5 @@ public class EventExecutionJsonSerializer implements RDBMSObjectSerializer<Event
 		{
 			throw new IllegalArgumentException("Invalid event execution JSON", e);
 		}
-	}
-
-	@Override
-	public ObjectNode toJson(EventExecution src)
-	{
-		return Constants.MAPPER.valueToTree(src);
-	}
-	
-	@Override
-	public Class<EventExecution> getClazz()
-	{
-		return EventExecution.class;
 	}
 }

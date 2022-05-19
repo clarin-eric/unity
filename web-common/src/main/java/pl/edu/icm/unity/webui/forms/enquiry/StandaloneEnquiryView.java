@@ -18,11 +18,12 @@ import com.vaadin.ui.HorizontalLayout;
 import com.vaadin.ui.Label;
 import com.vaadin.ui.VerticalLayout;
 
+import pl.edu.icm.unity.MessageSource;
 import pl.edu.icm.unity.base.utils.Log;
 import pl.edu.icm.unity.engine.api.finalization.WorkflowFinalizationConfiguration;
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
-import pl.edu.icm.unity.webui.authn.StandardWebAuthenticationProcessor;
+import pl.edu.icm.unity.webui.authn.StandardWebLogoutHandler;
 import pl.edu.icm.unity.webui.common.Styles;
+import pl.edu.icm.unity.webui.common.file.ImageAccessService;
 import pl.edu.icm.unity.webui.finalization.WorkflowCompletedWithLogoutComponent;
 
 /**
@@ -35,16 +36,20 @@ class StandaloneEnquiryView extends CustomComponent implements View
 	private static final Logger log = Log.getLogger(Log.U_SERVER_WEB, StandaloneEnquiryView.class);
 	protected EnquiryResponseEditor editor;
 	private Callback callback;
-	protected UnityMessageSource msg;
-	private StandardWebAuthenticationProcessor authnProcessor;
+	protected MessageSource msg;
+	private StandardWebLogoutHandler authnProcessor;
+	protected ImageAccessService imageAccessService;
+	
 	protected VerticalLayout main;
 	
-	StandaloneEnquiryView(EnquiryResponseEditor editor, StandardWebAuthenticationProcessor authnProcessor,
-			UnityMessageSource msg,	Callback callback)
+	StandaloneEnquiryView(EnquiryResponseEditor editor, StandardWebLogoutHandler authnProcessor, 
+			ImageAccessService imageAccessService,
+			MessageSource msg,	Callback callback)
 	{
 		this.editor = editor;
 		this.authnProcessor = authnProcessor;
 		this.msg = msg;
+		this.imageAccessService = imageAccessService;
 		this.callback = callback;
 		main = new VerticalLayout();
 		main.setSpacing(true);
@@ -131,7 +136,7 @@ class StandaloneEnquiryView extends CustomComponent implements View
 		if (config == null)
 			return;
 		if (config.autoRedirect)
-			redirect(config.redirectURL);
+			redirect(Page.getCurrent(), config.redirectURL);
 		else
 			showFinalScreen(config);
 	}
@@ -143,19 +148,18 @@ class StandaloneEnquiryView extends CustomComponent implements View
 		wrapper.setSpacing(false);
 		wrapper.setMargin(false);
 		wrapper.setSizeFull();
-		setSizeFull();
 		setCompositionRoot(wrapper);
 
 		Component finalScreen = new WorkflowCompletedWithLogoutComponent(config, this::redirect, 
-				msg.getMessage("MainHeader.logout"), authnProcessor::logout);
+				msg.getMessage("MainHeader.logout"), authnProcessor::logout, imageAccessService);
 		wrapper.addComponent(finalScreen);
 		wrapper.setComponentAlignment(finalScreen, Alignment.MIDDLE_CENTER);
 	}
 	
-	private void redirect(String redirectUrl)
+	private void redirect(Page page, String redirectUrl)
 	{
 		log.debug("Enquiry is finalized, redirecting to: {}", redirectUrl);
-		Page.getCurrent().open(redirectUrl, null);
+		page.open(redirectUrl, null);
 	}
 	
 	public interface Callback

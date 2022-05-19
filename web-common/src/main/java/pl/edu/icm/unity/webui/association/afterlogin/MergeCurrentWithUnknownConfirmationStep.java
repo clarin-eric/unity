@@ -7,16 +7,13 @@ package pl.edu.icm.unity.webui.association.afterlogin;
 import org.apache.logging.log4j.Logger;
 import org.vaadin.teemu.wizards.Wizard;
 
+import pl.edu.icm.unity.MessageSource;
 import pl.edu.icm.unity.base.utils.Log;
-import pl.edu.icm.unity.engine.api.authn.AuthenticationResult;
-import pl.edu.icm.unity.engine.api.authn.AuthenticationResult.Status;
 import pl.edu.icm.unity.engine.api.authn.InvocationContext;
 import pl.edu.icm.unity.engine.api.authn.LoginSession;
-import pl.edu.icm.unity.engine.api.authn.SandboxAuthnContext;
-import pl.edu.icm.unity.engine.api.authn.local.LocalSandboxAuthnContext;
-import pl.edu.icm.unity.engine.api.authn.remote.RemoteSandboxAuthnContext;
-import pl.edu.icm.unity.engine.api.authn.remote.RemotelyAuthenticatedContext;
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
+import pl.edu.icm.unity.engine.api.authn.remote.RemotelyAuthenticatedPrincipal;
+import pl.edu.icm.unity.engine.api.authn.sandbox.SandboxAuthnContext;
+import pl.edu.icm.unity.engine.api.authn.sandbox.SandboxAuthnEvent;
 import pl.edu.icm.unity.engine.api.translation.in.InputTranslationEngine;
 import pl.edu.icm.unity.engine.api.translation.in.MappedIdentity;
 import pl.edu.icm.unity.engine.api.translation.in.MappingResult;
@@ -25,7 +22,6 @@ import pl.edu.icm.unity.types.basic.Entity;
 import pl.edu.icm.unity.types.basic.EntityParam;
 import pl.edu.icm.unity.webui.association.AbstractConfirmationStep;
 import pl.edu.icm.unity.webui.common.NotificationPopup;
-import pl.edu.icm.unity.webui.sandbox.SandboxAuthnEvent;
 
 /**
  * Shows confirmation of the account association when the sandbox login should return an unknown user.
@@ -36,10 +32,10 @@ class MergeCurrentWithUnknownConfirmationStep extends AbstractConfirmationStep
 {
 	private static final Logger log = Log.getLogger(Log.U_SERVER_WEB,
 			MergeCurrentWithUnknownConfirmationStep.class);
-	private RemotelyAuthenticatedContext authnContext;
+	private RemotelyAuthenticatedPrincipal authnContext;
 	private Exception mergeError;
 	
-	MergeCurrentWithUnknownConfirmationStep(UnityMessageSource msg, InputTranslationEngine translationEngine, 
+	MergeCurrentWithUnknownConfirmationStep(MessageSource msg, InputTranslationEngine translationEngine, 
 			Wizard wizard)
 	{
 		super(msg, translationEngine, wizard);
@@ -47,24 +43,21 @@ class MergeCurrentWithUnknownConfirmationStep extends AbstractConfirmationStep
 
 	void setAuthnData(SandboxAuthnEvent event)
 	{
-		SandboxAuthnContext ctx = event.getCtx();
-		if (ctx instanceof RemoteSandboxAuthnContext)
-			setRemoteAuthnData((RemoteSandboxAuthnContext) ctx);
-		else
-			setLocalAuthnData((LocalSandboxAuthnContext) ctx);
-	}
-	
-	private void setRemoteAuthnData(RemoteSandboxAuthnContext ctx)
-	{
-		if (ctx.getAuthnException() != null)
+		SandboxAuthnContext ctx = event.ctx;
+		if (ctx.getAuthnException().isPresent())
 		{
+			log.info("Sandbox got authn error", ctx.getAuthnException().get());
+			setError(msg.getMessage("ConnectId.ConfirmStep.error"));
+		} else if (!ctx.getRemotePrincipal().isPresent())
+		{
+			log.error("Bug: sandbox authn context without remote principal used for merge with unknown remote user: {}", ctx);
 			setError(msg.getMessage("ConnectId.ConfirmStep.error"));
 		} else
 		{
-			if (!translationEngine.identitiesNotPresentInDb(ctx.getAuthnContext().getMappingResult()))
+			if (!translationEngine.identitiesNotPresentInDb(ctx.getRemotePrincipal().get().getMappingResult()))
 			{
 				MappedIdentity existingIdentity = translationEngine.getExistingIdentity(
-						ctx.getAuthnContext().getMappingResult());
+						ctx.getRemotePrincipal().get().getMappingResult());
 				Entity existingEntity;
 				try
 				{
@@ -81,21 +74,9 @@ class MergeCurrentWithUnknownConfirmationStep extends AbstractConfirmationStep
 				}
 			} else
 			{
-				authnContext = ctx.getAuthnContext();
+				authnContext = ctx.getRemotePrincipal().get();
 				introLabel.setHtmlValue("ConnectId.ConfirmStep.info", authnContext.getRemoteIdPName());
 			}
-		}
-	}
-
-	private void setLocalAuthnData(LocalSandboxAuthnContext ctx)
-	{
-		AuthenticationResult ae = ctx.getAuthenticationResult();
-		if (ae.getStatus() != Status.success)
-		{
-			setError(msg.getMessage("ConnectId.ConfirmStep.error"));
-		} else
-		{
-			setError(msg.getMessage("ConnectId.ConfirmStep.errorExistingIdentity"));
 		}
 	}
 

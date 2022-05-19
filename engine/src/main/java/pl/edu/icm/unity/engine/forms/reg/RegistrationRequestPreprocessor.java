@@ -4,28 +4,31 @@
  */
 package pl.edu.icm.unity.engine.forms.reg;
 
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Function;
 
 import org.apache.logging.log4j.Logger;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import pl.edu.icm.unity.base.utils.Log;
 import pl.edu.icm.unity.engine.api.translation.form.TranslatedRegistrationRequest;
 import pl.edu.icm.unity.engine.forms.BaseRequestPreprocessor;
 import pl.edu.icm.unity.engine.forms.InvitationPrefillInfo;
+import pl.edu.icm.unity.engine.forms.PolicyAgreementsValidator;
 import pl.edu.icm.unity.exceptions.EngineException;
 import pl.edu.icm.unity.exceptions.IllegalFormContentsException;
+import pl.edu.icm.unity.exceptions.IllegalFormTypeException;
 import pl.edu.icm.unity.types.basic.Attribute;
-import pl.edu.icm.unity.types.basic.IdentityParam;
 import pl.edu.icm.unity.types.registration.AttributeRegistrationParam;
 import pl.edu.icm.unity.types.registration.GroupRegistrationParam;
 import pl.edu.icm.unity.types.registration.GroupSelection;
 import pl.edu.icm.unity.types.registration.RegistrationForm;
 import pl.edu.icm.unity.types.registration.RegistrationRequest;
+import pl.edu.icm.unity.types.registration.invite.FormPrefill;
 import pl.edu.icm.unity.types.registration.invite.InvitationParam;
+import pl.edu.icm.unity.types.registration.invite.InvitationWithCode;
 
 /**
  * Helper component with methods to validate registration requests. There are methods to validate both the request 
@@ -39,50 +42,64 @@ import pl.edu.icm.unity.types.registration.invite.InvitationParam;
  * @author K. Benedyczak
  */
 @Component
-public class RegistrationRequestPreprocessor extends BaseRequestPreprocessor
+public class RegistrationRequestPreprocessor
 {
-	private static final Logger log = Log.getLogger(Log.U_SERVER,
+	private static final Logger log = Log.getLogger(Log.U_SERVER_FORMS,
 			RegistrationRequestPreprocessor.class);
 	
-	public void validateSubmittedRequest(RegistrationForm form, RegistrationRequest request,
+	private final PolicyAgreementsValidator agreementValidator;
+	private final BaseRequestPreprocessor basePreprocessor;
+	
+	@Autowired
+	public RegistrationRequestPreprocessor(PolicyAgreementsValidator agreementValidator,
+			BaseRequestPreprocessor basePreprocessor)
+	{
+		this.agreementValidator = agreementValidator;
+		this.basePreprocessor = basePreprocessor;
+	}
+
+	public InvitationPrefillInfo validateSubmittedRequest(RegistrationForm form, RegistrationRequest request,
 			boolean doCredentialCheckAndUpdate) throws EngineException
 	{
-		validateSubmittedRequest(form, request, doCredentialCheckAndUpdate, false);
+		return validateSubmittedRequest(form, request, doCredentialCheckAndUpdate, false);
 	}
 	
-	public void validateSubmittedRequestExceptCredentials(RegistrationForm form, RegistrationRequest request,
+	public InvitationPrefillInfo validateSubmittedRequestExceptCredentials(RegistrationForm form, RegistrationRequest request,
 			boolean doCredentialCheckAndUpdate) throws EngineException
 	{
-		validateSubmittedRequest(form, request, doCredentialCheckAndUpdate, true);
+		return validateSubmittedRequest(form, request, doCredentialCheckAndUpdate, true);
 	}
 	
-	private void validateSubmittedRequest(RegistrationForm form, RegistrationRequest request,
+	private InvitationPrefillInfo validateSubmittedRequest(RegistrationForm form, RegistrationRequest request,
 			boolean doCredentialCheckAndUpdate, boolean skipCredentialsValidation) throws EngineException
 	{
 		InvitationPrefillInfo invitationInfo = processInvitationAndValidateCode(form, request);
 		
-		super.validateSubmittedRequest(form, request, invitationInfo, 
-				doCredentialCheckAndUpdate, skipCredentialsValidation);
+		basePreprocessor.validateSubmittedRequest(form, request, doCredentialCheckAndUpdate, skipCredentialsValidation);
+		agreementValidator.validate(form, request);
+		
 		applyContextGroupsToAttributes(form, request);
 
 		if (invitationInfo.isByInvitation())
 		{
 			String code = request.getRegistrationCode();
-			log.debug("Received registration request for invitation " + code + ", removing it");
-			removeInvitation(code);
+			log.info("Received registration request for invitation {}, removing it", code);
+			basePreprocessor.removeInvitation(code);
 		}
+		return invitationInfo;
 	}
 
 	public void validateTranslatedRequest(RegistrationForm form, RegistrationRequest originalRequest, 
 			TranslatedRegistrationRequest request) throws EngineException
 	{
-		validateFinalAttributes(request.getAttributes());
-		validateFinalCredentials(originalRequest.getCredentials());
-		validateFinalIdentities(request.getIdentities());
-		validateFinalGroups(request.getGroups());
+		basePreprocessor.validateFinalAttributes(request.getAttributes());
+		basePreprocessor.validateFinalCredentials(originalRequest.getCredentials());
+		basePreprocessor.validateFinalIdentities(request.getIdentities());
+		basePreprocessor.validateFinalGroups(request.getGroups());
 	}
 
-	private void applyContextGroupsToAttributes(RegistrationForm form, RegistrationRequest request) throws IllegalFormContentsException
+	private void applyContextGroupsToAttributes(RegistrationForm form, RegistrationRequest request) 
+			throws IllegalFormContentsException
 	{
 		Map<String, Integer> wildcardToGroupParamIndex = new HashMap<>();
 		int j=0;
@@ -129,15 +146,10 @@ public class RegistrationRequestPreprocessor extends BaseRequestPreprocessor
 	 * Code is validated, wrt to invitation or form fixed code. What is more the request attributes
 	 * groups and identities are set to those from invitation when necessary and errors are reported
 	 * if request tries to overwrite mandatory elements from invitation.
-	 * 
-	 * @param form
-	 * @param request
-	 * @param sql
-	 * @return true if the request is by invitation
-	 * @throws EngineException
+	 * @throws IllegalFormTypeException 
 	 */
 	private InvitationPrefillInfo processInvitationAndValidateCode(RegistrationForm form, RegistrationRequest request) 
-			throws IllegalFormContentsException
+			throws IllegalFormContentsException, IllegalFormTypeException
 	{
 		String codeFromRequest = request.getRegistrationCode();
 
@@ -151,24 +163,34 @@ public class RegistrationRequestPreprocessor extends BaseRequestPreprocessor
 			return new InvitationPrefillInfo();
 		}
 				
-		InvitationParam invitation = getInvitation(codeFromRequest).getInvitation();
-		InvitationPrefillInfo invitationInfo = new InvitationPrefillInfo(true);
+		InvitationWithCode invitationWithCode = basePreprocessor.getInvitation(codeFromRequest);
+		InvitationPrefillInfo invitationInfo = new InvitationPrefillInfo(invitationWithCode);
+		InvitationParam invitation = invitationWithCode.getInvitation();
 		
-		if (!invitation.getFormId().equals(form.getName()))
+		if (!invitation.matchesForm(form))
 			throw new IllegalFormContentsException("The invitation is for different registration form");
 		
 		if (invitation.isExpired())
 			throw new IllegalFormContentsException("The invitation has already expired");
 		
-		processInvitationElements(form.getIdentityParams(), request.getIdentities(), 
-				invitation.getIdentities(), "identity", Comparator.comparing(IdentityParam::getValue),
-				invitationInfo::setPrefilledIdentity);
-		processInvitationElements(form.getAttributeParams(), request.getAttributes(), 
-				invitation.getAttributes(), "attribute", null,
-				invitationInfo::setPrefilledAttribute);
-		processInvitationElements(form.getGroupParams(), request.getGroupSelections(), 
-				filterValueReadOnlyAndHiddenGroupFromInvitation(invitation.getGroupSelections(), form.getGroupParams()), "group", null,
-				i -> {});
+		FormPrefill formInfo;
+		try
+		{
+			formInfo = invitation.getPrefillForForm(form);
+		} catch (EngineException e)
+		{
+			throw new IllegalFormContentsException("Form " + form.getName() + " does not match to invitation", e);
+		}
+		
+		log.debug("Will apply invitation parameter to the request:\n{}", invitation.toString());
+		log.debug("Request before applying the invitation:\n{}", request.toString());
+		basePreprocessor.processInvitationElements(form.getIdentityParams(), request.getIdentities(), 
+				formInfo.getIdentities(), "identity");
+		basePreprocessor.processInvitationElements(form.getAttributeParams(), request.getAttributes(), 
+				formInfo.getAttributes(), "attribute");
+		basePreprocessor.processInvitationElements(form.getGroupParams(), request.getGroupSelections(), 
+				basePreprocessor.filterValueReadOnlyAndHiddenGroupFromInvitation(formInfo.getGroupSelections(), form.getGroupParams()), 
+				"group");
 		return invitationInfo;
 	}
 

@@ -31,7 +31,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 
 import pl.edu.icm.unity.engine.builders.NotificationChannelBuilder;
-import pl.edu.icm.unity.engine.notifications.EmailFacility;
+import pl.edu.icm.unity.engine.notifications.email.EmailFacility;
 import pl.edu.icm.unity.engine.server.EngineInitialization;
 import pl.edu.icm.unity.exceptions.EngineException;
 import pl.edu.icm.unity.stdext.attr.StringAttribute;
@@ -78,8 +78,7 @@ public class TestInvitations extends RESTAdminTestBase
 		assertEquals(contentsGet, Status.OK.getStatusCode(), responseGet.getStatusLine().getStatusCode());
 		InvitationWithCode returned = m.readValue(contentsGet, InvitationWithCode.class);
 		assertThat(returned.getRegistrationCode(), is(code));
-		InvitationWithCode source = new InvitationWithCode(invitation, code, null, 0);
-		assertThat(returned, is(source));
+		assertThat(returned.getInvitation(), is(invitation));
 	}
 	
 	@Test
@@ -100,8 +99,9 @@ public class TestInvitations extends RESTAdminTestBase
 				new TypeReference<List<InvitationWithCode>>() {});
 		assertThat(returned.size(), is(1));
 		assertThat(returned.get(0).getRegistrationCode(), is(code));
-		InvitationWithCode source = new InvitationWithCode(invitation, code, null, 0);
-		assertThat(returned.get(0), is(source));
+	
+		assertThat(returned.get(0).getRegistrationCode(), is(code));
+		assertThat(returned.get(0).getInvitation(), is(invitation));
 	}
 	
 	@Test
@@ -176,14 +176,14 @@ public class TestInvitations extends RESTAdminTestBase
 	
 	private InvitationParam createInvitation()
 	{
-		InvitationParam ret = new RegistrationInvitationParam("exForm", 
+		RegistrationInvitationParam ret = new RegistrationInvitationParam("exForm", 
 				Instant.now().plusSeconds(200).truncatedTo(ChronoUnit.SECONDS), 
 				"someAddr@example.com");
 		Attribute attrP = StringAttribute.of("cn", "/", "value");
-		ret.getAttributes().put(0, new PrefilledEntry<>(attrP, PrefilledEntryMode.READ_ONLY));
-		ret.getIdentities().put(0, new PrefilledEntry<>(new IdentityParam(UsernameIdentity.ID, 
+		ret.getFormPrefill().getAttributes().put(0, new PrefilledEntry<>(attrP, PrefilledEntryMode.READ_ONLY));
+		ret.getFormPrefill().getIdentities().put(0, new PrefilledEntry<>(new IdentityParam(UsernameIdentity.ID, 
 				"user-id"), PrefilledEntryMode.READ_ONLY));
-		ret.getGroupSelections().put(0, new PrefilledEntry<>(new GroupSelection("/"), 
+		ret.getFormPrefill().getGroupSelections().put(0, new PrefilledEntry<>(new GroupSelection("/"), 
 				PrefilledEntryMode.READ_ONLY));
 		return ret;
 	}

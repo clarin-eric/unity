@@ -19,13 +19,18 @@ public enum Styles
 	captionBold("bold"),
 	trueConditionBackground("u-trueCondition-bg"),
 	falseConditionBackground("u-falseCondition-bg"),
+	background("u-backgroud"),
 	errorBackground("u-error-bg"),
+	successBackground("u-success-bg"),
+	warnBackground("u-warn-bg"),
 	negativeBottomMarginSmall("u-negativeBottomMarginSmall"),
 	negativeTopMargin("u-negativeTopMargin"),
 	verticalPaddingSmall("u-verticalPaddingSmall"),
 	smallMargins("u-smallMargins"),
 	iconError("u-error-icon"),
-	maxWidthColumn("u-maxWidthColumn"),
+	labelError("u-label-error"),
+	labelWarn("u-label-warn"),
+	iconOnlyLabel("u-iconOnlyLabel"),
 	
 	bigTabs("u-bigTabs"),
 	bigTab("u-bigTab"),
@@ -36,12 +41,15 @@ public enum Styles
 	error("u-error"),
 	success("u-success"),
 	textTitle("u-textTitle"),
+	textInfoTooltip("u-textInfoTooltip"),
 	textLarge("u-textLarge"),
 	textXLarge("u-textXLarge"),
 	textEndpointName("u-textEndpointHeading"),
 	toolbarButton("u-toolbarButton"),
+	toolbar("u-toolbar"),
 	verticalBar("u-verticalBar"),
 	horizontalBar("u-horizontalBar"),
+	horizontalBarBold("u-horizontalBarBold"),
 	header("u-header"),
 	selectedButton("u-selectedButton"),
 	minHeightAuthn("u-minHeightAuthenticator"),
@@ -67,8 +75,13 @@ public enum Styles
 	indent("u-indent"),
 	link("u-link"),
 	hamburgerMenu("u-hamburgerMenu"),
-	uGridNoHorizontalLines("u-noGridHorizontalLines"),
-	uDenseTreeGrid("u-denseTreeGrid"),
+	gridNoHorizontalLines("u-noGridHorizontalLines"),
+	denseTreeGrid("u-denseTreeGrid"),
+	gridWithAction("u-gridWithAction"),
+	smallGrid("u-smallGrid"),
+	border("u-border"),
+	smallIconLabel("u-smallIconLabel"),
+	mediumIcon("u-mediumIcon"),
 	largeIcon("u-largeIcon"),
 	veryLargeIcon("u-veryLargeIcon"),
 	signInButton("u-signInButton"),
@@ -79,6 +92,49 @@ public enum Styles
 	redProgressBar("u-redProgressBar"),
 	RegistrationLink("registrationLink"),
 	indentComboBox("u-indentComboBox"),
+	wordWrap("u-wordWrap"),
+	sectionTitle("u-sectionTitle"),
+	showHideButton("u-showHideButton"),
+	imagePreview("u-imagePreview"),
+	disabledButton("u-button-disabled "),
+	narrowTable("u-narrowTable"),
+	borderBold("u-border-bold"),
+	borderBoldGreen("u-border-bold-green"),
+	readOnlyComboBox("u-readOnlyComboBox"),	
+	indentSmall("u-indentSmall"),	
+	buttonAction("u-button-action"),
+	fixedWidthCaptions("u-fixedWidthCaptions"),
+	fixedWidthVeryShortCaptions("u-fixedWidthCaptionsVerySmall"),
+	fixedWidthShortCaptions("u-fixedWidthCaptionsSmall"),
+	fixedWidthMediumCaptions("u-fixedWidthCaptionsMedium"),
+	gridLinkButton("u-button-grid-link"),
+	viewTitle("u-viewTitle"),
+	viewSubtitle("u-viewSubtitle"),
+	policyAgreementItem("u-policyagreement-item"),
+	dragButton("u-dragButton"),
+	varPickerButton("u-varPickerButton"),
+	horizontalScroll("u-horizontalScroll"),
+	fontMonospace("u-fontMonospace"),
+	textAreaResizable("u-textAreaResizeable"),
+	
+	//Sidebar
+	sidebar("u-sidebar"),
+	leftMenu("u-leftMenu"),
+	topRightMenu("u-topRightMenu"),
+	headerBar("u-headerBar"),
+	contentBox("u-contentBox"),
+	rootContent("u-rootContent"),
+	menuButton("u-menuButton"),
+	menuButtonClickable("u-clickable"),
+	menuButtonActive("u-active"),
+	menuLabel("u-menuLabel"),
+	menuCombo("u-menuCombo"),
+	subMenu("u-subMenu"),
+	subMenuOpen("u-open"),
+	tooltip("u-toolTip"),
+	breadcrumbs("u-breadcrumbs"),
+	viewHeader("u-viewHeader"),
+	contentBackgroud("u-content-backgroud"),
 	
 	//Valo
 	vPanelLight(ValoTheme.PANEL_BORDERLESS),
@@ -97,7 +153,10 @@ public enum Styles
 	vTableNoHorizontalLines(ValoTheme.TABLE_NO_HORIZONTAL_LINES),
 	vComboSmall(ValoTheme.COMBOBOX_SMALL),
 	vDropLayout("drop-layout"),	
-	vGroupBrowser("v-tree8");
+	vGroupBrowser("v-tree8"),
+	vPanelBorderless(ValoTheme.PANEL_BORDERLESS),
+	vPanelWell(ValoTheme.PANEL_WELL);
+
 	
 	
 	/**
@@ -123,6 +182,7 @@ public enum Styles
 		switch (localeCode)
 		{
 		case "en":
+		case "fr":
 		case "pl":
 		case "de":
 		case "nb":

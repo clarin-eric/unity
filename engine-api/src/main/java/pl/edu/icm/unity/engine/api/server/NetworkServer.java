@@ -4,7 +4,7 @@
  */
 package pl.edu.icm.unity.engine.api.server;
 
-import java.net.URL;
+import java.util.Set;
 
 import org.eclipse.jetty.servlet.ServletContextHandler;
 
@@ -17,15 +17,16 @@ import pl.edu.icm.unity.exceptions.EngineException;
  */
 public interface NetworkServer
 {
-	/**
-	 * @return base address of the server which should be used as its externally accessible address.
-	 */
-	URL getAdvertisedAddress();
-	
 	void deployEndpoint(WebAppEndpointInstance endpoint) 
 			throws EngineException;
 	
 	void undeployEndpoint(String id) throws EngineException;
 
-	void deployHandler(ServletContextHandler sharedHandler) throws EngineException;
+	void deployHandler(ServletContextHandler sharedHandler, String endpointId) throws EngineException;
+
+	void undeployHandler(String contextPath) throws EngineException;
+	
+	void undeployAllHandlers() throws EngineException;
+	
+	Set<String> getUsedContextPaths();
 }

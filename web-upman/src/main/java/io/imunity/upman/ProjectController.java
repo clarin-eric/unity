@@ -16,13 +16,15 @@ import org.springframework.stereotype.Component;
 import com.vaadin.server.Resource;
 
 import io.imunity.upman.common.ServerFaultException;
+import pl.edu.icm.unity.MessageSource;
 import pl.edu.icm.unity.base.utils.Log;
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
+import pl.edu.icm.unity.engine.api.authn.InvocationContext;
 import pl.edu.icm.unity.engine.api.project.DelegatedGroup;
 import pl.edu.icm.unity.engine.api.project.DelegatedGroupManagement;
+import pl.edu.icm.unity.engine.api.project.GroupAuthorizationRole;
 import pl.edu.icm.unity.types.basic.GroupDelegationConfiguration;
-import pl.edu.icm.unity.webui.common.ImageUtils;
 import pl.edu.icm.unity.webui.common.Images;
+import pl.edu.icm.unity.webui.common.file.ImageAccessService;
 import pl.edu.icm.unity.webui.exceptions.ControllerException;
 
 /**
@@ -34,16 +36,18 @@ import pl.edu.icm.unity.webui.exceptions.ControllerException;
 @Component
 public class ProjectController
 {
-	private static final Logger log = Log.getLogger(Log.U_SERVER, ProjectController.class);
+	private static final Logger log = Log.getLogger(Log.U_SERVER_UPMAN, ProjectController.class);
 
-	private UnityMessageSource msg;
+	private MessageSource msg;
 	private DelegatedGroupManagement delGroupMan;
+	private ImageAccessService imageAccessService;
 
 	@Autowired
-	public ProjectController(UnityMessageSource msg, DelegatedGroupManagement delGroupMan)
+	public ProjectController(MessageSource msg, DelegatedGroupManagement delGroupMan, ImageAccessService imageAccessService)
 	{
 		this.msg = msg;
 		this.delGroupMan = delGroupMan;
+		this.imageAccessService = imageAccessService;
 	}
 
 	Map<String, String> getProjectForUser(long entityId) throws ControllerException
@@ -55,7 +59,7 @@ public class ProjectController
 			projects = delGroupMan.getProjectsForEntity(entityId);
 		} catch (Exception e)
 		{
-			log.debug("Can not get projects for entity " + entityId, e);
+			log.warn("Can not get projects for entity " + entityId, e);
 			throw new ServerFaultException(msg);
 		}
 
@@ -67,7 +71,7 @@ public class ProjectController
 		return projects.stream().collect(Collectors.toMap(p -> p.path, p -> p.displayedName));
 	}
 
-	public Resource getProjectLogoSafe(String projectPath)
+	public Resource getProjectLogoOrNull(String projectPath)
 	{
 		Resource logo = Images.logoSmall.getResource();
 		DelegatedGroup group;
@@ -79,12 +83,36 @@ public class ProjectController
 			return logo;
 		}
 		GroupDelegationConfiguration config = group.delegationConfiguration;
-		String logoUrl = config.logoUrl;
-		if (logoUrl != null && !logoUrl.isEmpty())
-		{
-			return ImageUtils.getConfiguredImageResource(logoUrl);
-		}
-
-		return logo;
+		return imageAccessService.getConfiguredImageResourceFromNullableUri(config.logoUrl).orElse(null);
 	}
+	
+	public DelegatedGroup getProjectGroup(String projectPath) throws ControllerException
+	{
+		try
+		{
+			return delGroupMan.getContents(projectPath, projectPath).group;
+		}
+		catch (Exception e)
+		
+		{
+			log.warn("Can not get project group " + projectPath, e);
+			throw new ServerFaultException(msg);
+		}
+	}
+	
+	public GroupAuthorizationRole getProjectRole(String projectPath) throws ControllerException
+	{
+		try
+		{
+
+			return delGroupMan.getGroupAuthorizationRole(projectPath,
+					InvocationContext.getCurrent().getLoginSession().getEntityId());
+
+		} catch (Exception e)
+		{
+			log.warn("Can not get project authorization role " + projectPath, e);
+			throw new ServerFaultException(msg);
+		}
+	}
+
 }

@@ -16,7 +16,6 @@ import java.util.stream.Stream;
 
 import com.vaadin.ui.Alignment;
 import com.vaadin.ui.Button;
-import com.vaadin.ui.Button.ClickEvent;
 import com.vaadin.ui.Component;
 import com.vaadin.ui.CustomComponent;
 import com.vaadin.ui.HorizontalLayout;
@@ -57,13 +56,12 @@ public class ListOfElementsWithActions<T> extends CustomComponent
 
 	public ListOfElementsWithActions(List<Column<T>> columns, ActionColumn<T> actionColumn)
 	{
-
 		this.columns = columns;
 		this.actionColumn = actionColumn;
 
 		this.components = new ArrayList<>();
 		main = new VerticalLayout();
-		main.setMargin(false);
+		main.setMargin(true);
 		main.setSpacing(false);
 		main.setId("ListOfElements");
 		setCompositionRoot(main);
@@ -82,7 +80,15 @@ public class ListOfElementsWithActions<T> extends CustomComponent
 		components.remove(entry);
 		main.removeComponent(entry);
 	}
-
+	
+	public void replaceEntry(T old, T updated)
+	{
+		Entry oldEntry = getElement(old);
+		Entry newEntry = new Entry(updated);
+		components.set(components.indexOf(oldEntry), newEntry);
+		main.replaceComponent(oldEntry, newEntry);	
+	}
+	
 	public void removeEntry(T element)
 	{
 		Entry entry = getElement(element);
@@ -102,8 +108,10 @@ public class ListOfElementsWithActions<T> extends CustomComponent
 
 	public void clearContents()
 	{
-		components.clear();
-		main.removeAllComponents();
+		for(Entry e : components)
+		{
+			main.removeComponent(e);
+		}
 	}
 
 	public List<T> getElements()
@@ -247,14 +255,8 @@ public class ListOfElementsWithActions<T> extends CustomComponent
 					actionButton.setIcon(handler.getIcon());
 					actionButton.setDescription(handler.getCaption());
 					actionButton.setStyleName(Styles.vButtonSmall.toString());
-					actionButton.addClickListener(new Button.ClickListener()
-					{
-						@Override
-						public void buttonClick(ClickEvent event)
-						{
-							handler.handle(Stream.of(element).collect(Collectors.toSet()));
-						}
-					});
+					actionButton.addClickListener(e -> handler
+							.handle(Stream.of(element).collect(Collectors.toSet())));
 					actionButton.setEnabled(handler.isEnabled(elementsSet));
 					buttons.addComponent(actionButton);
 				}

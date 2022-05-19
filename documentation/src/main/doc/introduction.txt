@@ -101,7 +101,7 @@ The core platform provides persistence of the service state (i.e. managed entiti
 extensions management, orchestration and several cross cutting features. Such core features
 are preferences management, notifications, registrations support etc. 
  
-Unity is written solely in Java 8, which is the single, hard installation requirement. All used technologies 
+Unity is written solely in Java, which is the single, hard installation requirement. All used technologies 
 are as lightweight as possible. Unity works as set of services available via an embedded HTTP server 
 (Jetty). Therefore there is no need to install it on top of an existing HTTP or servlet server, or 
 even worse to setup a JEE container. 
@@ -122,7 +122,7 @@ Below a glossary of key terms which are used throughout this manual is presented
 Endpoint::
  Unity provides a portfolio of access modules. Those modules are called _endpoint types_. 
  Each endpoint type can be deployed multiple times, with different configuration. A deployed and configured endpoint type
- is called an _endpoint instance_ or just an _endpoint_ for short. Examples: Web Admin UI is an endpoint type providing 
+ is called an _endpoint instance_ or just an _endpoint_ for short. Examples: Admin Console is an endpoint type providing 
  web browser management access; SAML SOAP authentication is enabled by another endpoint.
 
 Authenticator::

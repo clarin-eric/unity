@@ -9,7 +9,10 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
+
+import org.apache.logging.log4j.Logger;
 
 import com.vaadin.data.provider.DataProvider;
 import com.vaadin.data.provider.ListDataProvider;
@@ -19,10 +22,11 @@ import com.vaadin.ui.CustomComponent;
 import com.vaadin.ui.Grid;
 import com.vaadin.ui.Grid.Column;
 import com.vaadin.ui.Grid.SelectionMode;
-import com.vaadin.ui.renderers.ImageRenderer;
+import com.vaadin.ui.Image;
 
+import pl.edu.icm.unity.MessageSource;
+import pl.edu.icm.unity.base.utils.Log;
 import pl.edu.icm.unity.engine.api.authn.AuthenticationFlow;
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
 import pl.edu.icm.unity.types.authn.AuthenticationOptionKeyUtils;
 import pl.edu.icm.unity.webui.authn.VaadinAuthentication.VaadinAuthenticationUI;
 import pl.edu.icm.unity.webui.common.Images;
@@ -32,6 +36,7 @@ import pl.edu.icm.unity.webui.common.Images;
  */
 public class AuthnsGridWidget extends CustomComponent
 {
+	private static final Logger log = Log.getLogger(Log.U_SERVER_WEB, AuthnsGridWidget.class);
 	private final AuthNPanelFactory authNPanelFactory;
 	private final List<AuthNOption> options;
 
@@ -44,7 +49,7 @@ public class AuthnsGridWidget extends CustomComponent
 	private ListDataProvider<AuthenticationOptionGridEntry> dataProvider;
 	private final int height;
 	
-	public AuthnsGridWidget(List<AuthNOption> options, UnityMessageSource msg,
+	public AuthnsGridWidget(List<AuthNOption> options, MessageSource msg,
 			AuthNPanelFactory authNPanelFactory, int height)
 	{
 		this.options = options;
@@ -65,8 +70,13 @@ public class AuthnsGridWidget extends CustomComponent
 		dataProvider = DataProvider.ofCollection(providers);
 		providersChoice = new Grid<>(dataProvider);
 		providersChoice.setSelectionMode(SelectionMode.NONE);
-		Column<AuthenticationOptionGridEntry, Resource> imageColumn = providersChoice.addColumn(
-				AuthenticationOptionGridEntry::getImage, new ImageRenderer<>());
+		
+		Column<AuthenticationOptionGridEntry, Component> imageColumn = providersChoice.addComponentColumn(e -> {
+			Image img = new Image();
+			img.setSource(e.getImage());
+			return img;
+		});
+		
 		Column<AuthenticationOptionGridEntry, Component> buttonColumn = providersChoice
 				.addComponentColumn(AuthenticationOptionGridEntry::getComponent);
 
@@ -91,7 +101,6 @@ public class AuthnsGridWidget extends CustomComponent
 	 * Shows all authN UIs of all enabled authN options. The options not matching the given filter are 
 	 * added too, but at the end and are hidden. This trick guarantees that the containing box 
 	 * stays with a fixed size, while the user only sees the matching options at the top.
-	 * @param filter
 	 */
 	private void reloadContents()
 	{
@@ -102,6 +111,15 @@ public class AuthnsGridWidget extends CustomComponent
 
 		for (AuthNOption entry: options)
 		{
+			FirstFactorAuthNPanel authnPanel;
+			try
+			{
+				authnPanel = authNPanelFactory.createGridCompatibleAuthnPanel(entry);
+			} catch (UnsupportedOperationException e)
+			{
+				log.warn("Skipping {} option which is not grid compatible", entry.flow.getId());
+				continue;
+			}
 			String name = entry.authenticatorUI.getLabel();
 			Resource logo = entry.authenticatorUI.getImage();
 			String id = entry.authenticatorUI.getId();
@@ -115,7 +133,6 @@ public class AuthnsGridWidget extends CustomComponent
 			NameWithTags nameWithTags = new NameWithTags(name,
 					entry.authenticatorUI.getTags(), collator);
 			Resource logoImage = logo == null ? Images.empty.getResource() : logo;
-			FirstFactorAuthNPanel authnPanel = authNPanelFactory.createGridCompatibleAuthnPanel(entry);
 			AuthenticationOptionGridEntry providerEntry = new AuthenticationOptionGridEntry(globalId, nameWithTags,
 					logoImage, authnPanel);
 			providers.add(providerEntry);
@@ -139,6 +156,14 @@ public class AuthnsGridWidget extends CustomComponent
 	
 	}
 
+	public Optional<FirstFactorAuthNPanel> getAuthnOptionById(String optionId)
+	{
+		return providers.stream()
+				.filter(prov -> prov.id.equals(optionId))
+				.findAny()
+				.map(entry -> entry.component);
+	}
+	
 	public static class NameWithTags implements Comparable<Object>
 	{
 		private String name;
@@ -186,9 +211,10 @@ public class AuthnsGridWidget extends CustomComponent
 		private String id;
 		private NameWithTags nameWithTags;
 		private Resource image;
-		private Component component;
+		private FirstFactorAuthNPanel component;
 
-		public AuthenticationOptionGridEntry(String id, NameWithTags nameWithTags, Resource image, Component component)
+		public AuthenticationOptionGridEntry(String id, NameWithTags nameWithTags, Resource image, 
+				FirstFactorAuthNPanel component)
 		{
 			this.id = id;
 			this.nameWithTags = nameWithTags;
@@ -211,7 +237,7 @@ public class AuthnsGridWidget extends CustomComponent
 			return image;
 		}
 
-		public Component getComponent()
+		public FirstFactorAuthNPanel getComponent()
 		{
 			return component;
 		}

@@ -7,9 +7,12 @@ package pl.edu.icm.unity.saml.idp.web;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import org.apache.logging.log4j.Logger;
 
+import com.google.common.base.Strings;
+import com.vaadin.server.Resource;
 import com.vaadin.ui.Alignment;
 import com.vaadin.ui.CheckBox;
 import com.vaadin.ui.Component;
@@ -17,11 +20,11 @@ import com.vaadin.ui.CustomComponent;
 import com.vaadin.ui.Label;
 import com.vaadin.ui.VerticalLayout;
 
+import pl.edu.icm.unity.MessageSource;
 import pl.edu.icm.unity.base.utils.Log;
 import pl.edu.icm.unity.engine.api.PreferencesManagement;
 import pl.edu.icm.unity.engine.api.attributes.AttributeTypeSupport;
 import pl.edu.icm.unity.engine.api.identity.IdentityTypeSupport;
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
 import pl.edu.icm.unity.exceptions.EngineException;
 import pl.edu.icm.unity.saml.idp.SamlIdpProperties;
 import pl.edu.icm.unity.saml.idp.ctx.SAMLAuthnContext;
@@ -31,10 +34,10 @@ import pl.edu.icm.unity.types.basic.Attribute;
 import pl.edu.icm.unity.types.basic.AttributeType;
 import pl.edu.icm.unity.types.basic.DynamicAttribute;
 import pl.edu.icm.unity.types.basic.IdentityParam;
-import pl.edu.icm.unity.webui.authn.StandardWebAuthenticationProcessor;
+import pl.edu.icm.unity.webui.authn.StandardWebLogoutHandler;
 import pl.edu.icm.unity.webui.common.Label100;
-import pl.edu.icm.unity.webui.common.Styles;
 import pl.edu.icm.unity.webui.common.attributes.AttributeHandlerRegistry;
+import pl.edu.icm.unity.webui.common.file.ImageAccessService;
 import pl.edu.icm.unity.webui.common.safehtml.HtmlTag;
 import pl.edu.icm.unity.webui.common.safehtml.SafePanel;
 import pl.edu.icm.unity.webui.idpcommon.ExposedSelectableAttributesComponent;
@@ -42,7 +45,9 @@ import pl.edu.icm.unity.webui.idpcommon.IdPButtonsBar;
 import pl.edu.icm.unity.webui.idpcommon.IdPButtonsBar.Action;
 import pl.edu.icm.unity.webui.idpcommon.IdentitySelectorComponent;
 import pl.edu.icm.unity.webui.idpcommon.SPInfoComponent;
+import pl.edu.icm.unity.webui.idpcommon.SelectableAttributesComponent;
 import xmlbeans.org.oasis.saml2.assertion.NameIDType;
+import xmlbeans.org.oasis.saml2.protocol.AuthnRequestType;
 
 /**
  * Consent screen of the SAML web IdP. Fairly simple: shows who asks, what is going to be sent,
@@ -53,12 +58,13 @@ import xmlbeans.org.oasis.saml2.assertion.NameIDType;
 public class SamlConsentScreen extends CustomComponent
 {
 	private static final Logger log = Log.getLogger(Log.U_SERVER_SAML, SamlConsentScreen.class);
-	protected final UnityMessageSource msg;
+	protected final MessageSource msg;
 	protected final AttributeHandlerRegistry handlersRegistry;
 	protected final IdentityTypeSupport identityTypeSupport;
 	protected final PreferencesManagement preferencesMan;
-	protected final StandardWebAuthenticationProcessor authnProcessor;
+	protected final StandardWebLogoutHandler authnProcessor;
 	protected final AttributeTypeSupport aTypeSupport;
+	protected final ImageAccessService imageAccessService;
 
 	protected final List<IdentityParam> validIdentities;
 	protected final Collection<DynamicAttribute> attributes;
@@ -68,14 +74,14 @@ public class SamlConsentScreen extends CustomComponent
 	protected final ConfirmationConsumer acceptHandler;
 	
 	protected IdentitySelectorComponent idSelector;
-	protected ExposedSelectableAttributesComponent attrsPresenter;
+	protected SelectableAttributesComponent attrsPresenter;
 	protected SamlResponseHandler samlResponseHandler;
 	protected CheckBox rememberCB;
 
-	public SamlConsentScreen(UnityMessageSource msg, 
+	public SamlConsentScreen(MessageSource msg, ImageAccessService imageAccessService,  
 			AttributeHandlerRegistry handlersRegistry, 
 			PreferencesManagement preferencesMan,
-			StandardWebAuthenticationProcessor authnProcessor, 
+			StandardWebLogoutHandler authnProcessor, 
 			IdentityTypeSupport identityTypeSupport, 
 			AttributeTypeSupport aTypeSupport,
 			List<IdentityParam> validIdentities,
@@ -85,6 +91,7 @@ public class SamlConsentScreen extends CustomComponent
 			ConfirmationConsumer acceptHandler)
 	{
 		this.msg = msg;
+		this.imageAccessService = imageAccessService;
 		this.handlersRegistry = handlersRegistry;
 		this.preferencesMan = preferencesMan;
 		this.authnProcessor = authnProcessor;
@@ -100,14 +107,14 @@ public class SamlConsentScreen extends CustomComponent
 
 	protected void initUI()
 	{
-		SAMLAuthnContext samlCtx = SAMLContextSupport.getContext();
+		SAMLAuthnContext samlCtx = SamlSessionService.getVaadinContext();
 		
 		VerticalLayout vmain = new VerticalLayout();
 		vmain.setMargin(false);
 		vmain.setSpacing(false);
 		
 		VerticalLayout contents = new VerticalLayout();
-		contents.addStyleName(Styles.maxWidthColumn.toString());
+		contents.addStyleName("u-consentMainColumn");
 		vmain.addComponent(contents);
 		vmain.setComponentAlignment(contents, Alignment.TOP_CENTER);
 
@@ -115,6 +122,7 @@ public class SamlConsentScreen extends CustomComponent
 
 		Component exposedInfoPanel = createExposedDataPart(samlCtx);
 		contents.addComponent(exposedInfoPanel);
+		createRememberMeCheckbox(contents);
 		
 		createButtonsPart(samlCtx, contents);
 
@@ -125,17 +133,19 @@ public class SamlConsentScreen extends CustomComponent
 
 	private void createInfoPart(SAMLAuthnContext samlCtx, VerticalLayout contents)
 	{
-		String samlRequester = samlCtx.getRequest().getIssuer().getStringValue();
-		String returnAddress = samlCtx.getSamlConfiguration().getReturnAddressForRequester(
-					samlCtx.getRequest());
+		AuthnRequestType request = samlCtx.getRequest();
 
-		Label info1 = new Label100(msg.getMessage("SamlIdPWebUI.info1"));
-		info1.addStyleName(Styles.vLabelH1.toString());
-		SPInfoComponent spInfo = new SPInfoComponent(msg, null, samlRequester, returnAddress);
-		Label spc1 = HtmlTag.br();
-		Label info2 = new Label100(msg.getMessage("SamlIdPWebUI.info2"));
-		
-		contents.addComponents(info1, spInfo, spc1, info2);
+		String samlRequester = request.getIssuer().getStringValue();
+		String returnAddress = samlCtx.getSamlConfiguration().getReturnAddressForRequester(request);
+		String displayedName = samlCtx.getSamlConfiguration().getDisplayedNameForRequester(request.getIssuer());
+		Resource logo = samlCtx.getSamlConfiguration().getLogoForRequesterOrNull(request.getIssuer(), msg,
+				imageAccessService);
+
+		SPInfoComponent spInfo = new SPInfoComponent(msg, logo,
+				Strings.isNullOrEmpty(displayedName) ? samlRequester : displayedName,
+				returnAddress);
+
+		contents.addComponents(spInfo);
 	}
 
 	protected Component createExposedDataPart(SAMLAuthnContext samlCtx)
@@ -145,18 +155,32 @@ public class SamlConsentScreen extends CustomComponent
 		eiLayout.setWidth(100, Unit.PERCENTAGE);
 		exposedInfoPanel.setContent(eiLayout);
 		idSelector = new IdentitySelectorComponent(msg, identityTypeSupport, validIdentities);
-		eiLayout.addComponent(idSelector);
 
-		eiLayout.addComponent(HtmlTag.br());
-		boolean userCanEditConsent = samlCtx.getSamlConfiguration().getBooleanValue(SamlIdpProperties.USER_EDIT_CONSENT);
-		attrsPresenter = new ExposedSelectableAttributesComponent(msg, handlersRegistry, attributeTypes, 
-				aTypeSupport, attributes, userCanEditConsent);
-		eiLayout.addComponent(attrsPresenter);
+		Label info1 = new Label100(msg.getMessage("SamlIdPWebUI.allowForSignInInfo"));
+		Label info2 = new Label100(msg.getMessage("SamlIdPWebUI.allowForReadingUserProfile"));
+		eiLayout.addComponents(info1, info2);
 		
+		if (validIdentities.size() > 1)
+			eiLayout.addComponent(idSelector);
+		
+		eiLayout.addComponent(HtmlTag.br());
+		
+		boolean userCanEditConsent = samlCtx.getSamlConfiguration().getBooleanValue(SamlIdpProperties.USER_EDIT_CONSENT);
+		Optional<IdentityParam> selectedIdentity = Optional.ofNullable(validIdentities.size() == 1 ? validIdentities.get(0) : null); 
+		attrsPresenter = userCanEditConsent ? 
+				new ExposedSelectableAttributesComponent(msg, identityTypeSupport, handlersRegistry, 
+						attributeTypes, aTypeSupport, attributes, selectedIdentity) :
+				new ROExposedAttributesComponent(msg, identityTypeSupport, attributes, handlersRegistry, 
+						selectedIdentity);
+		eiLayout.addComponent((Component)attrsPresenter);
+		return exposedInfoPanel;
+	}
+
+	protected void createRememberMeCheckbox(VerticalLayout layout)
+	{
 		rememberCB = new CheckBox(msg.getMessage("SamlIdPWebUI.rememberSettings"));
 		rememberCB.setWidth(100, Unit.PERCENTAGE);
-		eiLayout.addComponent(rememberCB);
-		return exposedInfoPanel;
+		layout.addComponent(rememberCB);
 	}
 	
 	private void createButtonsPart(final SAMLAuthnContext samlCtx, VerticalLayout contents)
@@ -170,7 +194,7 @@ public class SamlConsentScreen extends CustomComponent
 		});
 		
 		contents.addComponent(buttons);
-		contents.setComponentAlignment(buttons, Alignment.MIDDLE_CENTER);
+		contents.setComponentAlignment(buttons, Alignment.BOTTOM_RIGHT);
 	}
 	
 	
@@ -211,10 +235,6 @@ public class SamlConsentScreen extends CustomComponent
 	
 	/**
 	 * Applies UI selected values to the given preferences object
-	 * @param preferences
-	 * @param samlCtx
-	 * @param defaultAccept
-	 * @throws EngineException
 	 */
 	protected void updatePreferencesFromUI(SamlPreferences preferences, SAMLAuthnContext samlCtx, boolean defaultAccept) 
 			throws EngineException
@@ -237,7 +257,7 @@ public class SamlConsentScreen extends CustomComponent
 	{
 		try
 		{
-			SAMLAuthnContext samlCtx = SAMLContextSupport.getContext();
+			SAMLAuthnContext samlCtx = SamlSessionService.getVaadinContext();
 			SamlPreferences preferences = SamlPreferences.getPreferences(preferencesMan);
 			updatePreferencesFromUI(preferences, samlCtx, defaultAccept);
 			SamlPreferences.savePreferences(preferencesMan, preferences);
@@ -262,7 +282,7 @@ public class SamlConsentScreen extends CustomComponent
 	
 	protected Collection<Attribute> getExposedAttributes()
 	{
-		return attrsPresenter.getUserFilteredAttributes().values();
+		return attrsPresenter.getUserFilteredAttributes();
 	}
 	
 	public interface ConfirmationConsumer

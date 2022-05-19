@@ -18,6 +18,12 @@ public class RegistrationFormBuilder extends BaseFormBuilder<RegistrationFormBui
 		super(new RegistrationForm());
 		instance = (RegistrationForm) getInstance();
 	}
+	
+	public RegistrationFormBuilder(RegistrationForm toCopy)
+	{
+		super(new RegistrationForm(toCopy.toJson()));
+		instance = (RegistrationForm) getInstance();
+	}
 
 	public RegistrationForm build()
 	{
@@ -95,6 +101,12 @@ public class RegistrationFormBuilder extends BaseFormBuilder<RegistrationFormBui
 	public RegistrationFormBuilder withTitle2ndStage(I18nString aValue)
 	{
 		instance.setTitle2ndStage(aValue);
+		return this;
+	}
+	
+	public RegistrationFormBuilder withSwitchToEnquiryInfo(I18nString aValue)
+	{
+		instance.setSwitchToEnquiryInfo(aValue);
 		return this;
 	}
 	

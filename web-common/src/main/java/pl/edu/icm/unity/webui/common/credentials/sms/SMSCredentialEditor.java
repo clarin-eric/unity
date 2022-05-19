@@ -9,21 +9,24 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import org.apache.logging.log4j.Logger;
 
 import com.vaadin.server.UserError;
 import com.vaadin.ui.ComboBox;
+import com.vaadin.ui.Component;
 import com.vaadin.ui.Label;
 import com.vaadin.ui.RadioButtonGroup;
+import com.vaadin.ui.VerticalLayout;
 
 import pl.edu.icm.unity.JsonUtil;
+import pl.edu.icm.unity.MessageSource;
 import pl.edu.icm.unity.base.utils.Log;
 import pl.edu.icm.unity.engine.api.attributes.AttributeSupport;
 import pl.edu.icm.unity.engine.api.attributes.AttributeTypeSupport;
 import pl.edu.icm.unity.engine.api.attributes.AttributeValueSyntax;
 import pl.edu.icm.unity.engine.api.confirmation.MobileNumberConfirmationManager;
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
 import pl.edu.icm.unity.exceptions.EngineException;
 import pl.edu.icm.unity.exceptions.IllegalCredentialException;
 import pl.edu.icm.unity.stdext.attr.VerifiableMobileNumberAttributeSyntax;
@@ -53,14 +56,14 @@ import pl.edu.icm.unity.webui.confirmations.MobileNumberConfirmationDialog;
  */
 public class SMSCredentialEditor implements CredentialEditor
 {
-	private static final Logger log = Log.getLogger(Log.U_SERVER, SMSCredentialEditor.class);
+	private static final Logger log = Log.getLogger(Log.U_SERVER_WEB, SMSCredentialEditor.class);
 	
 	private enum CredentialSource
 	{
 		New, Existing
 	};
 	
-	private UnityMessageSource msg;
+	private MessageSource msg;
 	private AttributeTypeSupport attrTypeSupport;
 	private AttributeSupport attrSup;
 	private ConfirmationInfoFormatter formatter;
@@ -75,7 +78,7 @@ public class SMSCredentialEditor implements CredentialEditor
 	private CredentialEditorContext context;
 	private SingleStringFieldBinder binder;
 	
-	public SMSCredentialEditor(UnityMessageSource msg, AttributeTypeSupport attrTypeSupport,
+	public SMSCredentialEditor(MessageSource msg, AttributeTypeSupport attrTypeSupport,
 			AttributeSupport attrSup,
 			MobileNumberConfirmationManager mobileConfirmationMan,
 			ConfirmationInfoFormatter formatter)
@@ -255,19 +258,20 @@ public class SMSCredentialEditor implements CredentialEditor
 	}
 
 	@Override
-	public ComponentsContainer getViewer(String credentialInfo)
+	public Optional<Component> getViewer(String credentialInfo)
 	{
-		ComponentsContainer ret = new ComponentsContainer();
+		VerticalLayout ret = new VerticalLayout();
+		ret.setMargin(false);
 
 		SMSCredentialExtraInfo pei = SMSCredentialExtraInfo.fromJson(credentialInfo);
 		if (pei.getLastChange() == null)
-			return ret;
+			return Optional.empty();
 
-		ret.add(new Label(msg.getMessage("SMSCredentialEditor.lastModification",
+		ret.addComponent(new Label(msg.getMessage("SMSCredentialEditor.lastModification",
 				pei.getLastChange())));
-		ret.add(new Label(msg.getMessage("SMSCredentialEditor.selectedMobileNumber",
+		ret.addComponent(new Label(msg.getMessage("SMSCredentialEditor.selectedMobileNumber",
 				hideMobile(pei.getMobile()))));
-		return ret;
+		return Optional.of(ret);
 	}
 	
 	private String hideMobile(String mobile)

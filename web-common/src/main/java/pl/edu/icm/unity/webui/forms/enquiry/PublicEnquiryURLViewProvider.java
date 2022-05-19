@@ -15,14 +15,13 @@ import org.springframework.stereotype.Component;
 import com.vaadin.navigator.View;
 import com.vaadin.server.VaadinSession;
 
+import pl.edu.icm.unity.MessageSource;
 import pl.edu.icm.unity.base.utils.Log;
 import pl.edu.icm.unity.engine.api.EnquiryManagement;
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
 import pl.edu.icm.unity.engine.api.registration.PublicRegistrationURLSupport;
 import pl.edu.icm.unity.exceptions.EngineException;
 import pl.edu.icm.unity.types.registration.EnquiryForm;
 import pl.edu.icm.unity.webui.forms.PublicFormURLProviderBase;
-import pl.edu.icm.unity.webui.forms.StandalonePublicView;
 import pl.edu.icm.unity.webui.forms.reg.RegistrationFormDialogProvider;
 
 /**
@@ -40,7 +39,7 @@ public class PublicEnquiryURLViewProvider extends PublicFormURLProviderBase
 	@Autowired
 	public PublicEnquiryURLViewProvider(
 			@Qualifier("insecure") EnquiryManagement enqMan,
-			ObjectFactory<StandalonePublicEnquiryView> viewFactory, UnityMessageSource msg)
+			ObjectFactory<StandalonePublicEnquiryView> viewFactory, MessageSource msg)
 		
 	{
 		this.enqMan = enqMan;
@@ -101,15 +100,4 @@ public class PublicEnquiryURLViewProvider extends PublicFormURLProviderBase
 		}
 		return null;
 	}
-
-	@Override
-	protected StandalonePublicView getViewFromSession()
-	{
-		VaadinSession vaadinSession  = VaadinSession.getCurrent();
-		if (vaadinSession == null)
-			return null;
-		
-		return vaadinSession.getAttribute(StandalonePublicEnquiryView.class);
-	}
-	
 }

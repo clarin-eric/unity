@@ -6,6 +6,7 @@ package pl.edu.icm.unity.oauth.as.token;
 
 import javax.ws.rs.GET;
 import javax.ws.rs.HeaderParam;
+import javax.ws.rs.POST;
 import javax.ws.rs.Path;
 import javax.ws.rs.Produces;
 import javax.ws.rs.core.Response;
@@ -15,8 +16,8 @@ import org.apache.http.HttpHeaders;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.nimbusds.oauth2.sdk.token.BearerTokenError;
 
-import pl.edu.icm.unity.engine.api.token.TokensManagement;
 import pl.edu.icm.unity.exceptions.EngineException;
+import pl.edu.icm.unity.oauth.as.OAuthTokenRepository;
 
 /**
  * RESTful implementation of the user information token resource
@@ -27,11 +28,19 @@ import pl.edu.icm.unity.exceptions.EngineException;
 @Path(OAuthTokenEndpoint.USER_INFO_PATH)
 public class UserInfoResource extends BaseTokenResource
 {
-	public UserInfoResource(TokensManagement tokensManagement)
+	public UserInfoResource(OAuthTokenRepository tokensDAO)
 	{
-		super(tokensManagement);
+		super(tokensDAO);
 	}
-
+	
+	@Path("/")
+	@POST
+	public Response getTokenViaPOST(@HeaderParam("Authorization") String bearerToken) 
+			throws EngineException, JsonProcessingException
+	{
+		return getToken(bearerToken);
+	}
+	
 	@Path("/")
 	@GET
 	public Response getToken(@HeaderParam("Authorization") String bearerToken) 

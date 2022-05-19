@@ -4,9 +4,13 @@
  */
 package pl.edu.icm.unity.engine.identity;
 
+import static java.lang.String.join;
+import static java.util.Collections.emptyList;
+import static java.util.Collections.emptySet;
+import static pl.edu.icm.unity.types.basic.audit.AuditEventTag.USERS;
+
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -15,14 +19,17 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.stream.Collectors;
 
 import org.apache.logging.log4j.Logger;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Sets;
 
+import pl.edu.icm.unity.base.capacityLimit.CapacityLimitName;
 import pl.edu.icm.unity.base.msgtemplates.UserNotificationTemplateDef;
 import pl.edu.icm.unity.base.utils.Log;
 import pl.edu.icm.unity.engine.api.EntityManagement;
@@ -32,17 +39,23 @@ import pl.edu.icm.unity.engine.api.confirmation.EmailConfirmationManager;
 import pl.edu.icm.unity.engine.api.identity.EntityResolver;
 import pl.edu.icm.unity.engine.api.identity.IdentityTypeDefinition;
 import pl.edu.icm.unity.engine.api.identity.IdentityTypesRegistry;
+import pl.edu.icm.unity.engine.api.identity.UnknownEmailException;
 import pl.edu.icm.unity.engine.api.notification.NotificationProducer;
 import pl.edu.icm.unity.engine.attribute.AttributeClassUtil;
 import pl.edu.icm.unity.engine.attribute.AttributesHelper;
-import pl.edu.icm.unity.engine.authz.AuthorizationManager;
+import pl.edu.icm.unity.engine.audit.AuditEventListener;
+import pl.edu.icm.unity.engine.audit.AuditEventTrigger;
+import pl.edu.icm.unity.engine.audit.AuditPublisher;
 import pl.edu.icm.unity.engine.authz.AuthzCapability;
+import pl.edu.icm.unity.engine.authz.InternalAuthorizationManager;
+import pl.edu.icm.unity.engine.capacityLimits.InternalCapacityLimitVerificator;
 import pl.edu.icm.unity.engine.credential.CredentialAttributeTypeProvider;
 import pl.edu.icm.unity.engine.credential.EntityCredentialsHelper;
 import pl.edu.icm.unity.engine.credential.SystemAllCredentialRequirements;
 import pl.edu.icm.unity.engine.events.InvocationEventProducer;
 import pl.edu.icm.unity.engine.group.GroupHelper;
 import pl.edu.icm.unity.exceptions.AuthorizationException;
+import pl.edu.icm.unity.exceptions.CapacityLimitReachedException;
 import pl.edu.icm.unity.exceptions.EngineException;
 import pl.edu.icm.unity.exceptions.IllegalIdentityValueException;
 import pl.edu.icm.unity.exceptions.IllegalTypeException;
@@ -74,6 +87,9 @@ import pl.edu.icm.unity.types.basic.Identity;
 import pl.edu.icm.unity.types.basic.IdentityParam;
 import pl.edu.icm.unity.types.basic.IdentityTaV;
 import pl.edu.icm.unity.types.basic.IdentityType;
+import pl.edu.icm.unity.types.basic.audit.AuditEntity;
+import pl.edu.icm.unity.types.basic.audit.AuditEventAction;
+import pl.edu.icm.unity.types.basic.audit.AuditEventType;
 import pl.edu.icm.unity.types.confirmation.ConfirmationInfo;
 
 /**
@@ -86,28 +102,32 @@ import pl.edu.icm.unity.types.confirmation.ConfirmationInfo;
 @InvocationEventProducer
 public class EntityManagementImpl implements EntityManagement
 {
-	private static final Logger log = Log.getLogger(Log.U_SERVER,	EntityManagementImpl.class);
-	private IdentityTypeDAO idTypeDAO;
-	private IdentityTypeHelper idTypeHelper;
-	private IdentityDAO idDAO;
-	private EntityDAO entityDAO;
-	private GroupDAO groupDAO;
-	private AttributeTypeDAO attributeTypeDAO;
-	private MembershipDAO membershipDAO;
-	private EntityCredentialsHelper credentialsHelper;
-	private GroupHelper groupHelper;
-	private SheduledOperationHelper scheduledOperationHelper;
-	private AttributesHelper attributesHelper;
-	private IdentityHelper identityHelper;
-	private EntityResolver idResolver;
-	private AuthorizationManager authz;
-	private IdentityTypesRegistry idTypesRegistry;
-	private EmailConfirmationManager confirmationManager;
-	private AttributeClassUtil acUtil;
-	private TransactionalRunner tx;
-	private UnityServerConfiguration cfg;
-	private NotificationProducer notificationProducer;
-	
+	private static final Logger log = Log.getLogger(Log.U_SERVER_CORE,	EntityManagementImpl.class);
+	private final IdentityTypeDAO idTypeDAO;
+	private final IdentityTypeHelper idTypeHelper;
+	private final IdentityDAO idDAO;
+	private final EntityDAO entityDAO;
+	private final GroupDAO groupDAO;
+	private final AttributeTypeDAO attributeTypeDAO;
+	private final MembershipDAO membershipDAO;
+	private final EntityCredentialsHelper credentialsHelper;
+	private final GroupHelper groupHelper;
+	private final SheduledOperationHelper scheduledOperationHelper;
+	private final AttributesHelper attributesHelper;
+	private final IdentityHelper identityHelper;
+	private final EntityResolver idResolver;
+	private final InternalAuthorizationManager authz;
+	private final IdentityTypesRegistry idTypesRegistry;
+	private final EmailConfirmationManager confirmationManager;
+	private final AttributeClassUtil acUtil;
+	private final TransactionalRunner tx;
+	private final UnityServerConfiguration cfg;
+	private final NotificationProducer notificationProducer;
+	private final AuditEventListener auditEventListener;
+	private final AuditPublisher auditPublisher;
+	private final InternalCapacityLimitVerificator capacityLimitVerificator;
+	private final ExistingUserFinder byEmailUserFinder;
+
 	@Autowired
 	public EntityManagementImpl(IdentityTypeDAO idTypeDAO, IdentityTypeHelper idTypeHelper,
 			IdentityDAO idDAO, EntityDAO entityDAO, GroupDAO groupDAO,
@@ -115,11 +135,14 @@ public class EntityManagementImpl implements EntityManagement
 			EntityCredentialsHelper credentialsHelper, GroupHelper groupHelper,
 			SheduledOperationHelper scheduledOperationHelper,
 			AttributesHelper attributesHelper, IdentityHelper identityHelper,
-			EntityResolver idResolver, AuthorizationManager authz,
+			EntityResolver idResolver, InternalAuthorizationManager authz,
 			IdentityTypesRegistry idTypesRegistry,
 			EmailConfirmationManager confirmationManager, AttributeClassUtil acUtil,
 			TransactionalRunner tx,
-			UnityServerConfiguration cfg, NotificationProducer notificationProducer)
+			UnityServerConfiguration cfg, NotificationProducer notificationProducer,
+			AuditEventListener auditEventListener, AuditPublisher auditPublisher,
+			InternalCapacityLimitVerificator capacityLimitVerificator,
+			ExistingUserFinder byEmailUserFinder)
 	{
 		this.idTypeDAO = idTypeDAO;
 		this.idTypeHelper = idTypeHelper;
@@ -141,43 +164,47 @@ public class EntityManagementImpl implements EntityManagement
 		this.tx = tx;
 		this.cfg = cfg;
 		this.notificationProducer = notificationProducer;
+		this.auditEventListener = auditEventListener;
+		this.auditPublisher = auditPublisher;
+		this.capacityLimitVerificator = capacityLimitVerificator;
+		this.byEmailUserFinder = byEmailUserFinder;
 	}
 
 	@Override
-	public Identity addEntity(IdentityParam toAdd, String credReqId, EntityState initialState,
-			boolean extractAttributes) throws EngineException
+	public Identity addEntity(IdentityParam toAdd, String credReqId, EntityState initialState) throws EngineException
 	{
-		return addEntity(toAdd, credReqId, initialState, extractAttributes, null);
+		return addEntity(toAdd, credReqId, initialState, null);
 	}
 	
 	@Override
-	public Identity addEntity(IdentityParam toAdd, EntityState initialState,
-			boolean extractAttributes) throws EngineException
+	public Identity addEntity(IdentityParam toAdd, EntityState initialState) throws EngineException
 	{
-		return addEntity(toAdd, SystemAllCredentialRequirements.NAME, initialState, extractAttributes, null);
+		return addEntity(toAdd, SystemAllCredentialRequirements.NAME, initialState, null);
 	}
 
 	@Override
 	public Identity addEntity(IdentityParam toAdd, String credReqId,
-			EntityState initialState, boolean extractAttributes,
-			List<Attribute> attributesP) throws EngineException
+			EntityState initialState, List<Attribute> attributesP) throws EngineException
 	{
 		authz.checkAuthorization(AuthzCapability.identityModify);
-		List<Attribute> attributes = attributesP == null ? Collections.emptyList() : attributesP;
+		
+		List<Attribute> attributes = attributesP == null ? emptyList() : attributesP;
 		
 		Identity ret = tx.runInTransactionRetThrowing(() -> {
-			return identityHelper.addEntity(toAdd, credReqId, initialState, 
-					extractAttributes, attributes, true);
-		}); 
+			capacityLimitVerificator.assertInSystemLimitForSingleAdd(CapacityLimitName.EntitiesCount,
+					() -> entityDAO.getCount());
+			assertIdentityLimit();
+			return identityHelper.addEntity(toAdd, credReqId, initialState, attributes,
+					true);
+		});
 		return ret;
 	}
 	
 	@Override
 	public Identity addEntity(IdentityParam toAdd,
-			EntityState initialState, boolean extractAttributes,
-			List<Attribute> attributesP) throws EngineException
+			EntityState initialState, List<Attribute> attributesP) throws EngineException
 	{
-		return addEntity(toAdd, SystemAllCredentialRequirements.NAME, initialState, extractAttributes, attributesP);
+		return addEntity(toAdd, SystemAllCredentialRequirements.NAME, initialState, attributesP);
 	}
 	
 	private static class IdentityWithAuthzInfo
@@ -193,15 +220,15 @@ public class EntityManagementImpl implements EntityManagement
 	}
 	
 	@Override
-	public Identity addIdentity(IdentityParam toAdd, EntityParam parentEntity, boolean extractAttributes)
-			throws EngineException
+	public Identity addIdentity(IdentityParam toAdd, EntityParam parentEntity) throws EngineException
 	{
 		IdentityWithAuthzInfo ret = tx.runInTransactionRetThrowing(() -> {
 			long entityId = idResolver.getEntityId(parentEntity);
 			IdentityType identityType = idTypeDAO.get(toAdd.getTypeId());
 			
 			boolean fullAuthz = authorizeIdentityChange(entityId, Sets.newHashSet(toAdd), 
-					identityType.isSelfModificable());
+					identityType.isSelfModificable());	
+			assertIdentityLimit();
 			if (!fullAuthz)
 				toAdd.setConfirmationInfo(new ConfirmationInfo(false));
 			List<Identity> identities = idDAO.getByEntity(entityId);
@@ -211,8 +238,12 @@ public class EntityManagementImpl implements EntityManagement
 						+ "the configured maximum number of instances was reached.");
 			Identity toCreate = idTypeHelper.upcastIdentityParam(toAdd, entityId);
 			idDAO.create(new StoredIdentity(toCreate));
-			if (extractAttributes && fullAuthz)
-				identityHelper.addExtractedAttributes(toCreate);
+			auditPublisher.log(AuditEventTrigger.builder()
+					.type(AuditEventType.IDENTITY)
+					.action(AuditEventAction.ADD)
+					.name(join(":", toCreate.getTypeId(), toCreate.getName()))
+					.subject(toCreate.getEntityId())
+					.tags(USERS));
 			return new IdentityWithAuthzInfo(toCreate, fullAuthz);
 		});
 		
@@ -224,6 +255,14 @@ public class EntityManagementImpl implements EntityManagement
 			});
 		}
 		return ret.identity;
+	}
+	
+	private void assertIdentityLimit() throws CapacityLimitReachedException
+	{
+		capacityLimitVerificator.assertInSystemLimitForSingleAdd(CapacityLimitName.IdentitiesCount,
+				() -> idDAO.getCountByType(idTypeHelper.getIdentityTypes().stream()
+						.filter(t -> !idTypeHelper.getTypeDefinition(t.getName()).isDynamic())
+						.map(t -> t.getName()).collect(Collectors.toList())));
 	}
 
 	private int getIdentityCountOfType(List<Identity> identities, String type)
@@ -279,9 +318,9 @@ public class EntityManagementImpl implements EntityManagement
 		}
 		return true;
 	}
-	
-	@Transactional
+
 	@Override
+	@Transactional
 	public void removeIdentity(IdentityTaV toRemove) throws EngineException
 	{
 		long entityId = idResolver.getEntityId(new EntityParam(toRemove));
@@ -307,6 +346,12 @@ public class EntityManagementImpl implements EntityManagement
 		String cmpValue = typeDefinition.getComparableValue(toRemove.getValue(), toRemove.getRealm(), 
 				toRemove.getTarget()); 
 		idDAO.delete(StoredIdentity.toInDBIdentityValue(identityType.getName(), cmpValue));
+		auditPublisher.log(AuditEventTrigger.builder()
+				.type(AuditEventType.IDENTITY)
+				.action(AuditEventAction.REMOVE)
+				.name(join(":", toRemove.getTypeId(), cmpValue))
+				.subject(auditEventListener.createAuditEntity(entityId))
+				.tags(USERS));
 	}
 
 	@Override
@@ -316,21 +361,28 @@ public class EntityManagementImpl implements EntityManagement
 		if (!Objects.equals(updated.getTypeId(), original.getTypeId()))
 			throw new IllegalArgumentException("Identity type can not be changed");
 		authz.checkAuthorization(AuthzCapability.identityModify);
-		
+
 		IdentityType identityType = idTypeDAO.get(original.getTypeId());
 		IdentityTypeDefinition typeDefinition = idTypeHelper.getTypeDefinition(identityType);
-		String cmpValue = typeDefinition.getComparableValue(original.getValue(), original.getRealm(), 
+		String cmpValue = typeDefinition.getComparableValue(original.getValue(), original.getRealm(),
 				original.getTarget());
-		String updatedCmpValue = typeDefinition.getComparableValue(updated.getValue(), updated.getRealm(), 
+		String updatedCmpValue = typeDefinition.getComparableValue(updated.getValue(), updated.getRealm(),
 				updated.getTarget());
 		if (!Objects.equals(cmpValue, updatedCmpValue))
 			throw new IllegalArgumentException("Identity change can not effect in comparable "
 					+ "value change of existing identity");
-		
+
 		String inDBKey = StoredIdentity.toInDBIdentityValue(identityType.getName(), cmpValue);
 		long entityId = idResolver.getEntityId(new EntityParam(original));
 		Identity updatedFull = idTypeHelper.upcastIdentityParam(updated, entityId);
 		idDAO.updateByName(inDBKey, new StoredIdentity(updatedFull));
+		auditPublisher.log(AuditEventTrigger.builder()
+				.type(AuditEventType.IDENTITY)
+				.action(AuditEventAction.UPDATE)
+				.name(join(":", updatedFull.getTypeId(), updatedFull.getName()))
+				.subject(updatedFull.getEntityId())
+				.details(ImmutableMap.of("action", "manual update"))
+				.tags(USERS));
 	}
 
 	@Override
@@ -550,16 +602,22 @@ public class EntityManagementImpl implements EntityManagement
 		resetIdentityForEntity(entityId, typeIdToReset, realm, target);
 	}
 
-	
-	@Transactional
 	@Override
+	@Transactional
 	public void removeEntity(EntityParam toRemove) throws EngineException
 	{
 		toRemove.validateInitialization();
 		long entityId = idResolver.getEntityId(toRemove);
 		authz.checkAuthorization(authz.isSelf(entityId), AuthzCapability.identityModify);
 		sendNotification(entityId, cfg.getValue(UnityServerConfiguration.ACCOUNT_REMOVED_NOTIFICATION));
+		AuditEntity auditEntity = auditEventListener.createAuditEntity(entityId);
 		entityDAO.deleteByKey(entityId);
+		auditPublisher.log(AuditEventTrigger.builder()
+				.type(AuditEventType.ENTITY)
+				.action(AuditEventAction.REMOVE)
+				.emptyName()
+				.subject(auditEntity)
+				.tags(USERS));
 	}
 	
 	@Override
@@ -590,6 +648,13 @@ public class EntityManagementImpl implements EntityManagement
 		
 		current.setEntityState(status);
 		entityDAO.updateByKey(entityId, current);
+		auditPublisher.log(AuditEventTrigger.builder()
+				.type(AuditEventType.ENTITY)
+				.action(AuditEventAction.UPDATE)
+				.emptyName()
+				.subject(entityId)
+				.details(ImmutableMap.of("state", status.toString()))
+				.tags(USERS));
 		sendNotification(entityId, notificationToSend);
 	}
 
@@ -634,26 +699,14 @@ public class EntityManagementImpl implements EntityManagement
 	public String getEntityLabel(EntityParam entity) throws EngineException
 	{
 		entity.validateInitialization();
-		AttributeExt attribute = attributesHelper.getAttributeByMetadata(entity, "/", 
+		return attributesHelper.getAttributeValueByMetadata(entity, "/",
 				EntityNameMetadataProvider.NAME);
-		if (attribute == null)
-			return null;
-		List<?> values = attribute.getValues();
-		if (values.isEmpty())
-			return null;
-		return values.get(0).toString();
 	}
 	
 	
 	/**
 	 * Checks if read cap is set and resolved the entity: identities and credential with respect to the
 	 * given target.
-	 * @param entityId
-	 * @param target
-	 * @param allowCreate
-	 * @param sqlMap
-	 * @return
-	 * @throws EngineException
 	 */
 	private Entity resolveEntityBasic(long entityId, String target, boolean allowCreate, String group) 
 			throws EngineException
@@ -665,11 +718,6 @@ public class EntityManagementImpl implements EntityManagement
 	
 	/**
 	 * assembles the final entity by adding the credential and state info.
-	 * @param entityId
-	 * @param identities
-	 * @param sqlMap
-	 * @return
-	 * @throws EngineException
 	 */
 	private Entity assembleEntity(long entityId, List<Identity> identities) throws EngineException
 	{
@@ -716,7 +764,7 @@ public class EntityManagementImpl implements EntityManagement
 		for (GroupMembership groupMem: entityMembership)
 		{
 			Group group = allAsMap.get(groupMem.getGroup());
-			group.setAttributesClasses(Collections.emptySet());
+			group.setAttributesClasses(emptySet());
 			group.setAttributeStatements(new AttributeStatement[0]);
 			ret.add(group);
 		}
@@ -774,12 +822,24 @@ public class EntityManagementImpl implements EntityManagement
 		entityDAO.deleteByKey(mergedId);
 	}
 
+	@Override
+	@Transactional
+	public Set<Entity> getAllEntitiesWithContactEmail(String contactEmail) throws EngineException
+	{
+		Set<Entity> entitiesIds = byEmailUserFinder.getEntitiesIdsByContactAddress(contactEmail);
+		if (entitiesIds.isEmpty())
+			throw new UnknownEmailException("Contact email " + contactEmail + " is not assigned to any entity");
+		
+		return entitiesIds;
+	}
+	
+	
 	private void mergeAttributes(long mergedId, long targetId, boolean safeMode) throws EngineException
 	{
 		Collection<AttributeExt> newAttributes = 
-				attributesHelper.getAllAttributes(mergedId, null, false, null);
+				attributesHelper.getAllAttributes(mergedId, emptyList(), false, null);
 		Collection<AttributeExt> targetAttributes = 
-				attributesHelper.getAllAttributes(targetId, null, false, null);
+				attributesHelper.getAllAttributes(targetId, emptyList(), false, null);
 		Set<String> targetAttributesSet = new HashSet<>();
 		for (AttributeExt attribute: targetAttributes)
 			targetAttributesSet.add(getAttrKey(attribute));
@@ -879,6 +939,12 @@ public class EntityManagementImpl implements EntityManagement
 			}
 			id.setEntityId(targetId);
 			idDAO.update(new StoredIdentity(id));
+			auditPublisher.log(AuditEventTrigger.builder()
+					.type(AuditEventType.IDENTITY)
+					.action(AuditEventAction.UPDATE)
+					.name(join(":", id.getTypeId(), id.getName()))
+					.details(ImmutableMap.of("description", "Merged identities", "source", "Entity id " + mergedId, "destination", "Entity id " + targetId))
+					.tags(USERS));
 		}
 	}
 	
@@ -907,23 +973,24 @@ public class EntityManagementImpl implements EntityManagement
 				if (target != null && !target.equals(id.getTarget()))
 					continue;
 				idDAO.delete(sid.getName());
+				auditPublisher.log(AuditEventTrigger.builder()
+						.type(AuditEventType.IDENTITY)
+						.action(AuditEventAction.REMOVE)
+						.name(join(":", id.getTypeId(), id.getName()))
+						.subject(id.getEntityId())
+						.tags(USERS));
 			}
 		}
 	}
 	
 	private List<Identity> getIdentitiesForEntity(long entityId, String target, boolean allowCreate) 
-			throws IllegalTypeException
+			throws IllegalIdentityValueException
 	{
-		List<Identity> all = idDAO.getByEntity(entityId);
-		List<Identity> ret = new ArrayList<>(all.size() + 4);
-		for (Identity id: all)
-			if (id.getTarget() == null || id.getTarget().equals(target))
-				ret.add(id);
-		Set<String> presentTypes = new HashSet<>();
-		for (Identity id: ret)
-			presentTypes.add(id.getTypeId());
+		List<Identity> ret = identityHelper.getIdentitiesForEntity(entityId, target);
+
 		if (allowCreate)
-			identityHelper.addDynamic(entityId, presentTypes, ret, target);
+			identityHelper.addDynamic(entityId, ret.stream().map(Identity::getTypeId).collect(Collectors.toSet()), ret, target);
+
 		return ret;
 	}
 

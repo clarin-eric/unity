@@ -16,12 +16,13 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import eu.unicore.util.configuration.ConfigurationException;
+import pl.edu.icm.unity.MessageSource;
 import pl.edu.icm.unity.engine.api.EntityManagement;
 import pl.edu.icm.unity.engine.api.PKIManagement;
 import pl.edu.icm.unity.engine.api.authn.AuthenticationProcessor;
 import pl.edu.icm.unity.engine.api.endpoint.EndpointFactory;
 import pl.edu.icm.unity.engine.api.endpoint.EndpointInstance;
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
+import pl.edu.icm.unity.engine.api.server.AdvertisedAddressProvider;
 import pl.edu.icm.unity.engine.api.server.NetworkServer;
 import pl.edu.icm.unity.engine.api.session.SessionManagement;
 import pl.edu.icm.unity.engine.api.token.TokensManagement;
@@ -53,12 +54,16 @@ public class JWTManagementEndpoint extends RESTEndpoint
 	private JWTAuthenticationProperties config;
 	
 	@Autowired
-	public JWTManagementEndpoint(UnityMessageSource msg, SessionManagement sessionMan,
+	public JWTManagementEndpoint(MessageSource msg,
+			SessionManagement sessionMan,
 			AuthenticationProcessor authenticationProcessor,
 			TokensManagement tokensMan,
-			PKIManagement pkiManagement, NetworkServer networkServer, EntityManagement identitiesMan)
+			PKIManagement pkiManagement,
+			NetworkServer networkServer,
+			AdvertisedAddressProvider advertisedAddrProvider,
+			EntityManagement identitiesMan)
 	{
-		super(msg, sessionMan, authenticationProcessor, networkServer, "");
+		super(msg, sessionMan, authenticationProcessor, networkServer, advertisedAddrProvider, "", identitiesMan);
 		this.tokensMan = tokensMan;
 		this.pkiManagement = pkiManagement;
 		this.identitiesMan = identitiesMan;
@@ -81,10 +86,10 @@ public class JWTManagementEndpoint extends RESTEndpoint
 	@Override
 	protected Application getApplication()
 	{
-		String addr = httpServer.getAdvertisedAddress().toString();
+		String addr = advertisedAddrProvider.get().toString();
 		String realm = description.getRealm().getName();
 		JWTManagement jwtMan = new JWTManagement(tokensMan, pkiManagement, identitiesMan,
-				realm, addr, config);
+				realm, addr, config.toConfig());
 		return new JWTManagementJAXRSApp(jwtMan);
 	}
 

@@ -16,7 +16,7 @@ import org.springframework.stereotype.Component;
 
 import pl.edu.icm.unity.engine.api.CredentialRequirementManagement;
 import pl.edu.icm.unity.engine.api.authn.local.LocalCredentialsRegistry;
-import pl.edu.icm.unity.engine.authz.AuthorizationManager;
+import pl.edu.icm.unity.engine.authz.InternalAuthorizationManager;
 import pl.edu.icm.unity.engine.authz.AuthzCapability;
 import pl.edu.icm.unity.engine.events.InvocationEventProducer;
 import pl.edu.icm.unity.engine.identity.IdentityHelper;
@@ -42,13 +42,13 @@ public class CredentialReqManagementImpl implements CredentialRequirementManagem
 	private CredentialRequirementDB credentialRequirementDB;
 	private CredentialReqRepository credReqRepository;
 	private IdentityHelper identityHelper;
-	private AuthorizationManager authz;
+	private InternalAuthorizationManager authz;
 	private EntityCredentialsHelper entityCredHelper;
 	
 	@Autowired
 	public CredentialReqManagementImpl(LocalCredentialsRegistry localCredReg,
 			CredentialRepository credRepository, CredentialRequirementDB credentialRequirementDB,
-			IdentityHelper identityHelper, AuthorizationManager authz,
+			IdentityHelper identityHelper, InternalAuthorizationManager authz,
 			EntityCredentialsHelper entityCredHelper, CredentialReqRepository credReqRepository)
 	{
 		this.localCredReg = localCredReg;
@@ -115,12 +115,20 @@ public class CredentialReqManagementImpl implements CredentialRequirementManagem
 	private void assertIsNotSystemCredReq(String name)
 	{
 		if (SystemAllCredentialRequirements.NAME.equals(name))
-			throw new IllegalArgumentException("Credential requirement '" + name + "' is the system credential requirement and cannot be overwrite or remove");
+			throw new IllegalArgumentException("Credential requirement '" + name + 
+					"' is the system credential requirement and can not be overwritten or removed");
 	}
 	
 	private void assertIsNotReadOnly(CredentialRequirements cred) throws EngineException
 	{
 		if (cred.isReadOnly())
 			throw new IllegalArgumentException("Cannot create read only credential requirement through this API");
+	}
+
+
+	@Override
+	public CredentialRequirements getCredentialRequirements(String name) throws EngineException
+	{
+		return credReqRepository.get(name);
 	}
 }

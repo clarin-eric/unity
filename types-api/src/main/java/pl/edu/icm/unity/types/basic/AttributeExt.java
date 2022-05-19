@@ -11,8 +11,6 @@ import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonValue;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
-import pl.edu.icm.unity.types.basic.Attribute;
-
 /**
  * Extends the basic {@link Attribute} with metadata which is set by the server when returning 
  * attributes. 
@@ -36,7 +34,6 @@ public class AttributeExt extends Attribute
 	
 	/**
 	 * Cloning constructor. Deep cloning is performed.
-	 * @param source
 	 */
 	public AttributeExt(AttributeExt source, Date creationTs, Date updateTs)
 	{
@@ -45,8 +42,6 @@ public class AttributeExt extends Attribute
 
 	/**
 	 * Upcasts {@link Attribute} to AttributeExt, creation and update dates are set to current time. 
-	 * @param baseAttribute
-	 * @param isDirect
 	 */
 	public AttributeExt(Attribute baseAttribute, boolean isDirect)
 	{
@@ -55,7 +50,6 @@ public class AttributeExt extends Attribute
 	
 	/**
 	 * Cloning constructor. Deep cloning is performed.
-	 * @param source
 	 */
 	public AttributeExt(AttributeExt source)
 	{

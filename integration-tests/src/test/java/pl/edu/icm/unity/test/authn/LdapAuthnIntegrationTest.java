@@ -6,12 +6,12 @@ package pl.edu.icm.unity.test.authn;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
-import static pl.edu.icm.unity.ldap.client.LdapProperties.BIND_ONLY;
-import static pl.edu.icm.unity.ldap.client.LdapProperties.PORTS;
-import static pl.edu.icm.unity.ldap.client.LdapProperties.PREFIX;
-import static pl.edu.icm.unity.ldap.client.LdapProperties.SERVERS;
-import static pl.edu.icm.unity.ldap.client.LdapProperties.TRANSLATION_PROFILE;
-import static pl.edu.icm.unity.ldap.client.LdapProperties.USER_DN_TEMPLATE;
+import static pl.edu.icm.unity.ldap.client.config.LdapProperties.BIND_ONLY;
+import static pl.edu.icm.unity.ldap.client.config.LdapProperties.PORTS;
+import static pl.edu.icm.unity.ldap.client.config.LdapProperties.PREFIX;
+import static pl.edu.icm.unity.ldap.client.config.LdapProperties.SERVERS;
+import static pl.edu.icm.unity.webui.authn.CommonWebAuthnProperties.TRANSLATION_PROFILE;
+import static pl.edu.icm.unity.ldap.client.config.LdapProperties.USER_DN_TEMPLATE;
 
 import java.io.IOException;
 import java.io.StringWriter;
@@ -37,11 +37,12 @@ import eu.unicore.security.etd.TrustDelegation;
 import eu.unicore.security.wsutil.samlclient.AuthnResponseAssertions;
 import eu.unicore.security.wsutil.samlclient.SAMLAuthnClient;
 import eu.unicore.util.httpclient.DefaultClientConfiguration;
+import eu.unicore.util.httpclient.ServerHostnameCheckingMode;
 import pl.edu.icm.unity.engine.DBIntegrationTestBase;
 import pl.edu.icm.unity.engine.api.AuthenticatorManagement;
 import pl.edu.icm.unity.engine.api.TranslationProfileManagement;
 import pl.edu.icm.unity.engine.api.translation.in.IdentityEffectMode;
-import pl.edu.icm.unity.engine.authz.AuthorizationManagerImpl;
+import pl.edu.icm.unity.engine.authz.InternalAuthorizationManagerImpl;
 import pl.edu.icm.unity.engine.authz.RoleAttributeTypeProvider;
 import pl.edu.icm.unity.engine.server.EngineInitialization;
 import pl.edu.icm.unity.engine.translation.in.action.MapIdentityActionFactory;
@@ -104,7 +105,7 @@ public class LdapAuthnIntegrationTest extends DBIntegrationTestBase
 			EndpointConfiguration cfg = new EndpointConfiguration(new I18nString("endpoint1"), "desc",
 					 Lists.newArrayList("ldap-password"), SAML_ENDP_CFG, realm.getName());
 			endpointMan.deploy(SamlUnicoreSoapEndpoint.NAME, "endpoint1", "/saml", cfg);
-			List<ResolvedEndpoint> endpoints = endpointMan.getEndpoints();
+			List<ResolvedEndpoint> endpoints = endpointMan.getDeployedEndpoints();
 			assertEquals(1, endpoints.size());
 
 			httpServer.start();
@@ -167,9 +168,9 @@ public class LdapAuthnIntegrationTest extends DBIntegrationTestBase
 	private void createUser() throws Exception
 	{
 		Identity added1 = idsMan.addEntity(new IdentityParam(X500Identity.ID, DEMO_SERVER_DN), 
-				EngineInitialization.DEFAULT_CREDENTIAL_REQUIREMENT, EntityState.valid, false);
+				EngineInitialization.DEFAULT_CREDENTIAL_REQUIREMENT, EntityState.valid);
 		Attribute sa = EnumAttribute.of(RoleAttributeTypeProvider.AUTHORIZATION_ROLE, 
-				"/", Lists.newArrayList(AuthorizationManagerImpl.USER_ROLE));
+				"/", Lists.newArrayList(InternalAuthorizationManagerImpl.USER_ROLE));
 		attrsMan.createAttribute(new EntityParam(added1), sa);
 	}
 	
@@ -191,7 +192,7 @@ public class LdapAuthnIntegrationTest extends DBIntegrationTestBase
 		KeystoreCredential keystoreCredential = new KeystoreCredential("src/test/resources/authn-tests/demoKeystore.p12", 
 				DEMO_KS_PASS.toCharArray(), DEMO_KS_PASS.toCharArray(), DEMO_KS_ALIAS, "PKCS12");
 		EmbeddedDirectoryServer embeddedDirectoryServer = new EmbeddedDirectoryServer(keystoreCredential,
-				"src/test/resources/authn-tests");
+				"src/test/resources/authn-tests", ServerHostnameCheckingMode.WARN);
 		ds = embeddedDirectoryServer.startEmbeddedServer();
 		ldapHostname = embeddedDirectoryServer.getPlainConnection().getConnectedAddress();
 		ldapPort = embeddedDirectoryServer.getPlainConnection().getConnectedPort()+"";

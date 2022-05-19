@@ -29,6 +29,7 @@ import net.sf.ehcache.config.PersistenceConfiguration;
 import net.sf.ehcache.config.Searchable;
 import net.sf.ehcache.search.Query;
 import net.sf.ehcache.search.Results;
+import pl.edu.icm.unity.MessageSource;
 import pl.edu.icm.unity.base.msgtemplates.confirm.EmailConfirmationTemplateDef;
 import pl.edu.icm.unity.base.token.Token;
 import pl.edu.icm.unity.base.utils.Log;
@@ -45,9 +46,8 @@ import pl.edu.icm.unity.engine.api.confirmation.states.RegistrationReqEmailAttri
 import pl.edu.icm.unity.engine.api.finalization.WorkflowFinalizationConfiguration;
 import pl.edu.icm.unity.engine.api.identity.EntityResolver;
 import pl.edu.icm.unity.engine.api.identity.IdentityTypeDefinition;
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
 import pl.edu.icm.unity.engine.api.notification.NotificationProducer;
-import pl.edu.icm.unity.engine.api.server.NetworkServer;
+import pl.edu.icm.unity.engine.api.server.AdvertisedAddressProvider;
 import pl.edu.icm.unity.engine.api.token.TokensManagement;
 import pl.edu.icm.unity.engine.api.utils.CacheProvider;
 import pl.edu.icm.unity.engine.attribute.AttributeTypeHelper;
@@ -73,7 +73,7 @@ import pl.edu.icm.unity.types.confirmation.VerifiableElement;
 @Component
 public class EmailConfirmationManagerImpl implements EmailConfirmationManager
 {
-	private static final Logger log = Log.getLogger(Log.U_SERVER, EmailConfirmationManagerImpl.class);
+	private static final Logger log = Log.getLogger(Log.U_SERVER_CONFIRMATION, EmailConfirmationManagerImpl.class);
 	private static final String CACHE_ID = "EmailConfirmationCache";
 	
 	private IdentityTypeHelper idTypeHelper;
@@ -83,7 +83,7 @@ public class EmailConfirmationManagerImpl implements EmailConfirmationManager
 	private EmailConfirmationFacilitiesRegistry confirmationFacilitiesRegistry;
 	private MessageTemplateDB mtDB;
 	private URL advertisedAddress;
-	private UnityMessageSource msg;
+	private MessageSource msg;
 	private EntityResolver idResolver;
 	private Ehcache confirmationReqCache;
 	private int requestLimit;
@@ -92,12 +92,17 @@ public class EmailConfirmationManagerImpl implements EmailConfirmationManager
 
 	@Autowired
 	public EmailConfirmationManagerImpl(IdentityTypeHelper idTypeHelper,
-			AttributeTypeHelper atTypeHelper, TokensManagement tokensMan,
+			AttributeTypeHelper atTypeHelper,
+			TokensManagement tokensMan,
 			NotificationProducer notificationProducer,
 			EmailConfirmationFacilitiesRegistry confirmationFacilitiesRegistry,
-			MessageTemplateDB mtDB, NetworkServer server, 
-			UnityMessageSource msg, EntityResolver idResolver,
-			TransactionalRunner tx, CacheProvider cacheProvider, UnityServerConfiguration mainConf)
+			MessageTemplateDB mtDB,
+			AdvertisedAddressProvider advertisedAddrProvider,
+			MessageSource msg,
+			EntityResolver idResolver,
+			TransactionalRunner tx,
+			CacheProvider cacheProvider,
+			UnityServerConfiguration mainConf)
 	{
 		this.idTypeHelper = idTypeHelper;
 		this.atTypeHelper = atTypeHelper;
@@ -105,7 +110,7 @@ public class EmailConfirmationManagerImpl implements EmailConfirmationManager
 		this.notificationProducer = notificationProducer;
 		this.confirmationFacilitiesRegistry = confirmationFacilitiesRegistry;
 		this.mtDB = mtDB;
-		this.advertisedAddress = server.getAdvertisedAddress();
+		this.advertisedAddress = advertisedAddrProvider.get();
 		this.msg = msg;
 		this.idResolver = idResolver;
 		this.tx = tx;
@@ -253,7 +258,7 @@ public class EmailConfirmationManagerImpl implements EmailConfirmationManager
 		params.put(EmailConfirmationTemplateDef.CONFIRMATION_LINK, link + "?"
 				+ EmailConfirmationServletProvider.CONFIRMATION_TOKEN_ARG + "=" + token);
 
-		log.debug("Send confirmation request to " + recipientAddress + " with token = "
+		log.info("Send confirmation request to " + recipientAddress + " with token = "
 				+ token);
 
 		confirmationReqCache.put(new Element(token, recipientAddress));
@@ -500,7 +505,7 @@ public class EmailConfirmationManagerImpl implements EmailConfirmationManager
 
 		} catch (Exception e)
 		{
-			log.debug("Cannot get confirmation configuration for attribute "
+			log.info("Cannot get confirmation configuration for attribute "
 					+ attributeName, e);
 			return Optional.empty();
 		}

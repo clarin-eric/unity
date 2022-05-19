@@ -4,11 +4,13 @@
 		"maxElements": 1,
 		"minElements": 1,
 		"selfModificable": false,
+		"global": false,
 		"uniqueValues": false,
 		"syntaxState": {
 			"regexp": "",
 			"minLength": 1,
-			"maxLength": 300
+			"maxLength": 300,
+			"editWithTextArea": false
 		},
 		"displayedName": {
 			"DefaultValue": "address",
@@ -34,11 +36,13 @@
 		"maxElements": 10,
 		"minElements": 1,
 		"selfModificable": false,
+		"global": false,
 		"uniqueValues": false,
 		"syntaxState": {
 			"regexp": "",
 			"minLength": 1,
-			"maxLength": 200
+			"maxLength": 200,
+			"editWithTextArea": false
 		},
 		"displayedName": {
 			"DefaultValue": "affiliation",
@@ -64,6 +68,7 @@
 		"maxElements": 1,
 		"minElements": 1,
 		"selfModificable": false,
+		"global": false,
 		"uniqueValues": false,
 		"syntaxState": {
 			"maxWidth": 100,
@@ -94,11 +99,13 @@
 		"maxElements": 1,
 		"minElements": 1,
 		"selfModificable": false,
+		"global": false,
 		"uniqueValues": false,
 		"syntaxState": {
 			"regexp": "",
 			"minLength": 1,
-			"maxLength": 300
+			"maxLength": 300,
+			"editWithTextArea": false
 		},
 		"displayedName": {
 			"DefaultValue": "avatarURL",
@@ -123,6 +130,7 @@
 		"maxElements": 1,
 		"minElements": 1,
 		"selfModificable": false,
+		"global": false,
 		"uniqueValues": false,
 		"syntaxState": {
 			
@@ -151,11 +159,13 @@
 		"maxElements": 1,
 		"minElements": 1,
 		"selfModificable": false,
+		"global": false,
 		"uniqueValues": false,
 		"syntaxState": {
 			"regexp": "",
 			"minLength": 1,
-			"maxLength": 200
+			"maxLength": 200,
+			"editWithTextArea": false
 		},
 		"displayedName": {
 			"DefaultValue": "blog",
@@ -181,11 +191,13 @@
 		"maxElements": 1,
 		"minElements": 1,
 		"selfModificable": false,
+		"global": false,
 		"uniqueValues": false,
 		"syntaxState": {
 			"regexp": "",
 			"minLength": 1,
-			"maxLength": 300
+			"maxLength": 300,
+			"editWithTextArea": false
 		},
 		"displayedName": {
 			"DefaultValue": "city",
@@ -211,17 +223,19 @@
 		"maxElements": 1,
 		"minElements": 1,
 		"selfModificable": false,
+		"global": false,
 		"uniqueValues": false,
 		"syntaxState": {
 			"regexp": "",
 			"minLength": 1,
-			"maxLength": 200
+			"maxLength": 200,
+			"editWithTextArea": false
 		},
 		"displayedName": {
 			"DefaultValue": "company",
 			"Map": {
-				"pl": "Firma",
-				"en": "Company"
+				"pl": "Nazwa firmy",
+				"en": "Company name"
 			}
 		},
 		"i18nDescription": {
@@ -241,11 +255,13 @@
 		"maxElements": 1,
 		"minElements": 1,
 		"selfModificable": false,
+		"global": false,
 		"uniqueValues": false,
 		"syntaxState": {
 			"regexp": "",
 			"minLength": 2,
-			"maxLength": 100
+			"maxLength": 100,
+			"editWithTextArea": false
 		},
 		"displayedName": {
 			"DefaultValue": "country",
@@ -271,11 +287,13 @@
 		"maxElements": 1,
 		"minElements": 1,
 		"selfModificable": false,
+		"global": false,
 		"uniqueValues": false,
 		"syntaxState": {
 			"regexp": "",
 			"minLength": 2,
-			"maxLength": 2
+			"maxLength": 2,
+			"editWithTextArea": false
 		},
 		"displayedName": {
 			"DefaultValue": "countryCode",
@@ -301,11 +319,13 @@
 		"maxElements": 1,
 		"minElements": 1,
 		"selfModificable": false,
+		"global": false,
 		"uniqueValues": false,
 		"syntaxState": {
 			"regexp": "",
 			"minLength": 0,
-			"maxLength": 400
+			"maxLength": 400,
+			"editWithTextArea": false
 		},
 		"displayedName": {
 			"DefaultValue": "description",
@@ -331,11 +351,13 @@
 		"maxElements": 1,
 		"minElements": 1,
 		"selfModificable": false,
+		"global": false,
 		"uniqueValues": false,
 		"syntaxState": {
 			"regexp": "",
 			"minLength": 1,
-			"maxLength": 100
+			"maxLength": 100,
+			"editWithTextArea": false
 		},
 		"displayedName": {
 			"DefaultValue": "currency",
@@ -361,11 +383,13 @@
 		"maxElements": 1,
 		"minElements": 1,
 		"selfModificable": false,
+		"global": false,
 		"uniqueValues": false,
 		"syntaxState": {
 			"regexp": "",
 			"minLength": 9,
-			"maxLength": 20
+			"maxLength": 20,
+			"editWithTextArea": false
 		},
 		"displayedName": {
 			"DefaultValue": "facsimileTelephoneNumber",
@@ -391,11 +415,13 @@
 		"maxElements": 1,
 		"minElements": 1,
 		"selfModificable": false,
+		"global": true,
 		"uniqueValues": false,
 		"syntaxState": {
 			"regexp": "",
 			"minLength": 1,
-			"maxLength": 200
+			"maxLength": 200,
+			"editWithTextArea": false
 		},
 		"displayedName": {
 			"DefaultValue": "firstname",
@@ -421,11 +447,13 @@
 		"maxElements": 1,
 		"minElements": 1,
 		"selfModificable": false,
+		"global": false,
 		"uniqueValues": false,
 		"syntaxState": {
 			"regexp": "",
 			"minLength": 2,
-			"maxLength": 100
+			"maxLength": 100,
+			"editWithTextArea": false
 		},
 		"displayedName": {
 			"DefaultValue": "gender",
@@ -451,11 +479,13 @@
 		"maxElements": 1,
 		"minElements": 1,
 		"selfModificable": false,
+		"global": false,
 		"uniqueValues": false,
 		"syntaxState": {
 			"regexp": "",
 			"minLength": 1,
-			"maxLength": 50
+			"maxLength": 50,
+			"editWithTextArea": false
 		},
 		"displayedName": {
 			"DefaultValue": "locale",
@@ -480,11 +510,13 @@
 		"maxElements": 1,
 		"minElements": 1,
 		"selfModificable": false,
+		"global": false,
 		"uniqueValues": false,
 		"syntaxState": {
 			"regexp": "",
 			"minLength": 1,
-			"maxLength": 20
+			"maxLength": 20,
+			"editWithTextArea": false
 		},
 		"displayedName": {
 			"DefaultValue": "initials",
@@ -510,11 +542,13 @@
 		"maxElements": 1,
 		"minElements": 1,
 		"selfModificable": false,
+		"global": false,
 		"uniqueValues": false,
 		"syntaxState": {
 			"regexp": "",
 			"minLength": 1,
-			"maxLength": 200
+			"maxLength": 200,
+			"editWithTextArea": false
 		},
 		"displayedName": {
 			"DefaultValue": "middleName",
@@ -540,11 +574,13 @@
 		"maxElements": 1,
 		"minElements": 1,
 		"selfModificable": false,
+		"global": false,
 		"uniqueValues": false,
 		"syntaxState": {
 			"regexp": "",
 			"minLength": 1,
-			"maxLength": 200
+			"maxLength": 200,
+			"editWithTextArea": false
 		},
 		"displayedName": {
 			"DefaultValue": "nickname",
@@ -569,11 +605,13 @@
 		"maxElements": 10,
 		"minElements": 1,
 		"selfModificable": false,
+		"global": false,
 		"uniqueValues": false,
 		"syntaxState": {
 			"regexp": "",
 			"minLength": 1,
-			"maxLength": 200
+			"maxLength": 200,
+			"editWithTextArea": false
 		},
 		"displayedName": {
 			"DefaultValue": "organization",
@@ -599,11 +637,13 @@
 		"maxElements": 10,
 		"minElements": 1,
 		"selfModificable": false,
+		"global": false,
 		"uniqueValues": false,
 		"syntaxState": {
 			"regexp": "",
 			"minLength": 1,
-			"maxLength": 200
+			"maxLength": 200,
+			"editWithTextArea": false
 		},
 		"displayedName": {
 			"DefaultValue": "organizationRole",
@@ -629,11 +669,13 @@
 		"maxElements": 10,
 		"minElements": 1,
 		"selfModificable": false,
+		"global": false,
 		"uniqueValues": false,
 		"syntaxState": {
 			"regexp": "",
 			"minLength": 1,
-			"maxLength": 200
+			"maxLength": 200,
+			"editWithTextArea": false
 		},
 		"displayedName": {
 			"DefaultValue": "organizationUnit",
@@ -659,11 +701,13 @@
 		"maxElements": 1,
 		"minElements": 1,
 		"selfModificable": false,
+		"global": false,
 		"uniqueValues": false,
 		"syntaxState": {
 			"regexp": "",
 			"minLength": 1,
-			"maxLength": 8000
+			"maxLength": 8000,
+			"editWithTextArea": true
 		},
 		"displayedName": {
 			"DefaultValue": "pgpPublicKey",
@@ -689,6 +733,7 @@
 		"maxElements": 1,
 		"minElements": 1,
 		"selfModificable": false,
+		"global": false,
 		"uniqueValues": false,
 		"syntaxState": {
 			"maxWidth": 1000,
@@ -719,11 +764,13 @@
 		"maxElements": 1,
 		"minElements": 1,
 		"selfModificable": false,
+		"global": false,
 		"uniqueValues": false,
 		"syntaxState": {
 			"regexp": "",
 			"minLength": 1,
-			"maxLength": 300
+			"maxLength": 300,
+			"editWithTextArea": false
 		},
 		"displayedName": {
 			"DefaultValue": "pictureURL",
@@ -749,11 +796,44 @@
 		"maxElements": 1,
 		"minElements": 1,
 		"selfModificable": false,
+		"global": false,
+		"uniqueValues": false,
+		"syntaxState": {
+			"maxWidth": 1000,
+			"maxHeight": 1000,
+			"maxSize": 3000000
+		},
+		"displayedName": {
+			"DefaultValue": "logo",
+			"Map": {
+				"pl": "Logo",
+				"en": "Logo"
+			}
+		},
+		"i18nDescription": {
+			"DefaultValue": null,
+			"Map": {
+				
+			}
+		},
+		"metadata": {
+			
+		},
+		"name": "logo",
+		"syntaxId": "image"
+	},
+	{
+		"flags": 0,
+		"maxElements": 1,
+		"minElements": 1,
+		"selfModificable": false,
+		"global": false,
 		"uniqueValues": false,
 		"syntaxState": {
 			"regexp": "",
 			"minLength": 1,
-			"maxLength": 300
+			"maxLength": 300,
+			"editWithTextArea": false
 		},
 		"displayedName": {
 			"DefaultValue": "post",
@@ -779,11 +859,13 @@
 		"maxElements": 2147483647,
 		"minElements": 0,
 		"selfModificable": false,
+		"global": false,
 		"uniqueValues": false,
 		"syntaxState": {
 			"regexp": "",
 			"minLength": 0,
-			"maxLength": 6
+			"maxLength": 6,
+			"editWithTextArea": false
 		},
 		"displayedName": {
 			"DefaultValue": "postalCode",
@@ -809,11 +891,13 @@
 		"maxElements": 1,
 		"minElements": 1,
 		"selfModificable": false,
+		"global": false,
 		"uniqueValues": false,
 		"syntaxState": {
 			"regexp": "",
 			"minLength": 1,
-			"maxLength": 100
+			"maxLength": 100,
+			"editWithTextArea": false
 		},
 		"displayedName": {
 			"DefaultValue": "preferredLanguage",
@@ -839,11 +923,13 @@
 		"maxElements": 1,
 		"minElements": 1,
 		"selfModificable": false,
+		"global": false,
 		"uniqueValues": false,
 		"syntaxState": {
 			"regexp": "",
 			"minLength": 1,
-			"maxLength": 200
+			"maxLength": 200,
+			"editWithTextArea": false
 		},
 		"displayedName": {
 			"DefaultValue": "primaryAffiliation",
@@ -869,11 +955,13 @@
 		"maxElements": 10,
 		"minElements": 1,
 		"selfModificable": false,
+		"global": false,
 		"uniqueValues": false,
 		"syntaxState": {
 			"regexp": "",
 			"minLength": 1,
-			"maxLength": 300
+			"maxLength": 300,
+			"editWithTextArea": false
 		},
 		"displayedName": {
 			"DefaultValue": "profileURL",
@@ -899,11 +987,13 @@
 		"maxElements": 10,
 		"minElements": 1,
 		"selfModificable": false,
+		"global": false,
 		"uniqueValues": false,
 		"syntaxState": {
 			"regexp": "",
 			"minLength": 1,
-			"maxLength": 200
+			"maxLength": 200,
+			"editWithTextArea": false
 		},
 		"displayedName": {
 			"DefaultValue": "provinceName",
@@ -929,11 +1019,13 @@
 		"maxElements": 1,
 		"minElements": 1,
 		"selfModificable": false,
+		"global": false,
 		"uniqueValues": false,
 		"syntaxState": {
 			"regexp": "",
 			"minLength": 1,
-			"maxLength": 200
+			"maxLength": 200,
+			"editWithTextArea": false
 		},
 		"displayedName": {
 			"DefaultValue": "Locality",
@@ -959,6 +1051,7 @@
 		"maxElements": 1,
 		"minElements": 1,
 		"selfModificable": false,
+		"global": false,
 		"uniqueValues": false,
 		"syntaxState": {
 			"min": 0.0,
@@ -987,11 +1080,13 @@
 		"maxElements": 10,
 		"minElements": 1,
 		"selfModificable": false,
+		"global": false,
 		"uniqueValues": false,
 		"syntaxState": {
 			"regexp": "",
 			"minLength": 1,
-			"maxLength": 300
+			"maxLength": 300,
+			"editWithTextArea": false
 		},
 		"displayedName": {
 			"DefaultValue": "seeAlso",
@@ -1017,11 +1112,13 @@
 		"maxElements": 10,
 		"minElements": 1,
 		"selfModificable": false,
+		"global": false,
 		"uniqueValues": false,
 		"syntaxState": {
 			"regexp": "",
 			"minLength": 1,
-			"maxLength": 1000
+			"maxLength": 1000,
+			"editWithTextArea": true
 		},
 		"displayedName": {
 			"DefaultValue": "sshPublicKey",
@@ -1047,11 +1144,13 @@
 		"maxElements": 10,
 		"minElements": 1,
 		"selfModificable": false,
+		"global": false,
 		"uniqueValues": false,
 		"syntaxState": {
 			"regexp": "",
 			"minLength": 1,
-			"maxLength": 300
+			"maxLength": 300,
+			"editWithTextArea": false
 		},
 		"displayedName": {
 			"DefaultValue": "street",
@@ -1077,11 +1176,13 @@
 		"maxElements": 1,
 		"minElements": 1,
 		"selfModificable": false,
+		"global": true,
 		"uniqueValues": false,
 		"syntaxState": {
 			"regexp": "",
 			"minLength": 1,
-			"maxLength": 200
+			"maxLength": 200,
+			"editWithTextArea": false
 		},
 		"displayedName": {
 			"DefaultValue": "surname",
@@ -1107,11 +1208,13 @@
 		"maxElements": 1,
 		"minElements": 1,
 		"selfModificable": false,
+		"global": false,
 		"uniqueValues": false,
 		"syntaxState": {
 			"regexp": "",
 			"minLength": 1,
-			"maxLength": 200
+			"maxLength": 200,
+			"editWithTextArea": false
 		},
 		"displayedName": {
 			"DefaultValue": "teamname",
@@ -1137,11 +1240,13 @@
 		"maxElements": 1,
 		"minElements": 1,
 		"selfModificable": false,
+		"global": false,
 		"uniqueValues": false,
 		"syntaxState": {
 			"regexp": "(\\+)?(\\d){9,12}",
 			"minLength": 9,
-			"maxLength": 20
+			"maxLength": 20,
+			"editWithTextArea": false
 		},
 		"displayedName": {
 			"DefaultValue": "telephoneNumber",
@@ -1167,11 +1272,13 @@
 		"maxElements": 1,
 		"minElements": 1,
 		"selfModificable": false,
+		"global": false,
 		"uniqueValues": false,
 		"syntaxState": {
 			"regexp": "",
 			"minLength": 1,
-			"maxLength": 50
+			"maxLength": 50,
+			"editWithTextArea": false
 		},
 		"displayedName": {
 			"DefaultValue": "timezone",
@@ -1197,11 +1304,13 @@
 		"maxElements": 10,
 		"minElements": 1,
 		"selfModificable": false,
+		"global": false,
 		"uniqueValues": false,
 		"syntaxState": {
 			"regexp": "",
 			"minLength": 1,
-			"maxLength": 200
+			"maxLength": 200,
+			"editWithTextArea": false
 		},
 		"displayedName": {
 			"DefaultValue": "title",
@@ -1227,11 +1336,13 @@
 		"maxElements": 10,
 		"minElements": 1,
 		"selfModificable": false,
+		"global": false,
 		"uniqueValues": false,
 		"syntaxState": {
 			"regexp": "",
 			"minLength": 0,
-			"maxLength": 20000
+			"maxLength": 20000,
+			"editWithTextArea": true
 		},
 		"displayedName": {
 			"DefaultValue": "certificate",
@@ -1257,11 +1368,13 @@
 		"maxElements": 1,
 		"minElements": 1,
 		"selfModificable": false,
+		"global": false,
 		"uniqueValues": false,
 		"syntaxState": {
 			"regexp": "",
 			"minLength": 1,
-			"maxLength": 300
+			"maxLength": 300,
+			"editWithTextArea": false
 		},
 		"displayedName": {
 			"DefaultValue": "website",
@@ -1287,11 +1400,13 @@
 		"maxElements": 1,
 		"minElements": 1,
 		"selfModificable": false,
+		"global": false,
 		"uniqueValues": false,
 		"syntaxState": {
 			"regexp": "",
 			"minLength": 2,
-			"maxLength": 300
+			"maxLength": 300,
+			"editWithTextArea": false
 		},
 		"displayedName": {
 			"DefaultValue": "displayName",
@@ -1317,11 +1432,13 @@
 		"maxElements": 1,
 		"minElements": 1,
 		"selfModificable": false,
+		"global": false,
 		"uniqueValues": false,
 		"syntaxState": {
 			"regexp": "",
 			"minLength": 2,
-			"maxLength": 300
+			"maxLength": 300,
+			"editWithTextArea": false
 		},
 		"displayedName": {
 			"DefaultValue": "userName",
@@ -1347,11 +1464,13 @@
 		"maxElements": 1,
 		"minElements": 1,
 		"selfModificable": false,
+		"global": false,
 		"uniqueValues": false,
 		"syntaxState": {
 			"regexp": "",
 			"minLength": 2,
-			"maxLength": 300
+			"maxLength": 300,
+			"editWithTextArea": false
 		},
 		"displayedName": {
 			"DefaultValue": "uid",

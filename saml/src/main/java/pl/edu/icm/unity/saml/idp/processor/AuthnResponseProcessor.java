@@ -10,18 +10,23 @@ import java.util.Collection;
 import java.util.List;
 import java.util.TimeZone;
 
+import org.apache.logging.log4j.Logger;
+
+import eu.emi.security.authn.x509.X509Credential;
 import eu.unicore.samly2.SAMLConstants;
 import eu.unicore.samly2.assertion.Assertion;
+import eu.unicore.samly2.binding.SAMLMessageType;
 import eu.unicore.samly2.elements.Subject;
 import eu.unicore.samly2.exceptions.SAMLRequesterException;
 import eu.unicore.samly2.proto.AssertionResponse;
+import pl.edu.icm.unity.base.utils.Log;
 import pl.edu.icm.unity.engine.api.attributes.AttributeTypeSupport;
 import pl.edu.icm.unity.saml.SAMLProcessingException;
 import pl.edu.icm.unity.saml.idp.SamlIdpProperties;
 import pl.edu.icm.unity.saml.idp.SamlIdpProperties.AssertionSigningPolicy;
 import pl.edu.icm.unity.saml.idp.ctx.SAMLAuthnContext;
+import pl.edu.icm.unity.saml.slo.SamlRoutableSignableMessage;
 import pl.edu.icm.unity.types.basic.Attribute;
-import pl.edu.icm.unity.types.basic.Identity;
 import pl.edu.icm.unity.types.basic.IdentityParam;
 import xmlbeans.org.oasis.saml2.assertion.AuthnContextType;
 import xmlbeans.org.oasis.saml2.assertion.SubjectConfirmationDataType;
@@ -39,6 +44,7 @@ import xmlbeans.org.oasis.saml2.protocol.ResponseDocument;
  */
 public class AuthnResponseProcessor extends BaseResponseProcessor<AuthnRequestDocument, AuthnRequestType>
 {
+	private static final Logger log = Log.getLogger(Log.U_SERVER_SAML, AuthnResponseProcessor.class);
 	private String sessionId;
 	private SubjectType authenticatedSubject;
 	
@@ -63,9 +69,10 @@ public class AuthnResponseProcessor extends BaseResponseProcessor<AuthnRequestDo
 			if (identity.getTypeId().equals(unityFormat))
 				ret.add(identity);
 		}
+		log.debug("Requested identity {}, mapped to {}, returning identities: {}", samlFormat, unityFormat, ret);
 		if (ret.size() > 0)
 			return ret;
-		throw new SAMLRequesterException(SAMLConstants.SubStatus.STATUS2_UNKNOWN_PRINCIPIAL,
+		throw new SAMLRequesterException(SAMLConstants.SubStatus.STATUS2_UNKNOWN_PRINCIPAL,
 				"There is no identity of the requested '" + samlFormat + 
 				"' SAML identity format for the authenticated principial.");			
 	}
@@ -78,24 +85,18 @@ public class AuthnResponseProcessor extends BaseResponseProcessor<AuthnRequestDo
 		return nameIdPolicy.getAllowCreate();
 	}
 	
-	public ResponseDocument processAuthnRequest(Identity authenticatedIdentity, String destination) 
-			throws SAMLRequesterException, SAMLProcessingException
-	{
-		return processAuthnRequest(authenticatedIdentity, null, destination);
-	}
-	
-	public ResponseDocument processAuthnRequest(IdentityParam authenticatedIdentity, 
-			Collection<Attribute> attributes, String destination) 
+	public SamlRoutableSignableMessage<ResponseDocument> processAuthnRequestReturningResponse(IdentityParam authenticatedIdentity, 
+			Collection<Attribute> attributes, String responseRelayState, String responseDestination) 
 			throws SAMLRequesterException, SAMLProcessingException
 	{
 		boolean returnSingleAssertion = samlConfiguration.getBooleanValue(
 				SamlIdpProperties.RETURN_SINGLE_ASSERTION);
 		return processAuthnRequest(authenticatedIdentity, attributes, returnSingleAssertion,
-				destination);
+				responseRelayState, responseDestination);
 	}
 	
-	protected ResponseDocument processAuthnRequest(IdentityParam authenticatedIdentity, 
-			Collection<Attribute> attributes, boolean returnSingleAssertion, String destination) 
+	protected SamlRoutableSignableMessage<ResponseDocument> processAuthnRequest(IdentityParam authenticatedIdentity, 
+			Collection<Attribute> attributes, boolean returnSingleAssertion, String relayState, String destination) 
 			throws SAMLRequesterException, SAMLProcessingException
 	{
 		SubjectType authenticatedOne = establishSubject(authenticatedIdentity);
@@ -121,14 +122,17 @@ public class AuthnResponseProcessor extends BaseResponseProcessor<AuthnRequestDo
 			}
 		}
 		
+		X509Credential responseSigningKey = null;
 		if (doSignResponse())
 		{
 			if (destination == null)
 				throw new SAMLProcessingException("Unable to determine Destination "
 						+ "value which is mandatory when signing response is requested");
-			signResponse(resp);
+			responseSigningKey = samlConfiguration.getSamlIssuerCredential();
 		}
-		return resp.getXMLBeanDoc();
+		
+		return new SamlRoutableSignableMessage<>(resp, responseSigningKey, SAMLMessageType.SAMLResponse, 
+				relayState, destination);
 	}
 	
 	protected SubjectType establishSubject(IdentityParam authenticatedIdentity)

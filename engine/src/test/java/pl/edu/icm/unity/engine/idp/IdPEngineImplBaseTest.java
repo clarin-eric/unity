@@ -12,6 +12,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static pl.edu.icm.unity.engine.api.authn.RemoteAuthenticationResult.successful;
 
 import java.util.List;
 import java.util.Optional;
@@ -24,9 +25,12 @@ import com.google.common.collect.Lists;
 import eu.unicore.util.configuration.PropertiesHelper;
 import pl.edu.icm.unity.engine.api.AttributesManagement;
 import pl.edu.icm.unity.engine.api.EntityManagement;
-import pl.edu.icm.unity.engine.api.authn.AuthenticationResult;
+import pl.edu.icm.unity.engine.api.GroupsManagement;
+import pl.edu.icm.unity.engine.api.authn.AuthenticatedEntity;
 import pl.edu.icm.unity.engine.api.authn.AuthenticationResult.Status;
+import pl.edu.icm.unity.engine.api.authn.remote.RemotelyAuthenticatedPrincipal;
 import pl.edu.icm.unity.engine.api.idp.EntityInGroup;
+import pl.edu.icm.unity.engine.api.translation.TranslationProfileGenerator;
 import pl.edu.icm.unity.engine.api.translation.out.TranslationInput;
 import pl.edu.icm.unity.engine.api.userimport.UserImportSerivce;
 import pl.edu.icm.unity.exceptions.EngineException;
@@ -43,6 +47,7 @@ public class IdPEngineImplBaseTest
 	public void shouldExposeImportStatusToProfile_EarlyImport() throws EngineException
 	{
 		AttributesManagement attributesMan = mock(AttributesManagement.class);
+		GroupsManagement groupMan = mock(GroupsManagement.class);
 		EntityManagement identitiesMan = mock(EntityManagement.class);
 		UserImportSerivce userImportService = mock(UserImportSerivce.class);
 		OutputProfileExecutor outputProfileExecutor = mock(OutputProfileExecutor.class);
@@ -50,15 +55,18 @@ public class IdPEngineImplBaseTest
 		
 		when(userImportService.importUser(any())).thenReturn(
 				Lists.newArrayList(
-					new UserImportSerivce.ImportResult("imp1", new AuthenticationResult(Status.success, null))));
+					new UserImportSerivce.ImportResult("imp1", successful(
+							mock(RemotelyAuthenticatedPrincipal.class), 
+							mock(AuthenticatedEntity.class)))));
 		
 		IdPEngineImplBase tested = new IdPEngineImplBase(attributesMan, attributesMan,
-				identitiesMan, userImportService, outputProfileExecutor);
+				identitiesMan, userImportService, outputProfileExecutor, groupMan);
+		
 		
 		tested.obtainUserInformationWithEarlyImport(
 				new IdentityTaV("idType", "id"), 
 				"/group", 
-				"profile", 
+				TranslationProfileGenerator.generateIncludeOutputProfile("profile"), 
 				"requester",
 				Optional.empty(),
 				"protocol", 
@@ -67,7 +75,7 @@ public class IdPEngineImplBaseTest
 				config);
 		
 		ArgumentCaptor<TranslationInput> captor = ArgumentCaptor.forClass(TranslationInput.class);
-		verify(outputProfileExecutor).execute(eq("profile"), captor.capture());
+		verify(outputProfileExecutor).execute(eq(TranslationProfileGenerator.generateIncludeOutputProfile("profile")), captor.capture());
 		TranslationInput ti = captor.getValue();
 		assertThat(ti.getImportStatus().size(), is(1));
 		assertThat(ti.getImportStatus().get("imp1"), is(notNullValue()));
@@ -78,6 +86,7 @@ public class IdPEngineImplBaseTest
 	public void shouldExposeImportStatusToProfile_LateImport() throws EngineException
 	{
 		AttributesManagement attributesMan = mock(AttributesManagement.class);
+		GroupsManagement groupMan = mock(GroupsManagement.class);
 		EntityManagement identitiesMan = mock(EntityManagement.class);
 		UserImportSerivce userImportService = mock(UserImportSerivce.class);
 		OutputProfileExecutor outputProfileExecutor = mock(OutputProfileExecutor.class);
@@ -87,15 +96,17 @@ public class IdPEngineImplBaseTest
 				new Entity(Lists.newArrayList(new Identity("idType", "id", 1, "id")), null, null));
 		when(userImportService.importToExistingUser(any(), any())).thenReturn(
 				Lists.newArrayList(
-					new UserImportSerivce.ImportResult("imp1", new AuthenticationResult(Status.success, null))));
+					new UserImportSerivce.ImportResult("imp1", successful(
+							mock(RemotelyAuthenticatedPrincipal.class), 
+							mock(AuthenticatedEntity.class)))));
 		
 		IdPEngineImplBase tested = new IdPEngineImplBase(attributesMan, attributesMan,
-				identitiesMan, userImportService, outputProfileExecutor);
+				identitiesMan, userImportService, outputProfileExecutor, groupMan);
 		
 		tested.obtainUserInformationWithEnrichingImport(
 				new EntityParam(1l), 
 				"/group", 
-				"profile", 
+				TranslationProfileGenerator.generateIncludeOutputProfile("profile"), 
 				"requester",
 				Optional.empty(),
 				"protocol", 
@@ -104,7 +115,7 @@ public class IdPEngineImplBaseTest
 				config);
 		
 		ArgumentCaptor<TranslationInput> captor = ArgumentCaptor.forClass(TranslationInput.class);
-		verify(outputProfileExecutor).execute(eq("profile"), captor.capture());
+		verify(outputProfileExecutor).execute(eq(TranslationProfileGenerator.generateIncludeOutputProfile("profile")), captor.capture());
 		TranslationInput ti = captor.getValue();
 		assertThat(ti.getImportStatus().size(), is(1));
 		assertThat(ti.getImportStatus().get("imp1"), is(notNullValue()));
@@ -115,6 +126,7 @@ public class IdPEngineImplBaseTest
 	public void shouldExposeRequesterAttributesToProfile_LateImport() throws EngineException
 	{
 		AttributesManagement attributesMan = mock(AttributesManagement.class);
+		GroupsManagement groupMan = mock(GroupsManagement.class);
 		AttributesManagement insecureAttributesMan = mock(AttributesManagement.class);
 		EntityManagement identitiesMan = mock(EntityManagement.class);
 		UserImportSerivce userImportService = mock(UserImportSerivce.class);
@@ -128,7 +140,9 @@ public class IdPEngineImplBaseTest
 				new Entity(Lists.newArrayList(new Identity("idType", "id", 1, "id")), null, null));
 		when(userImportService.importToExistingUser(any(), any())).thenReturn(
 				Lists.newArrayList(
-					new UserImportSerivce.ImportResult("imp1", new AuthenticationResult(Status.success, null))));
+					new UserImportSerivce.ImportResult("imp1", 
+							successful(mock(RemotelyAuthenticatedPrincipal.class), 
+									mock(AuthenticatedEntity.class)))));
 		
 		when(insecureAttributesMan.getAttributes(eq(clientEntity), eq("/GROUP"), eq(null)))
 				.thenReturn(clientAttributes);
@@ -136,12 +150,12 @@ public class IdPEngineImplBaseTest
 		
 		IdPEngineImplBase tested = new IdPEngineImplBase(attributesMan, 
 				insecureAttributesMan, identitiesMan, 
-				userImportService, outputProfileExecutor);
+				userImportService, outputProfileExecutor, groupMan);
 		
 		tested.obtainUserInformationWithEnrichingImport(
 				new EntityParam(1l), 
 				"/group", 
-				"profile", 
+				TranslationProfileGenerator.generateIncludeOutputProfile("profile"), 
 				"requester",
 				Optional.of(new EntityInGroup("/GROUP", clientEntity)),
 				"protocol", 
@@ -150,7 +164,7 @@ public class IdPEngineImplBaseTest
 				config);
 		
 		ArgumentCaptor<TranslationInput> captor = ArgumentCaptor.forClass(TranslationInput.class);
-		verify(outputProfileExecutor).execute(eq("profile"), captor.capture());
+		verify(outputProfileExecutor).execute(eq(TranslationProfileGenerator.generateIncludeOutputProfile("profile")), captor.capture());
 		TranslationInput ti = captor.getValue();
 		assertThat(ti.getRequesterAttributes().size(), is(1));
 		assertThat(ti.getRequesterAttributes(), is(clientAttributes));

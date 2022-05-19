@@ -16,17 +16,16 @@ import com.vaadin.ui.CustomComponent;
 import com.vaadin.ui.HorizontalLayout;
 import com.vaadin.ui.Label;
 import com.vaadin.ui.Link;
-import com.vaadin.ui.TextField;
 import com.vaadin.ui.VerticalLayout;
 
-import io.imunity.upman.utils.UpManGridHelper;
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
+import pl.edu.icm.unity.MessageSource;
 import pl.edu.icm.unity.webui.common.HamburgerMenu;
 import pl.edu.icm.unity.webui.common.Images;
 import pl.edu.icm.unity.webui.common.NotificationPopup;
 import pl.edu.icm.unity.webui.common.NotificationTray;
-import pl.edu.icm.unity.webui.common.SidebarStyles;
+import pl.edu.icm.unity.webui.common.SearchField;
 import pl.edu.icm.unity.webui.common.SingleActionHandler;
+import pl.edu.icm.unity.webui.common.grid.FilterableGridHelper;
 import pl.edu.icm.unity.webui.confirmations.ConfirmationInfoFormatter;
 import pl.edu.icm.unity.webui.exceptions.ControllerException;
 
@@ -38,13 +37,13 @@ import pl.edu.icm.unity.webui.exceptions.ControllerException;
  */
 public class UpdateRequestsComponent extends CustomComponent
 {
-	private UnityMessageSource msg;
+	private MessageSource msg;
 	private UpdateRequestsController controller;
 
 	private UpdateRequestsGrid updateRequestGrid;
 	private String project;
 
-	public UpdateRequestsComponent(UnityMessageSource msg, UpdateRequestsController controller, String project, ConfirmationInfoFormatter formatter)
+	public UpdateRequestsComponent(MessageSource msg, UpdateRequestsController controller, String project, ConfirmationInfoFormatter formatter)
 			throws ControllerException
 	{
 		this.msg = msg;
@@ -65,14 +64,14 @@ public class UpdateRequestsComponent extends CustomComponent
 		updateRequestGrid = new UpdateRequestsGrid(msg, commonActions, formatter);
 
 		HamburgerMenu<UpdateRequestEntry> hamburgerMenu = new HamburgerMenu<>();
-		hamburgerMenu.addStyleNames(SidebarStyles.indentSmall.toString());
-		hamburgerMenu.addStyleName(SidebarStyles.sidebar.toString());
 		updateRequestGrid.addSelectionListener(hamburgerMenu.getSelectionListener());
 
 		hamburgerMenu.addActionHandlers(commonActions);
 
-		TextField search = UpManGridHelper.generateSearchField(updateRequestGrid, msg);
+		SearchField search = FilterableGridHelper.generateSearchField(updateRequestGrid, msg);
 		HorizontalLayout menuBar = new HorizontalLayout(hamburgerMenu, search);
+		menuBar.setSpacing(false);
+		menuBar.setMargin(false);
 		menuBar.setComponentAlignment(search, Alignment.MIDDLE_RIGHT);
 		menuBar.setWidth(100, Unit.PERCENTAGE);
 
@@ -179,6 +178,6 @@ public class UpdateRequestsComponent extends CustomComponent
 			NotificationPopup.showError(e);
 		}
 
-		updateRequestGrid.setValue(requests);
+		updateRequestGrid.setItems(requests);
 	}
 }

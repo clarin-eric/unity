@@ -19,8 +19,8 @@ import org.springframework.stereotype.Component;
 
 import io.imunity.upman.common.ServerFaultException;
 import io.imunity.upman.utils.DelegatedGroupsHelper;
+import pl.edu.icm.unity.MessageSource;
 import pl.edu.icm.unity.base.utils.Log;
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
 import pl.edu.icm.unity.engine.api.project.DelegatedGroup;
 import pl.edu.icm.unity.engine.api.project.DelegatedGroupManagement;
 import pl.edu.icm.unity.engine.api.project.DelegatedGroupMember;
@@ -39,15 +39,15 @@ import pl.edu.icm.unity.webui.exceptions.ControllerException;
 @Component
 public class GroupMembersController
 {
-	private static final Logger log = Log.getLogger(Log.U_SERVER, GroupMembersController.class);
+	private static final Logger log = Log.getLogger(Log.U_SERVER_UPMAN, GroupMembersController.class);
 
 	private DelegatedGroupManagement delGroupMan;
 	private DelegatedGroupsHelper delGroupHelper;
 	private CachedAttributeHandlers cachedAttrHandlerRegistry;
-	private UnityMessageSource msg;
+	private MessageSource msg;
 
 	@Autowired
-	public GroupMembersController(UnityMessageSource msg,
+	public GroupMembersController(MessageSource msg,
 			AttributeHandlerRegistry attrHandlerRegistry, DelegatedGroupManagement delGroupMan,
 			DelegatedGroupsHelper delGroupHelper)
 	{
@@ -68,7 +68,7 @@ public class GroupMembersController
 			members = delGroupMan.getDelegatedGroupMemebers(projectPath, groupPath);
 		} catch (Exception e)
 		{
-			log.debug("Can not get memebers of group " + projectPath, e);
+			log.warn("Can not get memebers of group " + projectPath, e);
 			throw new ServerFaultException(msg);
 		}
 
@@ -120,7 +120,7 @@ public class GroupMembersController
 			}
 		} catch (Exception e)
 		{
-			log.debug("Can not get attribute names for project " + projectPath, e);
+			log.warn("Can not get attribute names for project " + projectPath, e);
 			throw new ServerFaultException(msg);
 		}
 		return attrs;
@@ -133,7 +133,7 @@ public class GroupMembersController
 			return delGroupHelper.getProjectGroups(projectPath);
 		} catch (Exception e)
 		{
-			log.debug("Can not get group " + projectPath, e);
+			log.warn("Can not get group " + projectPath, e);
 			throw new ServerFaultException(msg);
 		}
 	}
@@ -152,7 +152,7 @@ public class GroupMembersController
 			}
 		} catch (Exception e)
 		{
-			log.debug("Can not add member to group " + groupPath, e);
+			log.warn("Can not add member to group " + groupPath, e);
 			if (added.isEmpty())
 			{
 				throw new ControllerException(msg.getMessage("GroupMembersController.addToGroupError"),
@@ -180,7 +180,7 @@ public class GroupMembersController
 			}
 		} catch (Exception e)
 		{
-			log.debug("Can not remove member from group " + groupPath, e);
+			log.warn("Can not remove member from group " + groupPath, e);
 			if (removed.isEmpty())
 			{
 				throw new ControllerException(
@@ -196,17 +196,7 @@ public class GroupMembersController
 		}
 	}
 
-	public void addManagerPrivileges(String groupPath, Set<GroupMemberEntry> items) throws ControllerException
-	{
-		updatePrivileges(groupPath, GroupAuthorizationRole.manager, items);
-	}
-
-	public void revokeManagerPrivileges(String groupPath, Set<GroupMemberEntry> items) throws ControllerException
-	{
-		updatePrivileges(groupPath, GroupAuthorizationRole.regular, items);
-	}
-
-	private void updatePrivileges(String groupPath, GroupAuthorizationRole role, Set<GroupMemberEntry> items)
+	public void updateRole(String projectPath, String groupPath, GroupAuthorizationRole role, Set<GroupMemberEntry> items)
 			throws ControllerException
 	{
 
@@ -216,12 +206,12 @@ public class GroupMembersController
 		{
 			for (GroupMemberEntry member : items)
 			{
-				delGroupMan.setGroupAuthorizationRole(groupPath, member.getEntityId(), role);
+				delGroupMan.setGroupAuthorizationRole(projectPath, groupPath, member.getEntityId(), role);
 				updated.add(member.getName());
 			}
 		} catch (Exception e)
 		{
-			log.debug("Can not update group authorization role", e);
+			log.warn("Can not update group authorization role", e);
 			if (updated.isEmpty())
 			{
 				throw new ControllerException(

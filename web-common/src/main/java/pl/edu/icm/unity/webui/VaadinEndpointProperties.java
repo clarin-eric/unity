@@ -9,23 +9,23 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Properties;
 
-import org.apache.log4j.Logger;
+import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.util.Strings;
 
 import eu.unicore.util.configuration.ConfigurationException;
 import eu.unicore.util.configuration.DocumentationReferenceMeta;
 import eu.unicore.util.configuration.DocumentationReferencePrefix;
-import eu.unicore.util.configuration.PropertiesHelper;
 import eu.unicore.util.configuration.PropertyMD;
 import pl.edu.icm.unity.base.utils.Log;
+import pl.edu.icm.unity.engine.api.config.UnityPropertiesHelper;
 
 /**
  * Generic settings for all Vaadin web-endpoints.
  * @author K. Benedyczak
  */
-public class VaadinEndpointProperties extends PropertiesHelper
+public class VaadinEndpointProperties extends UnityPropertiesHelper
 {
-	private static final Logger log = Log.getLegacyLogger(Log.U_SERVER_CFG, VaadinEndpointProperties.class);
+	private static final Logger log = Log.getLogger(Log.U_SERVER_CFG, VaadinEndpointProperties.class);
 	
 	enum ScaleMode {
 		none, 
@@ -46,6 +46,7 @@ public class VaadinEndpointProperties extends PropertiesHelper
 	public static final String THEME = "mainTheme";
 	public static final String AUTHN_THEME = "authnTheme";
 	public static final String TEMPLATE = "template";
+	public static final String DEFAULT_TEMPLATE = "default.ftl";
 	public static final String AUTO_LOGIN = "autoLogin";
 	
 	public static final String ENABLE_REGISTRATION = "enableRegistration";
@@ -79,7 +80,7 @@ public class VaadinEndpointProperties extends PropertiesHelper
 	
 	public static final String CRED_RESET_COMPACT = "compactCredentialReset";
 	
-
+	public static final String DEFAULT_AUTHN_SHOW_LAST_OPTION_ONLY_LAYOUT_CONTENT = "_LAST_USED _SEPARATOR _EXPAND";
 
 	@DocumentationReferenceMeta
 	public final static Map<String, PropertyMD> META = new HashMap<>();
@@ -100,7 +101,7 @@ public class VaadinEndpointProperties extends PropertiesHelper
 				"Overrides the default theme name as used for rendering the endpoint's "
 				+ "authentication screen contents. If undefined the same setting as for the "
 				+ "main endpoint UI is used."));
-		META.put(TEMPLATE, new PropertyMD("default.ftl").setDescription(
+		META.put(TEMPLATE, new PropertyMD(DEFAULT_TEMPLATE).setDescription(
 				"The name of a Freemarker template, relative to templates directory, with a "
 				+ "template of the endpoint web interface. Custom template can be used to add "
 				+ "static header/footer etc."));
@@ -129,7 +130,7 @@ public class VaadinEndpointProperties extends PropertiesHelper
 						+ "If set to true only the previously used authentication option "
 						+ "will be shown to the user (it will be still possible to reveal other ones by clicking special button)."
 						+ " If set to false then this feature is turned off and users always see all available options."));
-		META.put(AUTHN_SHOW_LAST_OPTION_ONLY_LAYOUT, new PropertyMD("_LAST_USED _SEPARATOR _EXPAND").
+		META.put(AUTHN_SHOW_LAST_OPTION_ONLY_LAYOUT, new PropertyMD(DEFAULT_AUTHN_SHOW_LAST_OPTION_ONLY_LAYOUT_CONTENT).
 				setDescription("Advanced setting, typically should not be changed. Same syntax as column's contents. "
 						+ "Defines layout which is used when a single last used authN is presented "
 						+ "(i.e. relevant only when " + AUTHN_SHOW_LAST_OPTION_ONLY + " is enabled). "
@@ -235,6 +236,18 @@ public class VaadinEndpointProperties extends PropertiesHelper
 		return properties;
 	}
 	
+	public String getEffectiveMainTheme()
+	{
+		String configuredTheme = getConfiguredTheme(VaadinEndpointProperties.THEME);
+		return configuredTheme != null ? configuredTheme : VaadinEndpoint.DEFAULT_THEME;
+	}
+
+	public String getEffectiveAuthenticationTheme()
+	{
+		String configuredTheme = getConfiguredTheme(VaadinEndpointProperties.AUTHN_THEME);
+		return configuredTheme != null ? configuredTheme : VaadinEndpoint.DEFAULT_THEME;
+	}
+
 	public EndpointRegistrationConfiguration getRegistrationConfiguration()
 	{
 		String extURL = getValue(EXTERNAL_REGISTRATION_URL);

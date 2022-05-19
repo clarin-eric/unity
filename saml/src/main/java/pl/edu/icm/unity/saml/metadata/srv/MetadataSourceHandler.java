@@ -4,6 +4,7 @@
  */
 package pl.edu.icm.unity.saml.metadata.srv;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -15,6 +16,8 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.logging.log4j.Logger;
+
+import com.google.common.base.Stopwatch;
 
 import pl.edu.icm.unity.base.utils.Log;
 import pl.edu.icm.unity.engine.api.utils.ExecutorsService;
@@ -32,6 +35,7 @@ import xmlbeans.org.oasis.saml2.metadata.EntitiesDescriptorDocument;
  */
 class MetadataSourceHandler
 {
+	private static final Duration MAX_REFRESH_INTERVAL = Duration.ofDays(365);
 	private static final Logger log = Log.getLogger(Log.U_SERVER_SAML,
 			MetadataSourceHandler.class);
 	private static final long DEFAULT_RERUN_INTERVAL = 5000;
@@ -40,7 +44,7 @@ class MetadataSourceHandler
 	private final ExecutorsService executorsService;
 	private final MetadataDownloader downloader;
 
-	private long refreshInterval;
+	private Duration refreshInterval;
 	private Instant lastRefresh;
 	private Map<String, MetadataConsumer> consumersById = new HashMap<>();
 	private ScheduledFuture<?> scheduleWithFixedDelay;
@@ -95,7 +99,7 @@ class MetadataSourceHandler
 		return consumersById.isEmpty();
 	}
 
-	synchronized long getRefreshInterval()
+	synchronized Duration getRefreshInterval()
 	{
 		return refreshInterval;
 	}
@@ -115,15 +119,15 @@ class MetadataSourceHandler
 	{
 		scheduleWithFixedDelay = executorsService.getService().scheduleWithFixedDelay(
 				this::refresh, 
-				0, rerunInterval, TimeUnit.MILLISECONDS);
+				refreshInterval.toMillis(), rerunInterval, TimeUnit.MILLISECONDS);
 	}
 	
 	
-	private long getNewRefreshInterval()
+	private Duration getNewRefreshInterval()
 	{
-		long interval = Long.MAX_VALUE;
+		Duration interval = MAX_REFRESH_INTERVAL;
 		for (MetadataConsumer consumer: consumersById.values())
-			if (consumer.refreshInterval < interval)
+			if (consumer.refreshInterval.compareTo(interval) < 0)
 				interval = consumer.refreshInterval;
 		return interval;
 	}
@@ -136,16 +140,17 @@ class MetadataSourceHandler
 
 	private synchronized boolean isRefreshNeeded()
 	{
+		long refreshIntervalMs = refreshInterval.toMillis();
 		long sinceLastRefresh = lastRefresh == null ? 
 				Long.MAX_VALUE : lastRefresh.until(Instant.now(), ChronoUnit.MILLIS);
-		if (sinceLastRefresh >= refreshInterval)
+		if (sinceLastRefresh >= refreshIntervalMs)
 		{
 			lastRefresh = Instant.now();
 			return true;
 		} else
 		{
 			log.trace("Metadata for {} is fresh, refresh needed in {}ms", source.url,
-					refreshInterval - sinceLastRefresh);
+					refreshIntervalMs - sinceLastRefresh);
 			return false;
 		}
 	}
@@ -153,7 +158,8 @@ class MetadataSourceHandler
 	
 	private void doRefresh()
 	{
-		log.debug("Refreshing metadata for {}", source.url);
+		log.info("Refreshing metadata for {}", source.url);
+		Stopwatch watch = Stopwatch.createStarted();
 		EntitiesDescriptorDocument metadata;
 		try
 		{
@@ -164,6 +170,7 @@ class MetadataSourceHandler
 			return;
 		}
 		notifyConsumers(metadata);
+		log.info("Metadata refresh for {} done in {}", source.url, watch);
 	}
 
 	private boolean feedWithCached(MetadataConsumer consumer)

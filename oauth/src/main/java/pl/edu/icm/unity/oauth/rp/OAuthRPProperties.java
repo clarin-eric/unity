@@ -8,7 +8,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
 
-import org.apache.log4j.Logger;
+import org.apache.logging.log4j.Logger;
 
 import com.nimbusds.oauth2.sdk.http.HTTPRequest.Method;
 
@@ -16,28 +16,29 @@ import eu.emi.security.authn.x509.X509CertChainValidator;
 import eu.unicore.util.configuration.ConfigurationException;
 import eu.unicore.util.configuration.DocumentationReferenceMeta;
 import eu.unicore.util.configuration.DocumentationReferencePrefix;
-import eu.unicore.util.configuration.PropertiesHelper;
 import eu.unicore.util.configuration.PropertyMD;
 import eu.unicore.util.httpclient.ServerHostnameCheckingMode;
 import pl.edu.icm.unity.base.utils.Log;
 import pl.edu.icm.unity.engine.api.PKIManagement;
-import pl.edu.icm.unity.engine.api.token.TokensManagement;
+import pl.edu.icm.unity.engine.api.config.UnityPropertiesHelper;
 import pl.edu.icm.unity.exceptions.EngineException;
 import pl.edu.icm.unity.oauth.BaseRemoteASProperties;
+import pl.edu.icm.unity.oauth.as.OAuthTokenRepository;
 import pl.edu.icm.unity.oauth.client.config.CustomProviderProperties.ClientAuthnMode;
 import pl.edu.icm.unity.oauth.client.config.CustomProviderProperties.ClientHttpMethod;
 import pl.edu.icm.unity.oauth.rp.verificator.InternalTokenVerificator;
 import pl.edu.icm.unity.oauth.rp.verificator.MitreTokenVerificator;
 import pl.edu.icm.unity.oauth.rp.verificator.TokenVerificatorProtocol;
 import pl.edu.icm.unity.oauth.rp.verificator.UnityTokenVerificator;
+import pl.edu.icm.unity.webui.authn.CommonWebAuthnProperties;
 
 /**
  * Configuration of OAuth RP-alike authenticator.
  * @author K. Benedyczak
  */
-public class OAuthRPProperties extends PropertiesHelper implements BaseRemoteASProperties
+public class OAuthRPProperties extends UnityPropertiesHelper implements BaseRemoteASProperties
 {
-	private static final Logger log = Log.getLegacyLogger(Log.U_SERVER_CFG, OAuthRPProperties.class);
+	private static final Logger log = Log.getLogger(Log.U_SERVER_CFG, OAuthRPProperties.class);
 	
 	public enum VerificationProtocol {mitre, unity, internal};
 	
@@ -53,7 +54,6 @@ public class OAuthRPProperties extends PropertiesHelper implements BaseRemoteASP
 	public static final String VERIFICATION_ENDPOINT = "verificationEndpoint";
 	public static final String OPENID_MODE = "openidConnectMode";
 	public static final String OPENID_MODE_WITH_TYPO = "opeinidConnectMode";
-	public static final String TRANSLATION_PROFILE = "translationProfile";
 	public static final String REQUIRED_SCOPES = "requiredScopes.";
 	
 	static
@@ -104,21 +104,26 @@ public class OAuthRPProperties extends PropertiesHelper implements BaseRemoteASP
 		META.put(CLIENT_TRUSTSTORE, new PropertyMD().setDescription("Name of the truststore which should be used"
 				+ " to validate TLS peer's certificates. "
 				+ "If undefined then the system Java tuststore is used."));
-		META.put(TRANSLATION_PROFILE, new PropertyMD().setMandatory().setDescription(
-				"Name of a translation" +
-				" profile, which will be used to map remotely obtained attributes and identity" +
-				" to the local counterparts. The profile should at least map the remote identity."));
-
+		META.put(CommonWebAuthnProperties.TRANSLATION_PROFILE, new PropertyMD().
+				setDescription("Name of a translation" +
+						" profile, which will be used to map remotely obtained attributes and identity" +
+						" to the local counterparts. The profile should at least map the remote identity."));
+		META.put(CommonWebAuthnProperties.EMBEDDED_TRANSLATION_PROFILE, new PropertyMD().setHidden().
+				setDescription("Translation" +
+						" profile, which will be used to map remotely obtained attributes and identity" +
+						" to the local counterparts. The profile should at least map the remote identity."));
+		
+		
 	}
 	
 	private X509CertChainValidator validator = null;
-	private TokensManagement tokensMan;
+	private OAuthTokenRepository tokensDAO;
 	
 	public OAuthRPProperties(Properties properties, PKIManagement pkiManagement,
-			TokensManagement tokensMan) throws ConfigurationException
+			OAuthTokenRepository tokensDAO) throws ConfigurationException
 	{
 		super(PREFIX, properties, META, log);
-		this.tokensMan = tokensMan;
+		this.tokensDAO = tokensDAO;
 		String validatorName = getValue(CLIENT_TRUSTSTORE);
 		if (validatorName != null)
 		{
@@ -140,6 +145,13 @@ public class OAuthRPProperties extends PropertiesHelper implements BaseRemoteASP
 			throw new ConfigurationException("The " + getKeyDescription(VERIFICATION_ENDPOINT) +
 					" property is mandatory unless the '" + VerificationProtocol.internal +
 					"' verification protocol is used");
+		
+		if (!isSet(CommonWebAuthnProperties.EMBEDDED_TRANSLATION_PROFILE)
+				&& !isSet(CommonWebAuthnProperties.TRANSLATION_PROFILE))
+		{
+			throw new ConfigurationException(getKeyDescription(CommonWebAuthnProperties.TRANSLATION_PROFILE)
+					+ " is mandatory");
+		}
 	}
 	
 	@Override
@@ -150,6 +162,7 @@ public class OAuthRPProperties extends PropertiesHelper implements BaseRemoteASP
 		return mode != null ? mode : getEnumValue(CLIENT_AUTHN_MODE, ClientAuthnMode.class);
 	}
 	
+	@Override
 	public Method getClientHttpMethodForProfileAccess()
 	{
 		return (getEnumValue(CLIENT_HTTP_METHOD_FOR_PROFILE_ACCESS,
@@ -183,7 +196,7 @@ public class OAuthRPProperties extends PropertiesHelper implements BaseRemoteASP
 		case unity:
 			return new UnityTokenVerificator(this);
 		case internal:
-			return new InternalTokenVerificator(tokensMan);
+			return new InternalTokenVerificator(tokensDAO);
 		}
 		throw new IllegalStateException("Bug: unhandled protocol");
 	}

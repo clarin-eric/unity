@@ -19,16 +19,19 @@ import com.vaadin.ui.FormLayout;
 import com.vaadin.ui.Label;
 
 import pl.edu.icm.unity.JsonUtil;
+import pl.edu.icm.unity.MessageSource;
 import pl.edu.icm.unity.engine.api.MessageTemplateManagement;
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
 import pl.edu.icm.unity.exceptions.IllegalCredentialException;
 import pl.edu.icm.unity.stdext.credential.pass.PasswordCredential;
+import pl.edu.icm.unity.stdext.credential.pass.PasswordEncodingPoolProvider;
 import pl.edu.icm.unity.stdext.credential.pass.PasswordVerificator;
+import pl.edu.icm.unity.stdext.credential.pass.SCryptEncoder;
 import pl.edu.icm.unity.stdext.credential.pass.ScryptParams;
 import pl.edu.icm.unity.types.authn.CredentialDefinition;
 import pl.edu.icm.unity.webui.common.AbstractDialog;
 import pl.edu.icm.unity.webui.common.CompactFormLayout;
-import pl.edu.icm.unity.webui.common.Styles;
+import pl.edu.icm.unity.webui.common.FormValidationException;
+import pl.edu.icm.unity.webui.common.NotificationPopup;
 import pl.edu.icm.unity.webui.common.credentials.CredentialDefinitionEditor;
 import pl.edu.icm.unity.webui.common.credentials.CredentialDefinitionViewer;
 import pl.edu.icm.unity.webui.common.credentials.CredentialEditorContext;
@@ -41,7 +44,7 @@ public class PasswordCredentialDefinitionEditor implements CredentialDefinitionE
 {
 	private static final double MS_IN_MONTH = 3600000L*24L*30.41;
 	private static final int MAX_MONTHS = 48;
-	private UnityMessageSource msg;
+	private MessageSource msg;
 	private MessageTemplateManagement msgTplMan;
 	private IntStepper minScore;
 	private IntStepper minLength;
@@ -53,11 +56,14 @@ public class PasswordCredentialDefinitionEditor implements CredentialDefinitionE
 	private IntStepper historySize;
 	private IntStepper workFactor;
 	private PasswordCredentialResetSettingsEditor resetSettings;
+	private SCryptEncoder scryptEncoder;
 	
-	public PasswordCredentialDefinitionEditor(UnityMessageSource msg, MessageTemplateManagement msgTplMan)
+	public PasswordCredentialDefinitionEditor(MessageSource msg, MessageTemplateManagement msgTplMan, 
+			PasswordEncodingPoolProvider poolProvider)
 	{
 		this.msg = msg;
 		this.msgTplMan = msgTplMan;
+		this.scryptEncoder = new SCryptEncoder(poolProvider.pool);
 	}
 
 
@@ -117,7 +123,6 @@ public class PasswordCredentialDefinitionEditor implements CredentialDefinitionE
 	public Component getEditor(String credentialDefinitionConfiguration)
 	{
 		Button testMe = new Button(msg.getMessage("PasswordDefinitionEditor.testMe"));
-		testMe.addStyleName(Styles.vButtonLink.toString());
 		testMe.addClickListener(this::showTestDialog);
 		minScore = new IntStepper(msg.getMessage("PasswordDefinitionEditor.minScore"));
 		minScore.setDescription(msg.getMessage("PasswordDefinitionEditor.minScoreDesc"));
@@ -151,11 +156,11 @@ public class PasswordCredentialDefinitionEditor implements CredentialDefinitionE
 		workFactor = new IntStepper(msg.getMessage("PasswordDefinitionEditor.workFactor"));
 		workFactor.setStepAmount(1);
 		workFactor.setMinValue(ScryptParams.MIN_WORK_FACTOR);
-		workFactor.setMaxValue(ScryptParams.MAX_WORK_FACTOR);
+		int maxWF = scryptEncoder.getMaxAllowedWorkFactor();
+		workFactor.setMaxValue(maxWF);
 		workFactor.setWidth(3, Unit.EM);
 		workFactor.setDescription(msg.getMessage("PasswordDefinitionEditor.workFactorDesc"));
 		Button testWorkFactor = new Button(msg.getMessage("PasswordDefinitionEditor.testWorkFactor"));
-		testWorkFactor.addStyleName(Styles.vButtonLink.toString());
 		testWorkFactor.addClickListener(this::showTestWorkFactorDialog);
 		
 		
@@ -172,7 +177,7 @@ public class PasswordCredentialDefinitionEditor implements CredentialDefinitionE
 		if (credentialDefinitionConfiguration != null)
 			helper.setSerializedConfiguration(JsonUtil.parse(credentialDefinitionConfiguration));
 		else
-			helper.setScryptParams(new ScryptParams());
+			helper.setScryptParams(new ScryptParams(16 > maxWF ? maxWF : 16));
 		initUIState(helper);
 		resetSettings = new PasswordCredentialResetSettingsEditor(msg, msgTplMan, helper.getPasswordResetSettings());
 		resetSettings.addEditorToLayout(form);
@@ -182,15 +187,33 @@ public class PasswordCredentialDefinitionEditor implements CredentialDefinitionE
 
 	private void showTestDialog(ClickEvent event)
 	{
-		new TestPasswordDialog(msg, getCredential()).show();
-	}
-
-	private void showTestWorkFactorDialog(ClickEvent event)
-	{
-		new TestWorkFactorDialog(msg, getCredential()).show();
+		PasswordCredential cred = getCredentialSave();
+		if (cred == null)
+			return;
+		
+		new TestPasswordDialog(msg, cred).show();
 	}
 	
-	private PasswordCredential getCredential()
+	private void showTestWorkFactorDialog(ClickEvent event)
+	{
+		PasswordCredential cred = getCredentialSave();
+		if (cred == null)
+			return;
+		new TestWorkFactorDialog(msg, cred, scryptEncoder).show();
+	}
+	
+	private PasswordCredential getCredentialSave()
+	{
+		try{
+			return getCredential();
+		} catch (FormValidationException e)
+		{
+			NotificationPopup.showError(msg.getMessage("PasswordDefinitionEditor.checkConfig"), "");
+			return null;
+		}
+	}
+	
+	private PasswordCredential getCredential() throws FormValidationException
 	{
 		PasswordCredential cred = new PasswordCredential();
 		cred.setDenySequences(denySequences.getValue());
@@ -215,7 +238,13 @@ public class PasswordCredentialDefinitionEditor implements CredentialDefinitionE
 	@Override
 	public String getCredentialDefinition() throws IllegalCredentialException
 	{
-		return JsonUtil.serialize(getCredential().getSerializedConfiguration());
+		try
+		{
+			return JsonUtil.serialize(getCredential().getSerializedConfiguration());
+		} catch (FormValidationException e)
+		{
+			throw new IllegalCredentialException("", e);
+		}	
 	}
 
 	private void initUIState(PasswordCredential helper)
@@ -248,12 +277,12 @@ public class PasswordCredentialDefinitionEditor implements CredentialDefinitionE
 	{
 		private PasswordCredential config;
 
-		public TestPasswordDialog(UnityMessageSource msg, PasswordCredential config)
+		public TestPasswordDialog(MessageSource msg, PasswordCredential config)
 		{
 			super(msg, msg.getMessage("PasswordDefinitionEditor.testMe"), 
 					msg.getMessage("close"));
 			this.config = config;
-			setSize(45, 50);
+			setSizeEm(40, 30);
 		}
 
 		@Override

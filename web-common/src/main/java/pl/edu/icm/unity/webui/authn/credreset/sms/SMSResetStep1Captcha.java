@@ -11,7 +11,7 @@ import com.vaadin.ui.Alignment;
 import com.vaadin.ui.Component;
 import com.vaadin.ui.VerticalLayout;
 
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
+import pl.edu.icm.unity.MessageSource;
 import pl.edu.icm.unity.exceptions.WrongArgumentException;
 import pl.edu.icm.unity.webui.authn.credreset.CredentialResetFlowConfig;
 import pl.edu.icm.unity.webui.authn.credreset.CredentialResetLayout;
@@ -25,7 +25,7 @@ import pl.edu.icm.unity.webui.common.CaptchaComponent;
  */
 public class SMSResetStep1Captcha extends CredentialResetLayout
 {
-	private UnityMessageSource msg;
+	private MessageSource msg;
 	
 	private TextFieldWithContextLabel username;
 	private CaptchaComponent captcha;
@@ -35,11 +35,14 @@ public class SMSResetStep1Captcha extends CredentialResetLayout
 	private boolean requireCaptcha;
 
 	private boolean compactLayout;
+
+	private boolean collectUsername;
 	
 	public SMSResetStep1Captcha(CredentialResetFlowConfig credResetConfig, boolean requireCaptcha, 
-			Consumer<String> proceedCallback)
+			Consumer<String> proceedCallback, boolean collectUsername)
 	{
 		super(credResetConfig);
+		this.collectUsername = collectUsername;
 		this.msg = credResetConfig.msg;
 		this.requireCaptcha = requireCaptcha;
 		this.proceedCallback = proceedCallback;
@@ -70,18 +73,24 @@ public class SMSResetStep1Captcha extends CredentialResetLayout
 		
 		narrowCol.addComponent(buttons);
 		narrowCol.setComponentAlignment(buttons, Alignment.TOP_CENTER);
+		if (!collectUsername)
+			username.setVisible(false);
 		return narrowCol;
 	}
 
 	private void onConfirm()
 	{
-		String user = username.getValue();
-		if (user == null || user.equals(""))
+		String user = null;
+		if (collectUsername)
 		{
-			username.setComponentError(new UserError(msg.getMessage("fieldRequired")));
-			return;
+			user = username.getValue();
+			if (user == null || user.equals(""))
+			{
+				username.setComponentError(new UserError(msg.getMessage("fieldRequired")));
+				return;
+			}
+			username.setComponentError(null);
 		}
-		username.setComponentError(null);
 		if (requireCaptcha)
 		{
 			try

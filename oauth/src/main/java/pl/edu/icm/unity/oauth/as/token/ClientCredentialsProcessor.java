@@ -20,19 +20,18 @@ import com.nimbusds.openid.connect.sdk.claims.UserInfo;
 import pl.edu.icm.unity.base.utils.Log;
 import pl.edu.icm.unity.engine.api.authn.InvocationContext;
 import pl.edu.icm.unity.engine.api.authn.LoginSession;
-import pl.edu.icm.unity.engine.api.idp.CommonIdPProperties;
 import pl.edu.icm.unity.engine.api.idp.EntityInGroup;
 import pl.edu.icm.unity.engine.api.idp.IdPEngine;
 import pl.edu.icm.unity.engine.api.translation.out.TranslationResult;
 import pl.edu.icm.unity.exceptions.EngineException;
 import pl.edu.icm.unity.oauth.as.OAuthASProperties;
-import pl.edu.icm.unity.oauth.as.OAuthAuthzContext.ScopeInfo;
 import pl.edu.icm.unity.oauth.as.OAuthProcessor;
 import pl.edu.icm.unity.oauth.as.OAuthRequestValidator;
 import pl.edu.icm.unity.oauth.as.OAuthSystemAttributesProvider;
 import pl.edu.icm.unity.oauth.as.OAuthSystemAttributesProvider.GrantFlow;
 import pl.edu.icm.unity.oauth.as.OAuthToken;
 import pl.edu.icm.unity.oauth.as.OAuthValidationException;
+import pl.edu.icm.unity.oauth.as.OAuthScope;
 import pl.edu.icm.unity.types.basic.AttributeExt;
 import pl.edu.icm.unity.types.basic.DynamicAttribute;
 import pl.edu.icm.unity.types.basic.EntityParam;
@@ -51,7 +50,6 @@ public class ClientCredentialsProcessor
 	public ClientCredentialsProcessor(OAuthRequestValidator requestValidator,
 			IdPEngine idpEngine, OAuthASProperties config)
 	{
-		super();
 		this.requestValidator = requestValidator;
 		this.idpEngine = idpEngine;
 		this.config = config;
@@ -75,11 +73,12 @@ public class ClientCredentialsProcessor
 		
 		Set<GrantFlow> allowedFlows = requestValidator.getAllowedFlows(attributes);
 		if (!allowedFlows.contains(GrantFlow.client))
+		{
 			throw new OAuthValidationException("The '" + client + 
 					"' is not authorized to use the '" + GrantFlow.client + "' grant flow.");
-		
+		}
 		OAuthToken internalToken = new OAuthToken();
-		Set<String> requestedAttributes = establishFlowsAndAttributes(internalToken, scope);
+		Set<String> requestedAttributes = establishFlowsAndAttributes(internalToken, scope, attributes);
 		
 		internalToken.setClientId(loginSession.getEntityId());
 		internalToken.setClientUsername(client);
@@ -96,7 +95,6 @@ public class ClientCredentialsProcessor
 				config.getIntValue(OAuthASProperties.MAX_EXTEND_ACCESS_TOKEN_VALIDITY) : 0;
 		internalToken.setMaxExtendedValidity(maxExtendedValidity);
 		
-		OAuthProcessor oauthProcessor = new OAuthProcessor();
 		String usersGroup = getUsersGroup(attributes);
 		TranslationResult translationResult;
 		try
@@ -107,26 +105,26 @@ public class ClientCredentialsProcessor
 			log.warn("Can not obtain user info for OAuth in client credentials flow", e);
 			throw new OAuthValidationException("Internal error");
 		}
-		Set<DynamicAttribute> filteredAttributes = oauthProcessor.filterAttributes(
+		Set<DynamicAttribute> filteredAttributes = OAuthProcessor.filterAttributes(
 				translationResult, requestedAttributes);
-		UserInfo userInfo = oauthProcessor.prepareUserInfoClaimSet(client, filteredAttributes);
+		UserInfo userInfo = OAuthProcessor.prepareUserInfoClaimSet(client, filteredAttributes);
 		internalToken.setUserInfo(userInfo.toJSONObject().toJSONString());
 		return internalToken;
 	}
 	
-	private Set<String> establishFlowsAndAttributes(OAuthToken internalToken, String scope)
+	private Set<String> establishFlowsAndAttributes(OAuthToken internalToken, String scope, Map<String, AttributeExt> clientAttributes)
 	{
 		Set<String> requestedAttributes = new HashSet<>();
 		if (scope != null && !scope.isEmpty())
 		{
 			Scope parsed = Scope.parse(scope);
-			List<ScopeInfo> validRequestedScopes = requestValidator.getValidRequestedScopes(parsed);
+			List<OAuthScope> validRequestedScopes = requestValidator.getValidRequestedScopes(clientAttributes, parsed);
 			String[] array = validRequestedScopes.stream().
-					map(si -> si.getName()).
+					map(si -> si.name).
 					toArray(String[]::new);
 			internalToken.setEffectiveScope(array);
-			for (ScopeInfo si: validRequestedScopes)
-				requestedAttributes.addAll(si.getAttributes());
+			for (OAuthScope si: validRequestedScopes)
+				requestedAttributes.addAll(si.attributes);
 		}
 		return requestedAttributes;
 	}
@@ -138,10 +136,11 @@ public class ClientCredentialsProcessor
 		EntityParam clientEntity = new EntityParam(ae.getEntityId());
 		EntityInGroup clientWithGroup = new EntityInGroup(
 				config.getValue(OAuthASProperties.CLIENTS_GROUP), clientEntity);
+		
 		TranslationResult translationResult = idpEngine.obtainUserInformationWithEnrichingImport(
 				clientEntity, 
 				usersGroup, 
-				config.getValue(CommonIdPProperties.TRANSLATION_PROFILE), 
+				config.getOutputTranslationProfile(), 
 				client,
 				Optional.of(clientWithGroup),
 				"OAuth2", 

@@ -16,7 +16,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import com.google.common.collect.Lists;
 
 import pl.edu.icm.unity.base.msgtemplates.confirm.EmailConfirmationTemplateDef;
-import pl.edu.icm.unity.base.notifications.FacilityName;
 import pl.edu.icm.unity.base.token.Token;
 import pl.edu.icm.unity.engine.api.MessageTemplateManagement;
 import pl.edu.icm.unity.engine.api.config.UnityServerConfiguration;
@@ -27,7 +26,7 @@ import pl.edu.icm.unity.engine.api.confirmation.states.UserEmailConfirmationStat
 import pl.edu.icm.unity.engine.api.finalization.WorkflowFinalizationConfiguration;
 import pl.edu.icm.unity.engine.api.token.TokensManagement;
 import pl.edu.icm.unity.engine.api.translation.form.TranslatedRegistrationRequest.AutomaticRequestAction;
-import pl.edu.icm.unity.engine.authz.AuthorizationManagerImpl;
+import pl.edu.icm.unity.engine.authz.InternalAuthorizationManagerImpl;
 import pl.edu.icm.unity.engine.builders.NotificationChannelBuilder;
 import pl.edu.icm.unity.engine.confirmation.EmailConfirmationManagerImpl;
 import pl.edu.icm.unity.engine.server.EngineInitialization;
@@ -99,7 +98,7 @@ public class TestEmailConfirmations extends DBIntegrationTestBase
 		setupAdmin();
 
 		Identity id = idsMan.addEntity(new IdentityParam(EmailIdentity.ID,
-				"example1@ex.com"), "crMock", EntityState.valid, false);
+				"example1@ex.com"), "crMock", EntityState.valid);
 		EntityParam entity = new EntityParam(id.getEntityId());
 		AttributeType atT = new AttributeType(InitializerCommon.EMAIL_ATTR,
 				VerifiableEmailAttributeSyntax.ID);
@@ -143,7 +142,7 @@ public class TestEmailConfirmations extends DBIntegrationTestBase
 	public void shouldNotAddConfirmedAttributeIfAddedByUser() throws Exception
 	{
 		setupPasswordAuthn();
-		Identity id = createUsernameUserWithRole(AuthorizationManagerImpl.USER_ROLE);
+		Identity id = createUsernameUserWithRole(InternalAuthorizationManagerImpl.USER_ROLE);
 		EntityParam entity = new EntityParam(id.getEntityId());
 		AttributeType atT = new AttributeType(InitializerCommon.EMAIL_ATTR,
 				VerifiableEmailAttributeSyntax.ID);
@@ -170,7 +169,7 @@ public class TestEmailConfirmations extends DBIntegrationTestBase
 	public void shouldPreserveOneConfirmationStateIfChangedByUser() throws Exception
 	{
 		setupPasswordAuthn();
-		Identity id = createUsernameUserWithRole(AuthorizationManagerImpl.USER_ROLE);
+		Identity id = createUsernameUserWithRole(InternalAuthorizationManagerImpl.USER_ROLE);
 		EntityParam entity = new EntityParam(id.getEntityId());
 		AttributeType atT = new AttributeType(InitializerCommon.EMAIL_ATTR,
 				VerifiableEmailAttributeSyntax.ID);
@@ -213,7 +212,7 @@ public class TestEmailConfirmations extends DBIntegrationTestBase
 	public void shouldThrowExceptionIfUserRemoveLastConfirmedValue() throws Exception
 	{
 		setupPasswordAuthn();
-		Identity id = createUsernameUserWithRole(AuthorizationManagerImpl.USER_ROLE);
+		Identity id = createUsernameUserWithRole(InternalAuthorizationManagerImpl.USER_ROLE);
 		EntityParam entity = new EntityParam(id.getEntityId());
 		AttributeType atT = new AttributeType(InitializerCommon.EMAIL_ATTR,
 				VerifiableEmailAttributeSyntax.ID);
@@ -255,7 +254,7 @@ public class TestEmailConfirmations extends DBIntegrationTestBase
 		setupMockAuthn();
 		groupsMan.addGroup(new Group("/test"));
 		Identity id = idsMan.addEntity(new IdentityParam(EmailIdentity.ID,
-				"example1@ex.com"), "crMock", EntityState.valid, false);
+				"example1@ex.com"), "crMock", EntityState.valid);
 		EntityParam entity = new EntityParam(id.getEntityId());
 		groupsMan.addMemberFromParent("/test", entity);
 
@@ -281,7 +280,7 @@ public class TestEmailConfirmations extends DBIntegrationTestBase
 		setupMockAuthn();
 		groupsMan.addGroup(new Group("/test"));
 		Identity id = idsMan.addEntity(new IdentityParam(UsernameIdentity.ID,
-				"username"), "crMock", EntityState.valid, false);
+				"username"), "crMock", EntityState.valid);
 		EntityParam entity = new EntityParam(id.getEntityId());
 		groupsMan.addMemberFromParent("/test", entity);
 		aTypeMan.addAttributeType(new AttributeType(InitializerCommon.EMAIL_ATTR,
@@ -337,7 +336,7 @@ public class TestEmailConfirmations extends DBIntegrationTestBase
 		setupMockAuthn();
 		groupsMan.addGroup(new Group("/test"));
 		Identity id = idsMan.addEntity(new IdentityParam(EmailIdentity.ID,
-				"example1@ex.com"), "crMock", EntityState.valid, false);
+				"example1@ex.com"), "crMock", EntityState.valid);
 		EntityParam entity = new EntityParam(id.getEntityId());
 		groupsMan.addMemberFromParent("/test", entity);
 		addSimpleConfirmationConfiguration(
@@ -799,7 +798,7 @@ public class TestEmailConfirmations extends DBIntegrationTestBase
 	{
 		setupPasswordAuthn();
 		
-		Identity id = createUsernameUserWithRole(AuthorizationManagerImpl.USER_ROLE);
+		Identity id = createUsernameUserWithRole(InternalAuthorizationManagerImpl.USER_ROLE);
 		EntityParam entity = new EntityParam(id.getEntityId());
 		AttributeType atT = new AttributeType(InitializerCommon.EMAIL_ATTR,
 				VerifiableEmailAttributeSyntax.ID);
@@ -849,7 +848,7 @@ public class TestEmailConfirmations extends DBIntegrationTestBase
 				.withName(channelName)
 				.withConfiguration("test")
 				.withDescription("test")
-				.withFacilityId(FacilityName.EMAIL.toString())
+				.withFacilityId("EMAIL")
 				.build());
 		
 		

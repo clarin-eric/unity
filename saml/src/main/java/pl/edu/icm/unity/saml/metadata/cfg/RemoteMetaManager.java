@@ -5,6 +5,7 @@
 package pl.edu.icm.unity.saml.metadata.cfg;
 
 import java.security.cert.X509Certificate;
+import java.time.Duration;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -29,7 +30,8 @@ import xmlbeans.org.oasis.saml2.metadata.EntitiesDescriptorDocument;
 
 /**
  * Manages the retrieval, loading and update of runtime configuration based on the remote SAML metadata. 
- * @author K. Benedyczak
+ * 
+ * TODO: this class to be dropped after refactoring of SAML IDP code to be based on non Properties config.
  */
 public class RemoteMetaManager
 {
@@ -66,10 +68,10 @@ public class RemoteMetaManager
 
 	public synchronized IdPVisalSettings getVisualSettings(String configKey, Locale locale)
 	{
-		String logoUrl = virtualConfiguration.getLocalizedValue(configKey + SAMLSPProperties.IDP_LOGO, locale);
+		String logoURI = virtualConfiguration.getLocalizedValue(configKey + SAMLSPProperties.IDP_LOGO, locale);
 		String name = ((SAMLSPProperties)virtualConfiguration).getLocalizedName(configKey, locale);
 		List<String> tags = virtualConfiguration.getListOfValues(configKey + SAMLSPProperties.IDP_NAME + ".");
-		return new IdPVisalSettings(logoUrl, tags, name);
+		return new IdPVisalSettings(logoURI, tags, name);
 	}
 	
 	public synchronized void setBaseConfiguration(SamlProperties configuration)
@@ -98,7 +100,7 @@ public class RemoteMetaManager
 			MetadataConsumer consumer = new MetadataConsumer(url, key);
 			String consumerId = metadataService.preregisterConsumer(url);
 			registeredConsumers.add(consumerId);
-			metadataService.registerConsumer(consumerId, refreshInterval, customTruststore, 
+			metadataService.registerConsumer(consumerId, Duration.ofMillis(refreshInterval), customTruststore, 
 					consumer::updateMetadata);
 		}
 	}
@@ -133,7 +135,7 @@ public class RemoteMetaManager
 		try
 		{
 			X509Certificate issuerCertificate = issuerCertificateName != null ? 
-					pkiManagement.getCertificate(issuerCertificateName) : null;
+					pkiManagement.getCertificate(issuerCertificateName).value: null;
 			verificator.validate(metadata, new Date(),
 					sigCheckingMode, issuerCertificate);
 		} catch (MetadataValidationException e)

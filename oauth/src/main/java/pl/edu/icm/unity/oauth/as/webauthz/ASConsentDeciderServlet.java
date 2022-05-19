@@ -4,14 +4,17 @@
  */
 package pl.edu.icm.unity.oauth.as.webauthz;
 
+import static pl.edu.icm.unity.webui.LoginInProgressService.noSignInContextException;
+
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.Collection;
+import java.util.Optional;
 
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
-import javax.servlet.http.HttpSession;
 
 import org.apache.logging.log4j.Logger;
 
@@ -22,6 +25,7 @@ import com.nimbusds.oauth2.sdk.OAuth2Error;
 import com.nimbusds.oauth2.sdk.SerializeException;
 import com.nimbusds.oauth2.sdk.client.ClientType;
 
+import pl.edu.icm.unity.MessageSource;
 import pl.edu.icm.unity.base.utils.Log;
 import pl.edu.icm.unity.engine.api.EnquiryManagement;
 import pl.edu.icm.unity.engine.api.PreferencesManagement;
@@ -29,66 +33,77 @@ import pl.edu.icm.unity.engine.api.authn.InvocationContext;
 import pl.edu.icm.unity.engine.api.authn.LoginSession;
 import pl.edu.icm.unity.engine.api.idp.CommonIdPProperties;
 import pl.edu.icm.unity.engine.api.idp.IdPEngine;
-import pl.edu.icm.unity.engine.api.session.SessionManagement;
-import pl.edu.icm.unity.engine.api.token.TokensManagement;
+import pl.edu.icm.unity.engine.api.policyAgreement.PolicyAgreementManagement;
 import pl.edu.icm.unity.engine.api.translation.out.TranslationResult;
 import pl.edu.icm.unity.engine.api.utils.RoutingServlet;
 import pl.edu.icm.unity.exceptions.EngineException;
 import pl.edu.icm.unity.oauth.as.OAuthAuthzContext;
+import pl.edu.icm.unity.oauth.as.OAuthAuthzContext.Prompt;
 import pl.edu.icm.unity.oauth.as.OAuthErrorResponseException;
+import pl.edu.icm.unity.oauth.as.OAuthIdpStatisticReporter;
 import pl.edu.icm.unity.oauth.as.OAuthProcessor;
 import pl.edu.icm.unity.oauth.as.preferences.OAuthPreferences;
 import pl.edu.icm.unity.oauth.as.preferences.OAuthPreferences.OAuthClientSettings;
 import pl.edu.icm.unity.types.basic.DynamicAttribute;
 import pl.edu.icm.unity.types.basic.EntityParam;
 import pl.edu.icm.unity.types.basic.IdentityParam;
+import pl.edu.icm.unity.types.basic.idpStatistic.IdpStatistic.Status;
+import pl.edu.icm.unity.webui.LoginInProgressService.HttpContextSession;
+import pl.edu.icm.unity.webui.LoginInProgressService.SignInContextSession;
 import pl.edu.icm.unity.webui.VaadinRequestMatcher;
 import pl.edu.icm.unity.webui.idpcommon.EopException;
 
 /**
- * Invoked after authentication, main OAuth AS servlet. It decides whether the request should be
- * processed automatically or with manual consent. This is separated from Vaadin consent app so it is not needlessly 
- * loaded in user's browser.
+ * Invoked after authentication, main OAuth AS servlet. It decides whether the
+ * request should be processed automatically or with manual consent. This is
+ * separated from Vaadin consent app so it is not needlessly loaded in user's
+ * browser.
  * 
  * @author K. Benedyczak
  */
 public class ASConsentDeciderServlet extends HttpServlet
 {
 	private static final Logger log = Log.getLogger(Log.U_SERVER_OAUTH, ASConsentDeciderServlet.class);
-	
+
 	private PreferencesManagement preferencesMan;
-	private TokensManagement tokensMan;
 	private OAuthIdPEngine idpEngine;
-	private SessionManagement sessionMan;
+	private OAuthSessionService oauthSessionService;
 	private String oauthUiServletPath;
 	private String authenticationUIServletPath;
 	private EnquiryManagement enquiryManagement;
+	private final OAuthProcessor oauthProcessor;
+	private final PolicyAgreementManagement policyAgreementsMan;
+	private final OAuthIdpStatisticReporter statReporter;
+	private final MessageSource msg;
 
-	
 	public ASConsentDeciderServlet(PreferencesManagement preferencesMan, IdPEngine idpEngine,
-			TokensManagement tokensMan, SessionManagement sessionMan,
-			String oauthUiServletPath, String authenticationUIServletPath,
-			EnquiryManagement enquiryManagement)
+			OAuthProcessor oauthProcessor, OAuthSessionService oauthSessionService, String oauthUiServletPath,
+			String authenticationUIServletPath, EnquiryManagement enquiryManagement,
+			PolicyAgreementManagement policyAgreementsMan, OAuthIdpStatisticReporter idpStatisticReporter, MessageSource msg)
 	{
-		this.tokensMan = tokensMan;
+		this.oauthProcessor = oauthProcessor;
 		this.preferencesMan = preferencesMan;
-		this.sessionMan = sessionMan;
+		this.oauthSessionService = oauthSessionService;
 		this.authenticationUIServletPath = authenticationUIServletPath;
 		this.enquiryManagement = enquiryManagement;
 		this.idpEngine = new OAuthIdPEngine(idpEngine);
 		this.oauthUiServletPath = oauthUiServletPath;
+		this.policyAgreementsMan = policyAgreementsMan;
+		this.statReporter = idpStatisticReporter;
+		this.msg = msg;
 	}
 
 	@Override
-	protected void service(HttpServletRequest req, HttpServletResponse resp)
-			throws ServletException, IOException
+	protected void service(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException
 	{
-		//if we got this request here it means that this is a request from Authnentication UI
-		// which was not reloaded with something new - either regular endpoint UI or navigated away with a redirect. 
+		// if we got this request here it means that this is a request from
+		// Authnentication UI
+		// which was not reloaded with something new - either regular endpoint UI or
+		// navigated away with a redirect.
 		if (VaadinRequestMatcher.isVaadinRequest(req))
 		{
 			String forwardURI = authenticationUIServletPath;
-			if (req.getPathInfo() != null) 
+			if (req.getPathInfo() != null)
 				forwardURI += req.getPathInfo();
 			log.debug("Request to Vaadin internal address will be forwarded to authN {}", req.getRequestURI());
 			req.getRequestDispatcher(forwardURI).forward(req, resp);
@@ -96,20 +111,19 @@ public class ASConsentDeciderServlet extends HttpServlet
 		}
 		super.service(req, resp);
 	}
-	
+
 	@Override
-	protected void doGet(HttpServletRequest req, HttpServletResponse resp)
-			throws ServletException, IOException
+	protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException
 	{
 		try
 		{
 			serviceInterruptible(req, resp);
 		} catch (EopException e)
 		{
-			//OK
+			// OK
 		}
 	}
-	
+
 	protected void serviceInterruptible(HttpServletRequest req, HttpServletResponse resp)
 			throws ServletException, IOException, EopException
 	{
@@ -121,17 +135,27 @@ public class ASConsentDeciderServlet extends HttpServlet
 		} catch (EngineException e1)
 		{
 			log.error("Engine problem when handling client request - can not load preferences", e1);
-			AuthorizationErrorResponse oauthResponse = new AuthorizationErrorResponse(
-					oauthCtx.getReturnURI(), 
-					OAuth2Error.SERVER_ERROR,
-					oauthCtx.getRequest().getState(),
+			AuthorizationErrorResponse oauthResponse = new AuthorizationErrorResponse(oauthCtx.getReturnURI(),
+					OAuth2Error.SERVER_ERROR, oauthCtx.getRequest().getState(),
 					oauthCtx.getRequest().impliedResponseMode());
 			sendReturnRedirect(oauthResponse, req, resp, true);
+			statReporter.reportStatus(oauthCtx, Status.FAILED);
 			return;
 
 		}
-		if (isInteractiveUIRequired(preferences, oauthCtx))
+		if (forceConsentIfConsentPrompt(oauthCtx))
 		{
+			log.trace("Consent is required for OAuth request, 'consent' prompt was given , forwarding to consent UI");
+			RoutingServlet.forwardTo(oauthUiServletPath, req, resp);
+		} 
+		else if (isInteractiveUIRequired(preferences, oauthCtx))
+		{
+			if (isNonePrompt(oauthCtx))
+			{
+				sendNonePromptError(oauthCtx, req, resp);
+				return;
+			}
+			
 			log.trace("Consent is required for OAuth request, forwarding to consent UI");
 			RoutingServlet.forwardTo(oauthUiServletPath, req, resp);
 		} else
@@ -141,31 +165,61 @@ public class ASConsentDeciderServlet extends HttpServlet
 		}
 	}
 	
+	private void sendNonePromptError(OAuthAuthzContext oauthCtx, HttpServletRequest req, HttpServletResponse resp)
+			throws IOException
+	{
+		log.error("Consent is required but 'none' prompt was given");
+		AuthorizationErrorResponse oauthResponse = new AuthorizationErrorResponse(oauthCtx.getReturnURI(),
+				OAuth2Error.SERVER_ERROR, oauthCtx.getRequest().getState(),
+				oauthCtx.getRequest().impliedResponseMode());
+		sendReturnRedirect(oauthResponse, req, resp, true);
+	}
+	
+	private boolean isNonePrompt(OAuthAuthzContext oauthCtx)
+	{
+		return oauthCtx.getPrompts().contains(Prompt.NONE);	
+	}
+	
+	private boolean forceConsentIfConsentPrompt(OAuthAuthzContext oauthCtx)
+	{
+		return oauthCtx.getPrompts().contains(Prompt.CONSENT);
+	}
+
 	protected OAuthClientSettings loadPreferences(OAuthAuthzContext oauthCtx) throws EngineException
 	{
 		OAuthPreferences preferences = OAuthPreferences.getPreferences(preferencesMan);
 		return preferences.getSPSettings(oauthCtx.getRequest().getClientID().getValue());
 	}
-	
+
 	private boolean isInteractiveUIRequired(OAuthClientSettings preferences, OAuthAuthzContext oauthCtx)
 	{
-		return isConsentRequired(preferences, oauthCtx) || isActiveValueSelectionRequired(oauthCtx) 
-				|| isEnquiryWaiting();
+		return isConsentRequired(preferences, oauthCtx) || isActiveValueSelectionRequired(oauthCtx)
+				|| isEnquiryWaiting() || isPolicyAgreementWaiting(oauthCtx);
 	}
 
-	
 	private boolean isActiveValueSelectionRequired(OAuthAuthzContext oauthCtx)
 	{
-		return CommonIdPProperties.isActiveValueSelectionConfiguredForClient(oauthCtx.getConfig(), 
+		return CommonIdPProperties.isActiveValueSelectionConfiguredForClient(oauthCtx.getConfig(),
 				oauthCtx.getClientUsername());
 	}
-	
+
+	/**
+	 * According to native OAuth profile, public clients needs to have consent shown
+	 * regardless of user's saved "trust" for the client. Still we honor admin
+	 * setting disabling consent globally.
+	 */
 	private boolean isConsentRequired(OAuthClientSettings preferences, OAuthAuthzContext oauthCtx)
 	{
-		if (preferences.isDoNotAsk() && oauthCtx.getClientType() != ClientType.PUBLIC)
-			return false;
+		if (preferences.isDoNotAsk() && oauthCtx.getClientType() == ClientType.CONFIDENTIAL)
+			return isScopesChanges(preferences, oauthCtx);
 		
-		return !oauthCtx.getConfig().isSkipConsent();
+		return isScopesChanges(preferences, oauthCtx) || !oauthCtx.getConfig().isSkipConsent();
+	}
+	
+	private boolean isScopesChanges(OAuthClientSettings preferences, OAuthAuthzContext oauthCtx)
+	{
+		return !preferences.getEffectiveRequestedScopes()
+				.containsAll(Arrays.asList(oauthCtx.getEffectiveRequestedScopesList()));
 	}
 
 	private boolean isEnquiryWaiting()
@@ -182,82 +236,93 @@ public class ASConsentDeciderServlet extends HttpServlet
 		}
 	}
 
+	private boolean isPolicyAgreementWaiting(OAuthAuthzContext oauthCtx)
+	{
+		try
+		{
+			return !policyAgreementsMan
+					.filterAgreementToPresent(
+							new EntityParam(InvocationContext.getCurrent().getLoginSession().getEntityId()),
+							CommonIdPProperties.getPolicyAgreementsConfig(msg, oauthCtx.getConfig()).agreements)
+					.isEmpty();
+		} catch (EngineException e)
+		{
+			log.error("Unable to determine policy agreements to accept");
+		}
+		return false;
+	}
+
 	/**
 	 * Automatically sends an OAuth response, without the consent screen.
-	 * @throws IOException 
-	 * @throws EopException 
 	 */
-	protected void autoReplay(OAuthClientSettings clientPreferences, OAuthAuthzContext oauthCtx, 
+	protected void autoReplay(OAuthClientSettings clientPreferences, OAuthAuthzContext oauthCtx,
 			HttpServletRequest request, HttpServletResponse response) throws EopException, IOException
 	{
 		if (!clientPreferences.isDefaultAccept())
 		{
 			log.trace("User preferences are set to decline authZ from the client");
-			AuthorizationErrorResponse oauthResponse = new AuthorizationErrorResponse(
-					oauthCtx.getReturnURI(), 
-					OAuth2Error.ACCESS_DENIED, 
-					oauthCtx.getRequest().getState(),
+			AuthorizationErrorResponse oauthResponse = new AuthorizationErrorResponse(oauthCtx.getReturnURI(),
+					OAuth2Error.ACCESS_DENIED, oauthCtx.getRequest().getState(),
 					oauthCtx.getRequest().impliedResponseMode());
+			statReporter.reportStatus(oauthCtx, Status.FAILED);
+
 			sendReturnRedirect(oauthResponse, request, response, false);
 		}
-		
-		OAuthProcessor processor = new OAuthProcessor();
+
 		AuthorizationSuccessResponse respDoc;
 		try
 		{
 			TranslationResult userInfo = idpEngine.getUserInfo(oauthCtx);
-			handleTranslationProfileRedirectIfNeeded(userInfo, request.getSession(), response);
-			IdentityParam selectedIdentity = idpEngine.getIdentity(userInfo, 
+			handleTranslationProfileRedirectIfNeeded(userInfo, request, response);
+			IdentityParam selectedIdentity = idpEngine.getIdentity(userInfo,
 					oauthCtx.getConfig().getSubjectIdentityType());
-			log.debug("Authentication of " + selectedIdentity);
-			Collection<DynamicAttribute> attributes = processor.filterAttributes(userInfo, 
+			log.info("Authentication of " + selectedIdentity);
+			Collection<DynamicAttribute> attributes = OAuthProcessor.filterAttributes(userInfo,
 					oauthCtx.getEffectiveRequestedAttrs());
-			respDoc = processor.prepareAuthzResponseAndRecordInternalState(attributes, selectedIdentity, 
-					oauthCtx, tokensMan);
+			respDoc = oauthProcessor.prepareAuthzResponseAndRecordInternalState(attributes, selectedIdentity, oauthCtx,
+					statReporter);
 		} catch (OAuthErrorResponseException e)
 		{
+
+			statReporter.reportStatus(oauthCtx, Status.FAILED);
+
 			sendReturnRedirect(e.getOauthResponse(), request, response, e.isInvalidateSession());
 			return;
 		} catch (Exception e)
 		{
 			log.error("Engine problem when handling client request", e);
-			AuthorizationErrorResponse oauthResponse = new AuthorizationErrorResponse(
-					oauthCtx.getReturnURI(), 
-					OAuth2Error.SERVER_ERROR, 
-					oauthCtx.getRequest().getState(),
+			AuthorizationErrorResponse oauthResponse = new AuthorizationErrorResponse(oauthCtx.getReturnURI(),
+					OAuth2Error.SERVER_ERROR, oauthCtx.getRequest().getState(),
 					oauthCtx.getRequest().impliedResponseMode());
+			statReporter.reportStatus(oauthCtx, Status.FAILED);
 			sendReturnRedirect(oauthResponse, request, response, false);
 			return;
 		}
 		sendReturnRedirect(respDoc, request, response, false);
 	}
-	
-	private void handleTranslationProfileRedirectIfNeeded(TranslationResult userInfo, HttpSession session,
-			HttpServletResponse response) 
-			throws IOException, EopException
+
+	private void handleTranslationProfileRedirectIfNeeded(TranslationResult userInfo, HttpServletRequest request,
+			HttpServletResponse response) throws IOException, EopException
 	{
 		String redirectURL = userInfo.getRedirectURL();
 		if (redirectURL != null)
 		{
 			response.sendRedirect(redirectURL);
-			session.removeAttribute(OAuthParseServlet.SESSION_OAUTH_CONTEXT);
+			oauthSessionService.cleanupComplete(Optional.of(new HttpContextSession(request)), false);
 			throw new EopException();
 		}
 	}
-	
+
 	private OAuthAuthzContext getOAuthContext(HttpServletRequest req)
 	{
-		HttpSession httpSession = req.getSession();
-		OAuthAuthzContext ret = (OAuthAuthzContext) httpSession.getAttribute(
-				OAuthParseServlet.SESSION_OAUTH_CONTEXT);
-		if (ret == null)
-			throw new IllegalStateException("No OAuth context after authN");
-		return ret;
+		return OAuthSessionService.getContext(req).orElseThrow(noSignInContextException());
 	}
-	
-	private void sendReturnRedirect(AuthorizationResponse oauthResponse, HttpServletRequest request, 
+
+	private void sendReturnRedirect(AuthorizationResponse oauthResponse, HttpServletRequest request,
 			HttpServletResponse response, boolean invalidateSession) throws IOException
 	{
+		SignInContextSession session = new HttpContextSession(request);
+		oauthSessionService.cleanupBeforeResponseSent(session);
 		try
 		{
 			String redirectURL = oauthResponse.toURI().toString();
@@ -266,14 +331,9 @@ public class ASConsentDeciderServlet extends HttpServlet
 		} catch (SerializeException e)
 		{
 			throw new IOException("Error: can not serialize error response", e);
-		}
-		
-		HttpSession httpSession = request.getSession();
-		httpSession.removeAttribute(OAuthParseServlet.SESSION_OAUTH_CONTEXT);
-		if (invalidateSession)
+		} finally
 		{
-			LoginSession loginSession = InvocationContext.getCurrent().getLoginSession();
-			sessionMan.removeSession(loginSession.getId(), true);
+			oauthSessionService.cleanupAfterResponseSent(session, invalidateSession);
 		}
 	}
 }

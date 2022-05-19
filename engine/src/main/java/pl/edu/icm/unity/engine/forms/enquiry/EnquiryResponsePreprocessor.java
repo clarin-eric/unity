@@ -5,88 +5,106 @@
 package pl.edu.icm.unity.engine.forms.enquiry;
 
 import java.util.Collection;
-import java.util.Comparator;
 
 import org.apache.logging.log4j.Logger;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import pl.edu.icm.unity.base.utils.Log;
 import pl.edu.icm.unity.engine.api.translation.form.TranslatedRegistrationRequest;
 import pl.edu.icm.unity.engine.forms.BaseRequestPreprocessor;
 import pl.edu.icm.unity.engine.forms.InvitationPrefillInfo;
+import pl.edu.icm.unity.engine.forms.PolicyAgreementsValidator;
 import pl.edu.icm.unity.exceptions.EngineException;
 import pl.edu.icm.unity.exceptions.IllegalFormContentsException;
+import pl.edu.icm.unity.exceptions.IllegalFormTypeException;
 import pl.edu.icm.unity.exceptions.WrongArgumentException;
+import pl.edu.icm.unity.store.api.generic.EnquiryFormDB;
+import pl.edu.icm.unity.types.basic.EntityParam;
 import pl.edu.icm.unity.types.basic.IdentityParam;
 import pl.edu.icm.unity.types.registration.EnquiryForm;
 import pl.edu.icm.unity.types.registration.EnquiryResponse;
+import pl.edu.icm.unity.types.registration.EnquiryResponseState;
 import pl.edu.icm.unity.types.registration.invite.EnquiryInvitationParam;
+import pl.edu.icm.unity.types.registration.invite.FormPrefill;
 import pl.edu.icm.unity.types.registration.invite.InvitationParam;
+import pl.edu.icm.unity.types.registration.invite.InvitationWithCode;
 
 /**
  * Helper component with methods to validate {@link EnquiryResponse}.
- * 
- * @author K. Benedyczak
  */
 @Component
-public class EnquiryResponsePreprocessor extends BaseRequestPreprocessor
+public class EnquiryResponsePreprocessor
 {
-	private static final Logger log = Log.getLogger(Log.U_SERVER,
+	private static final Logger log = Log.getLogger(Log.U_SERVER_FORMS,
 			EnquiryResponsePreprocessor.class);
 	
-	public void validateSubmittedResponse(EnquiryForm form, EnquiryResponse response,
+	private final PolicyAgreementsValidator agreementValidator;
+	private final BaseRequestPreprocessor basePreprocessor;
+	private final EnquiryFormDB enquiryFormDB;
+	
+	@Autowired
+	public EnquiryResponsePreprocessor(PolicyAgreementsValidator agreementValidator,
+			BaseRequestPreprocessor baseRequestPreprocessor, EnquiryFormDB enquiryFormDB)
+	{
+		this.agreementValidator = agreementValidator;
+		this.basePreprocessor = baseRequestPreprocessor;
+		this.enquiryFormDB = enquiryFormDB;
+	}
+
+	public InvitationPrefillInfo validateSubmittedResponse(EnquiryForm form, EnquiryResponseState response,
 			boolean doCredentialCheckAndUpdate) throws IllegalFormContentsException
 	{	
-		InvitationPrefillInfo invitationInfo = getInvitationPrefillInfo(form, response);
+		InvitationPrefillInfo invitationInfo = getInvitationPrefillInfo(form, response.getRequest());
 
-		super.validateSubmittedRequest(form, response, invitationInfo, doCredentialCheckAndUpdate);
-
+		basePreprocessor.validateSubmittedRequest(form, response.getRequest(), doCredentialCheckAndUpdate);
+		agreementValidator.validate(new EntityParam(response.getEntityId()), form, response.getRequest());
+		
 		if (invitationInfo.isByInvitation())
 		{
-			String code = response.getRegistrationCode();
-			log.debug("Received enquiry response for invitation " + code + ", removing it");
-			removeInvitation(code);
+			String code = response.getRequest().getRegistrationCode();
+			log.info("Received enquiry response for invitation " + code + ", removing it");
+			basePreprocessor.removeInvitation(code);
 		}
+		
+		return invitationInfo;
 	}
 
 	public void validateTranslatedRequest(EnquiryForm form, EnquiryResponse response, 
 			TranslatedRegistrationRequest request) throws EngineException
 	{
-		validateFinalAttributes(request.getAttributes());
-		validateFinalCredentials(response.getCredentials());
+		basePreprocessor.validateFinalAttributes(request.getAttributes());
+		basePreprocessor.validateFinalCredentials(response.getCredentials());
 		validateFinalIdentities(request.getIdentities());
-		validateFinalGroups(request.getGroups());
+		basePreprocessor.validateFinalGroups(request.getGroups());
 	}
 
-	@Override
-	protected void validateFinalIdentities(Collection<IdentityParam> identities) 
+	private void validateFinalIdentities(Collection<IdentityParam> identities) 
 			throws EngineException
 	{
 		for (IdentityParam idParam: identities)
 		{
 			if (idParam.getTypeId() == null || idParam.getValue() == null)
 				throw new WrongArgumentException("Identity " + idParam + " contains null values");
-			identityTypesRegistry.getByName(idParam.getTypeId()).validate(idParam.getValue());
-			checkIdentityIsNotPresent(idParam);
+			basePreprocessor.identityTypesRegistry.getByName(idParam.getTypeId()).validate(idParam.getValue());
+			basePreprocessor.assertIdentityIsNotPresentOnConfirm(idParam);
 		}
 	}
 	
 	public Long getEntityFromInvitationAndValidateCode(String formId, String code) 
-			throws IllegalFormContentsException
+			throws IllegalFormContentsException, IllegalFormTypeException
 	{
 		if (code == null)
-		{
 			return null;
-		}
 			
-		InvitationParam invitation = getInvitation(code).getInvitation();
+		InvitationParam invitation = basePreprocessor.getInvitation(code).getInvitation();
 		
-		if (!invitation.getFormId().equals(formId))
+		if (!invitation.matchesForm(enquiryFormDB.get(formId)))
 			throw new IllegalFormContentsException("The invitation is for different enquiry form");
 		
 		if (invitation.isExpired())
 			throw new IllegalFormContentsException("The invitation has already expired");
-		
+	
 		EnquiryInvitationParam enquiryInvitation = (EnquiryInvitationParam) invitation;
 		if (enquiryInvitation.getEntity() == null)
 			throw new IllegalFormContentsException("The invitation has no entity set");
@@ -101,18 +119,28 @@ public class EnquiryResponsePreprocessor extends BaseRequestPreprocessor
 		{
 			return new InvitationPrefillInfo();
 		}
-		InvitationPrefillInfo invitationInfo = new InvitationPrefillInfo(true);
 		
-		InvitationParam invitation = getInvitation(codeFromRequest).getInvitation();
-		processInvitationElements(form.getIdentityParams(), response.getIdentities(), 
-				invitation.getIdentities(), "identity", Comparator.comparing(IdentityParam::getValue),
-				invitationInfo::setPrefilledIdentity);
-		processInvitationElements(form.getAttributeParams(), response.getAttributes(), 
-				invitation.getAttributes(), "attribute", null,
-				invitationInfo::setPrefilledAttribute);
-		processInvitationElements(form.getGroupParams(), response.getGroupSelections(), 
-				filterValueReadOnlyAndHiddenGroupFromInvitation(invitation.getGroupSelections(), form.getGroupParams()), "group", null,
-				i -> {});
+		
+		InvitationWithCode invitationWithCode = basePreprocessor.getInvitation(codeFromRequest);
+		InvitationPrefillInfo invitationInfo = new InvitationPrefillInfo(invitationWithCode);
+		InvitationParam invitation = invitationWithCode.getInvitation();
+		
+		FormPrefill formInfo;
+		try
+		{
+			formInfo = invitation.getPrefillForForm(form);
+		} catch (EngineException e)
+		{
+			throw new IllegalFormContentsException("Form " + form.getName() + " not match to invitation", e);
+		}
+		
+		basePreprocessor.processInvitationElements(form.getIdentityParams(), response.getIdentities(), 
+				formInfo.getIdentities(), "identity");
+		basePreprocessor.processInvitationElements(form.getAttributeParams(), response.getAttributes(), 
+				formInfo.getAttributes(), "attribute");
+		basePreprocessor.processInvitationElements(form.getGroupParams(), response.getGroupSelections(), 
+				basePreprocessor.filterValueReadOnlyAndHiddenGroupFromInvitation(formInfo.getGroupSelections(), form.getGroupParams()), 
+				"group");
 		return invitationInfo;
 	}
 }

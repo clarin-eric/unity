@@ -4,6 +4,8 @@
  */
 package pl.edu.icm.unity.stdext.credential;
 
+import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
@@ -14,12 +16,13 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import pl.edu.icm.unity.JsonUtil;
 import pl.edu.icm.unity.base.utils.Log;
+import pl.edu.icm.unity.engine.api.authn.AuthenticationSubject;
 import pl.edu.icm.unity.engine.api.authn.CredentialReset;
 import pl.edu.icm.unity.engine.api.authn.EntityWithCredential;
 import pl.edu.icm.unity.engine.api.authn.local.CredentialHelper;
 import pl.edu.icm.unity.engine.api.authn.local.LocalCredentialVerificator;
 import pl.edu.icm.unity.engine.api.identity.IdentityResolver;
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
+import pl.edu.icm.unity.engine.api.msg.LocaleHelper;
 import pl.edu.icm.unity.engine.api.notification.NotificationProducer;
 import pl.edu.icm.unity.engine.api.utils.CodeGenerator;
 import pl.edu.icm.unity.exceptions.EngineException;
@@ -27,7 +30,6 @@ import pl.edu.icm.unity.exceptions.IllegalIdentityValueException;
 import pl.edu.icm.unity.exceptions.TooManyAttempts;
 import pl.edu.icm.unity.exceptions.WrongArgumentException;
 import pl.edu.icm.unity.types.basic.EntityParam;
-import pl.edu.icm.unity.types.basic.IdentityTaV;
 
 /**
  * Base for credential reset implementation of {@link CredentialReset}. This implementation is stateful, i.e. from creation it
@@ -36,33 +38,35 @@ import pl.edu.icm.unity.types.basic.IdentityTaV;
  */
 public abstract class CredentialResetBase implements CredentialReset
 {
-	private static final Logger log = Log.getLogger(Log.U_SERVER, CredentialResetBase.class);
+	private static final Logger log = Log.getLogger(Log.U_SERVER_AUTHN, CredentialResetBase.class);
 	protected static final int MAX_ANSWER_ATTEMPTS = 2;
 	private static final int MAX_RESENDS = 3;
-	private static final long MAX_CODE_VALIDITY = 30*3600;
+	public static final Duration DEFAULT_MAX_CODE_VALIDITY = Duration.ofMinutes(30);
+	private Duration maxCodeValidity;
 	
 	private NotificationProducer notificationProducer;
 	private IdentityResolver identityResolver;
 	private CredentialHelper credentialHelper;
 	private LocalCredentialVerificator localCredentialHandler;
 	
-	protected IdentityTaV requestedSubject;
 	protected EntityWithCredential resolved;
 
 	private String credentialId;
 	private ObjectNode completeCredentialConfiguration;
 	
 	private String codeSent;
-	private long codeValidityEnd;
+	private LocalDateTime codeValidityEnd;
 	private int dynamicAnswerAttempts = 0;
 	private int codeSendingAttempts = 0;
+	private AuthenticationSubject requestedSubject;
 	
 	public CredentialResetBase(NotificationProducer notificationProducer,
 			IdentityResolver identityResolver,
 			LocalCredentialVerificator localVerificator,
 			CredentialHelper credentialHelper,
 			String credentialId, 
-			ObjectNode completeCredentialConfiguration)
+			ObjectNode completeCredentialConfiguration,
+			Duration maxCodeValidity)
 	{
 		this.notificationProducer = notificationProducer;
 		this.credentialHelper = credentialHelper;
@@ -70,16 +74,16 @@ public abstract class CredentialResetBase implements CredentialReset
 		this.credentialId = credentialId;
 		this.localCredentialHandler = localVerificator;
 		this.completeCredentialConfiguration = completeCredentialConfiguration;
+		this.maxCodeValidity = maxCodeValidity;
 	}
 
-	public void setSubject(IdentityTaV subject, String[] idTypes)
+	public void setSubject(AuthenticationSubject subject, String[] idTypes)
 	{
 		this.requestedSubject = subject;
 		try
 		{
-			resolved = identityResolver.resolveIdentity(subject.getValue(), 
-					idTypes, credentialId);
-		} catch(IllegalIdentityValueException e)
+			resolved = identityResolver.resolveSubject(subject, idTypes, credentialId);
+		} catch (IllegalIdentityValueException e)
 		{
 			//OK - can happen, we can ignore
 		} catch (Exception e)
@@ -108,6 +112,11 @@ public abstract class CredentialResetBase implements CredentialReset
 
 	protected abstract String getCredentialSettings();
 
+	protected AuthenticationSubject getRequestedSubject()
+	{
+		return requestedSubject;
+	}
+	
 	@Override
 	public String getSecurityQuestion()
 	{
@@ -131,7 +140,7 @@ public abstract class CredentialResetBase implements CredentialReset
 		{
 			codeSent = CodeGenerator.generateNumberCode(codeLen);
 		}
-		codeValidityEnd = System.currentTimeMillis() + MAX_CODE_VALIDITY;
+		codeValidityEnd = LocalDateTime.now().plus(maxCodeValidity);
 	}
 	
 	protected abstract int getCodeLength();
@@ -147,13 +156,19 @@ public abstract class CredentialResetBase implements CredentialReset
 		if (codeSent == null)
 			createCode(onlyNumberCode);
 
+		String username = identityResolver.getDisplayedUserName(new EntityParam(resolved.getEntityId()));
 		Map<String, String> params = new HashMap<>();
 		params.put(CredentialResetTemplateDefBase.VAR_CODE, codeSent);
-		params.put(CredentialResetTemplateDefBase.VAR_USER, requestedSubject.getValue());
-		Locale currentLocale = UnityMessageSource.getLocale(null);
+		params.put(CredentialResetTemplateDefBase.VAR_USER, username);
+		Locale currentLocale = LocaleHelper.getLocale(null);
 		String locale = currentLocale == null ? null : currentLocale.toString();
 		notificationProducer.sendNotification(new EntityParam(resolved.getEntityId()), 
-				msgTemplate, params, locale, requestedSubject.getValue(), true);
+				msgTemplate, params, locale, username, true);
+	}
+	
+	public String getSentCode()
+	{
+		return codeSent;
 	}
 	
 	@Override
@@ -162,7 +177,7 @@ public abstract class CredentialResetBase implements CredentialReset
 		if (dynamicAnswerAttempts >= MAX_ANSWER_ATTEMPTS)
 			throw new TooManyAttempts();
 		dynamicAnswerAttempts++;
-		if (System.currentTimeMillis() > codeValidityEnd)
+		if (LocalDateTime.now().isAfter(codeValidityEnd))
 			throw new TooManyAttempts();
 		if (codeSent == null || !codeSent.equals(answer))
 			throw new WrongArgumentException("The code is invalid");

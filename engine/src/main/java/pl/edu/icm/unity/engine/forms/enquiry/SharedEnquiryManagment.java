@@ -21,9 +21,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 
+import pl.edu.icm.unity.MessageSource;
 import pl.edu.icm.unity.base.utils.Log;
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
+import pl.edu.icm.unity.engine.api.identity.EntityResolver;
 import pl.edu.icm.unity.engine.api.notification.NotificationProducer;
+import pl.edu.icm.unity.engine.api.policyAgreement.PolicyAgreementManagement;
 import pl.edu.icm.unity.engine.api.registration.GroupDiffUtils;
 import pl.edu.icm.unity.engine.api.registration.RequestSubmitStatus;
 import pl.edu.icm.unity.engine.api.registration.RequestedGroupDiff;
@@ -40,10 +42,12 @@ import pl.edu.icm.unity.engine.forms.RegistrationConfirmationSupport.Phase;
 import pl.edu.icm.unity.engine.forms.reg.RegistrationConfirmationRewriteSupport;
 import pl.edu.icm.unity.engine.group.GroupHelper;
 import pl.edu.icm.unity.engine.identity.IdentityHelper;
+import pl.edu.icm.unity.engine.identity.SecondFactorOptInService;
 import pl.edu.icm.unity.engine.notifications.InternalFacilitiesManagement;
 import pl.edu.icm.unity.engine.notifications.NotificationFacility;
 import pl.edu.icm.unity.engine.translation.form.EnquiryTranslationProfile;
 import pl.edu.icm.unity.exceptions.EngineException;
+import pl.edu.icm.unity.exceptions.UnknownIdentityException;
 import pl.edu.icm.unity.store.api.GroupDAO;
 import pl.edu.icm.unity.store.api.generic.EnquiryResponseDB;
 import pl.edu.icm.unity.store.api.generic.InvitationDB;
@@ -69,7 +73,7 @@ import pl.edu.icm.unity.types.registration.RegistrationRequestStatus;
 @Component
 public class SharedEnquiryManagment extends BaseSharedRegistrationSupport
 {
-	private static final Logger log = Log.getLogger(Log.U_SERVER, SharedEnquiryManagment.class);
+	private static final Logger log = Log.getLogger(Log.U_SERVER_FORMS, SharedEnquiryManagment.class);
 
 	private EnquiryResponseDB enquiryResponseDB;
 	private IdentityHelper dbIdentities;
@@ -82,17 +86,21 @@ public class SharedEnquiryManagment extends BaseSharedRegistrationSupport
 	private AttributeTypeHelper atHelper;
 
 	@Autowired
-	public SharedEnquiryManagment(UnityMessageSource msg, NotificationProducer notificationProducer,
+	public SharedEnquiryManagment(MessageSource msg, NotificationProducer notificationProducer,
 			AttributesHelper attributesHelper, GroupHelper groupHelper,
 			EntityCredentialsHelper entityCredentialsHelper, EnquiryResponseDB enquiryResponseDB,
 			IdentityHelper dbIdentities, RegistrationConfirmationRewriteSupport confirmationsRewriteSupport,
 			InternalFacilitiesManagement facilitiesManagement,
 			RegistrationActionsRegistry registrationTranslationActionsRegistry,
 			EnquiryResponsePreprocessor responseValidator, AttributeTypeHelper atHelper,
-			RegistrationConfirmationSupport confirmationsSupport, InvitationDB invitationDB, GroupDAO groupDB)
+			RegistrationConfirmationSupport confirmationsSupport, InvitationDB invitationDB, GroupDAO groupDB,
+			PolicyAgreementManagement policyAgreementManagement,
+			SecondFactorOptInService secondFactorOptInService,
+			EntityResolver entityResolver)
 	{
 		super(msg, notificationProducer, attributesHelper, groupHelper, entityCredentialsHelper,
-				facilitiesManagement, invitationDB);
+				facilitiesManagement, invitationDB, policyAgreementManagement, secondFactorOptInService, enquiryResponseDB,
+				entityResolver);
 		this.enquiryResponseDB = enquiryResponseDB;
 		this.dbIdentities = dbIdentities;
 		this.confirmationsRewriteSupport = confirmationsRewriteSupport;
@@ -107,14 +115,6 @@ public class SharedEnquiryManagment extends BaseSharedRegistrationSupport
 	 * Accepts a enquiry response applying all enquiry form rules. The
 	 * method operates on a result of the form's translation profile, rather
 	 * then on the original request.
-	 * 
-	 * @param form
-	 * @param currentRequest
-	 * @param publicComment
-	 * @param internalComment
-	 * @param rewriteConfirmationToken
-	 * @param sql
-	 * @throws EngineException
 	 */
 	public void acceptEnquiryResponse(EnquiryForm form, EnquiryResponseState currentRequest,
 			AdminComment publicComment, AdminComment internalComment, boolean rewriteConfirmationToken)
@@ -135,6 +135,14 @@ public class SharedEnquiryManagment extends BaseSharedRegistrationSupport
 			addAttributeToGroupsMap(a, rootAttributes, remainingAttributesByGroup);
 
 		long entityId = currentRequest.getEntityId();
+		try
+		{
+			entityResolver.getEntityId(new EntityParam(entityId));
+		} catch (UnknownIdentityException e)
+		{
+			throw new EngineException("Unknown entity " + currentRequest.getEntityId(), e);
+		}
+		
 		Collection<IdentityParam> identities = translatedRequest.getIdentities();
 		Iterator<IdentityParam> identitiesIterator = identities.iterator();
 		while (identitiesIterator.hasNext())
@@ -154,7 +162,9 @@ public class SharedEnquiryManagment extends BaseSharedRegistrationSupport
 		applyRequestedAttributeClasses(translatedRequest.getAttributeClasses(), entityId);
 
 		applyRequestedCredentials(currentRequest, entityId);
-
+		
+		applyMFAStatus(entityId, translatedRequest.getMfaPreferenceStatus());
+		
 		EnquiryFormNotifications notificationsCfg = form.getNotificationsConfiguration();
 		String templateId = notificationsCfg.getAcceptedTemplate();
 		String requesterAddress = getRequesterAddress(currentRequest, templateId);
@@ -165,6 +175,8 @@ public class SharedEnquiryManagment extends BaseSharedRegistrationSupport
 		confirmationsSupport.sendIdentityConfirmationRequest(currentRequest, form, entityId, Phase.ON_ACCEPT);
 		if (rewriteConfirmationToken)
 			confirmationsRewriteSupport.rewriteRequestToken(currentRequest, entityId);
+		
+		policyAgreementManagement.submitDecisions(new EntityParam(entityId), currentRequest.getRequest().getPolicyAgreements());
 	}
 
 	private void applyGroupsAndAttributesFromEnquiry(long entityId, List<Group> allGroups, List<Group> allUserGroups,

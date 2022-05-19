@@ -9,35 +9,36 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
-import static pl.edu.icm.unity.ldap.client.LdapProperties.ADV_SEARCH_ATTRIBUTES;
-import static pl.edu.icm.unity.ldap.client.LdapProperties.ADV_SEARCH_BASE;
-import static pl.edu.icm.unity.ldap.client.LdapProperties.ADV_SEARCH_FILTER;
-import static pl.edu.icm.unity.ldap.client.LdapProperties.ADV_SEARCH_PFX;
-import static pl.edu.icm.unity.ldap.client.LdapProperties.ATTRIBUTES;
-import static pl.edu.icm.unity.ldap.client.LdapProperties.BIND_AS;
-import static pl.edu.icm.unity.ldap.client.LdapProperties.BIND_ONLY;
-import static pl.edu.icm.unity.ldap.client.LdapProperties.CONNECTION_MODE;
-import static pl.edu.icm.unity.ldap.client.LdapProperties.GROUPS_BASE_NAME;
-import static pl.edu.icm.unity.ldap.client.LdapProperties.GROUP_DEFINITION_MATCHBY_MEMBER_ATTR;
-import static pl.edu.icm.unity.ldap.client.LdapProperties.GROUP_DEFINITION_MEMBER_ATTR;
-import static pl.edu.icm.unity.ldap.client.LdapProperties.GROUP_DEFINITION_NAME_ATTR;
-import static pl.edu.icm.unity.ldap.client.LdapProperties.GROUP_DEFINITION_OC;
-import static pl.edu.icm.unity.ldap.client.LdapProperties.GROUP_DEFINITION_PFX;
-import static pl.edu.icm.unity.ldap.client.LdapProperties.MEMBER_OF_ATTRIBUTE;
-import static pl.edu.icm.unity.ldap.client.LdapProperties.MEMBER_OF_GROUP_ATTRIBUTE;
-import static pl.edu.icm.unity.ldap.client.LdapProperties.PORTS;
-import static pl.edu.icm.unity.ldap.client.LdapProperties.PREFIX;
-import static pl.edu.icm.unity.ldap.client.LdapProperties.SERVERS;
-import static pl.edu.icm.unity.ldap.client.LdapProperties.SYSTEM_DN;
-import static pl.edu.icm.unity.ldap.client.LdapProperties.SYSTEM_PASSWORD;
-import static pl.edu.icm.unity.ldap.client.LdapProperties.TLS_TRUST_ALL;
-import static pl.edu.icm.unity.ldap.client.LdapProperties.TRANSLATION_PROFILE;
-import static pl.edu.icm.unity.ldap.client.LdapProperties.TRUSTSTORE;
-import static pl.edu.icm.unity.ldap.client.LdapProperties.USER_DN_SEARCH_KEY;
-import static pl.edu.icm.unity.ldap.client.LdapProperties.USER_DN_TEMPLATE;
-import static pl.edu.icm.unity.ldap.client.LdapProperties.VALID_USERS_FILTER;
+import static pl.edu.icm.unity.ldap.client.config.LdapProperties.ADV_SEARCH_ATTRIBUTES;
+import static pl.edu.icm.unity.ldap.client.config.LdapProperties.ADV_SEARCH_BASE;
+import static pl.edu.icm.unity.ldap.client.config.LdapProperties.ADV_SEARCH_FILTER;
+import static pl.edu.icm.unity.ldap.client.config.LdapProperties.ADV_SEARCH_PFX;
+import static pl.edu.icm.unity.ldap.client.config.LdapProperties.ATTRIBUTES;
+import static pl.edu.icm.unity.ldap.client.config.LdapProperties.BIND_AS;
+import static pl.edu.icm.unity.ldap.client.config.LdapProperties.BIND_ONLY;
+import static pl.edu.icm.unity.ldap.client.config.LdapProperties.CONNECTION_MODE;
+import static pl.edu.icm.unity.ldap.client.config.LdapProperties.GROUPS_BASE_NAME;
+import static pl.edu.icm.unity.ldap.client.config.LdapProperties.GROUP_DEFINITION_MATCHBY_MEMBER_ATTR;
+import static pl.edu.icm.unity.ldap.client.config.LdapProperties.GROUP_DEFINITION_MEMBER_ATTR;
+import static pl.edu.icm.unity.ldap.client.config.LdapProperties.GROUP_DEFINITION_NAME_ATTR;
+import static pl.edu.icm.unity.ldap.client.config.LdapProperties.GROUP_DEFINITION_OC;
+import static pl.edu.icm.unity.ldap.client.config.LdapProperties.GROUP_DEFINITION_PFX;
+import static pl.edu.icm.unity.ldap.client.config.LdapProperties.MEMBER_OF_ATTRIBUTE;
+import static pl.edu.icm.unity.ldap.client.config.LdapProperties.MEMBER_OF_GROUP_ATTRIBUTE;
+import static pl.edu.icm.unity.ldap.client.config.LdapProperties.PORTS;
+import static pl.edu.icm.unity.ldap.client.config.LdapProperties.PREFIX;
+import static pl.edu.icm.unity.ldap.client.config.LdapProperties.SERVERS;
+import static pl.edu.icm.unity.ldap.client.config.LdapProperties.SYSTEM_DN;
+import static pl.edu.icm.unity.ldap.client.config.LdapProperties.SYSTEM_PASSWORD;
+import static pl.edu.icm.unity.ldap.client.config.LdapProperties.TLS_TRUST_ALL;
+import static pl.edu.icm.unity.ldap.client.config.LdapProperties.TRUSTSTORE;
+import static pl.edu.icm.unity.ldap.client.config.LdapProperties.USER_DN_SEARCH_KEY;
+import static pl.edu.icm.unity.ldap.client.config.LdapProperties.USER_DN_TEMPLATE;
+import static pl.edu.icm.unity.ldap.client.config.LdapProperties.VALID_USERS_FILTER;
+import static pl.edu.icm.unity.webui.authn.CommonWebAuthnProperties.TRANSLATION_PROFILE;
 
 import java.util.Map;
+import java.util.Optional;
 import java.util.Properties;
 import java.util.regex.Pattern;
 
@@ -49,16 +50,18 @@ import org.junit.Test;
 import com.unboundid.ldap.listener.InMemoryDirectoryServer;
 import com.unboundid.ldap.sdk.LDAPException;
 
+import eu.emi.security.authn.x509.impl.KeystoreCredential;
+import eu.unicore.util.httpclient.ServerHostnameCheckingMode;
 import pl.edu.icm.unity.engine.api.PKIManagement;
 import pl.edu.icm.unity.engine.api.authn.remote.RemoteAttribute;
 import pl.edu.icm.unity.engine.api.authn.remote.RemoteGroupMembership;
 import pl.edu.icm.unity.engine.api.authn.remote.RemotelyAuthenticatedInput;
 import pl.edu.icm.unity.ldap.client.LdapAuthenticationException;
 import pl.edu.icm.unity.ldap.client.LdapClient;
-import pl.edu.icm.unity.ldap.client.LdapClientConfiguration;
-import pl.edu.icm.unity.ldap.client.LdapProperties;
 import pl.edu.icm.unity.ldap.client.LdapUtils;
-import pl.edu.icm.unity.ldap.client.LdapProperties.BindAs;
+import pl.edu.icm.unity.ldap.client.config.LdapClientConfiguration;
+import pl.edu.icm.unity.ldap.client.config.LdapProperties;
+import pl.edu.icm.unity.ldap.client.config.LdapProperties.BindAs;
 
 public class LdapTest
 {
@@ -73,7 +76,10 @@ public class LdapTest
 	@BeforeClass
 	public static void startEmbeddedServer() throws Exception
 	{
-		EmbeddedDirectoryServer embeddedDirectoryServer = new EmbeddedDirectoryServer();
+		KeystoreCredential credential = new KeystoreCredential("src/test/resources/pki/demo-localhost.p12", 
+				"the!unity".toCharArray(), "the!unity".toCharArray(), "unity-demo", "PKCS12");
+		EmbeddedDirectoryServer embeddedDirectoryServer = new EmbeddedDirectoryServer(credential, 
+				"src/test/resources", ServerHostnameCheckingMode.WARN);
 		ds = embeddedDirectoryServer.startEmbeddedServer();
 		hostname = embeddedDirectoryServer.getPlainConnection().getConnectedAddress();
 		port = embeddedDirectoryServer.getPlainConnection().getConnectedPort()+"";
@@ -592,6 +598,27 @@ public class LdapTest
 		assertEquals(1, ret.getAttributes().size());
 		assertTrue(containsAttribute(ret.getAttributes(), "ou", "grant2"));
 	}	
+	
+	@Test
+	public void shouldSearchSingleAttributeWhenUsingBindsAsSystem() throws Exception
+	{
+		Properties p = new Properties();
+		p.setProperty(PREFIX+SERVERS+"1", hostname);
+		p.setProperty(PREFIX+PORTS+"1", port);
+		p.setProperty(PREFIX+USER_DN_TEMPLATE, "cn={USERNAME},ou=users,dc=unity-example,dc=com");
+		p.setProperty(PREFIX+ATTRIBUTES+"1", "sn");
+
+		p.setProperty(PREFIX+BIND_AS, "system");
+		p.setProperty(PREFIX+SYSTEM_DN, "cn=user1,ou=users,dc=unity-example,dc=com");
+		p.setProperty(PREFIX+SYSTEM_PASSWORD, "user1");	
+		
+		LdapProperties lp = new LdapProperties(p);
+		LdapClientConfiguration clientConfig = new LdapClientConfiguration(lp, pkiManagement);
+		LdapClient client = new LdapClient("test");
+		Optional<String> ret = client.searchAttribute("user1", "sn", clientConfig);
+
+		assertEquals("User1 surname", ret.get());
+	}
 	
 	
 	private boolean containsGroup(Map<String, RemoteGroupMembership> groups, String group)

@@ -4,52 +4,42 @@
  */
 package pl.edu.icm.unity.engine.attribute;
 
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.stream.Collectors;
-
+import com.google.common.collect.ImmutableMap;
+import org.apache.logging.log4j.Logger;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
-
-import com.google.common.collect.Lists;
-
+import pl.edu.icm.unity.base.capacityLimit.CapacityLimitName;
+import pl.edu.icm.unity.base.utils.Log;
 import pl.edu.icm.unity.engine.api.attributes.AttributeClassHelper;
 import pl.edu.icm.unity.engine.api.attributes.AttributeMetadataProvider;
 import pl.edu.icm.unity.engine.api.attributes.AttributeMetadataProvidersRegistry;
 import pl.edu.icm.unity.engine.api.attributes.AttributeValueSyntax;
 import pl.edu.icm.unity.engine.api.identity.EntityResolver;
-import pl.edu.icm.unity.exceptions.EngineException;
-import pl.edu.icm.unity.exceptions.IllegalAttributeTypeException;
-import pl.edu.icm.unity.exceptions.IllegalAttributeValueException;
-import pl.edu.icm.unity.exceptions.IllegalGroupValueException;
-import pl.edu.icm.unity.exceptions.IllegalIdentityValueException;
-import pl.edu.icm.unity.exceptions.IllegalTypeException;
-import pl.edu.icm.unity.exceptions.SchemaConsistencyException;
-import pl.edu.icm.unity.exceptions.WrongArgumentException;
+import pl.edu.icm.unity.engine.api.mvel.CachingMVELGroupProvider;
+import pl.edu.icm.unity.engine.audit.AuditEventTrigger;
+import pl.edu.icm.unity.engine.audit.AuditEventTrigger.AuditEventTriggerBuilder;
+import pl.edu.icm.unity.engine.audit.AuditPublisher;
+import pl.edu.icm.unity.engine.capacityLimits.InternalCapacityLimitVerificator;
+import pl.edu.icm.unity.engine.credential.CredentialAttributeTypeProvider;
+import pl.edu.icm.unity.exceptions.*;
 import pl.edu.icm.unity.stdext.attr.StringAttribute;
-import pl.edu.icm.unity.store.api.AttributeDAO;
-import pl.edu.icm.unity.store.api.AttributeTypeDAO;
-import pl.edu.icm.unity.store.api.EntityDAO;
-import pl.edu.icm.unity.store.api.GroupDAO;
-import pl.edu.icm.unity.store.api.IdentityDAO;
-import pl.edu.icm.unity.store.api.MembershipDAO;
+import pl.edu.icm.unity.store.api.*;
 import pl.edu.icm.unity.store.api.generic.AttributeClassDB;
 import pl.edu.icm.unity.store.types.StoredAttribute;
-import pl.edu.icm.unity.types.basic.Attribute;
-import pl.edu.icm.unity.types.basic.AttributeExt;
-import pl.edu.icm.unity.types.basic.AttributeType;
-import pl.edu.icm.unity.types.basic.AttributesClass;
-import pl.edu.icm.unity.types.basic.EntityInformation;
-import pl.edu.icm.unity.types.basic.EntityParam;
-import pl.edu.icm.unity.types.basic.EntityState;
-import pl.edu.icm.unity.types.basic.Identity;
+import pl.edu.icm.unity.types.basic.*;
+import pl.edu.icm.unity.types.basic.audit.AuditEventAction;
+import pl.edu.icm.unity.types.basic.audit.AuditEventTag;
+import pl.edu.icm.unity.types.basic.audit.AuditEventType;
 import pl.edu.icm.unity.types.confirmation.ConfirmationInfo;
 import pl.edu.icm.unity.types.confirmation.VerifiableElement;
+
+import java.util.*;
+import java.util.stream.Collectors;
+
+import static java.util.Collections.emptyList;
+import static java.util.Collections.singletonList;
+import static java.util.stream.Collectors.toList;
+import static pl.edu.icm.unity.types.basic.audit.AuditEventTag.AUTHN;
 
 /**
  * Attributes and ACs related operations, intended for reuse between other classes.
@@ -59,20 +49,23 @@ import pl.edu.icm.unity.types.confirmation.VerifiableElement;
 @Component
 public class AttributesHelper
 {
-	private AttributeMetadataProvidersRegistry atMetaProvidersRegistry;
-	private AttributeClassDB acDB;
-	private AttributeClassUtil acUtil;
-	private IdentityDAO identityDAO;
-	private EntityDAO entityDAO;
-	private EntityResolver idResolver;
-	private AttributeTypeDAO attributeTypeDAO;
-	private AttributeDAO attributeDAO;
-	private MembershipDAO membershipDAO;
-	private AttributeStatementProcessor statementsHelper;
-	private AttributeTypeHelper atHelper;
-	private GroupDAO groupDAO;
+	private static final Logger log = Log.getLogger(Log.U_SERVER_CORE,	AttributesHelper.class);
+
 	
-	
+	private final AttributeMetadataProvidersRegistry atMetaProvidersRegistry;
+	private final AttributeClassDB acDB;
+	private final AttributeClassUtil acUtil;
+	private final IdentityDAO identityDAO;
+	private final EntityDAO entityDAO;
+	private final EntityResolver idResolver;
+	private final AttributeTypeDAO attributeTypeDAO;
+	private final AttributeDAO attributeDAO;
+	private final MembershipDAO membershipDAO;
+	private final AttributeStatementProcessor statementsHelper;
+	private final AttributeTypeHelper atHelper;
+	private final AuditPublisher audit;
+	private final InternalCapacityLimitVerificator capacityLimitVerificator;
+	private final PublicAttributeRegistry attrRegistry;
 	
 	@Autowired
 	public AttributesHelper(AttributeMetadataProvidersRegistry atMetaProvidersRegistry,
@@ -81,7 +74,8 @@ public class AttributesHelper
 			AttributeTypeDAO attributeTypeDAO, AttributeDAO attributeDAO,
 			MembershipDAO membershipDAO, AttributeStatementProcessor statementsHelper,
 			AttributeTypeHelper atHelper, AttributeClassUtil acUtil,
-			GroupDAO groupDAO)
+			AuditPublisher audit,
+			InternalCapacityLimitVerificator capacityLimitVerificator)
 	{
 		this.atMetaProvidersRegistry = atMetaProvidersRegistry;
 		this.acDB = acDB;
@@ -94,44 +88,9 @@ public class AttributesHelper
 		this.statementsHelper = statementsHelper;
 		this.atHelper = atHelper;
 		this.acUtil = acUtil;
-		this.groupDAO = groupDAO;
-	}
-
-	/**
-	 * See {@link #getAllAttributes(long, String, String, SqlSession)}, the only difference is that the result
-	 * is returned in a map indexed with groups (1st key) and attribute names (submap key).
-	 * @param entityId
-	 * @param groupPath
-	 * @param attributeTypeName
-	 * @return
-	 * @throws EngineException 
-	 * @throws WrongArgumentException 
-	 */
-	public Map<String, Map<String, AttributeExt>> getAllAttributesAsMap(long entityId, String groupPath, 
-			boolean effective, String attributeTypeName) 
-			throws EngineException
-	{
-		Map<String, Map<String, AttributeExt>> directAttributesByGroup = getAllEntityAttributesMap(entityId);
-		if (!effective)
-		{
-			filterMap(directAttributesByGroup, groupPath, attributeTypeName);
-			return directAttributesByGroup;
-		}
-		Set<String> allGroups = membershipDAO.getEntityMembershipSimple(entityId);
-		List<String> groups = groupPath == null ? new ArrayList<>(allGroups) : Lists.newArrayList(groupPath);
-		Map<String, Map<String, AttributeExt>> ret = new HashMap<>();
-		
-		Map<String, AttributesClass> allClasses = acDB.getAllAsMap();
-		
-		List<Identity> identities = identityDAO.getByEntity(entityId);
-		for (String group: groups)
-		{
-			Map<String, AttributeExt> inGroup = statementsHelper.getEffectiveAttributes(identities, 
-					group, attributeTypeName, allGroups, directAttributesByGroup, allClasses,
-					groupDAO::get, attributeTypeDAO::get);
-			ret.put(group, inGroup);
-		}
-		return ret;
+		this.audit = audit;
+		this.capacityLimitVerificator = capacityLimitVerificator;
+		this.attrRegistry = new PublicAttributeRegistry(attributeDAO, atHelper);
 	}
 
 	public Map<String, AttributeExt> getAllAttributesAsMapOneGroup(long entityId, String groupPath) 
@@ -139,59 +98,20 @@ public class AttributesHelper
 	{
 		if (groupPath == null)
 			throw new IllegalArgumentException("For this method group must be specified");
-		Map<String, Map<String, AttributeExt>> asMap = getAllAttributesAsMap(entityId, groupPath, true, null);
-		return asMap.get(groupPath);
+		return getEntityAttributesInGroupAsMap(entityId, groupPath, null);
 	}
-
+	
 	/**
-	 * @param entityId
-	 * @param atMapper
-	 * @param gMapper
-	 * @return map indexed with groups. Values are maps of all attributes in all groups, indexed with their names.
-	 * @throws IllegalTypeException
-	 * @throws IllegalGroupValueException
+	 * @return single attribute of a given entity in a given group.
 	 */
-	private Map<String, Map<String, AttributeExt>> getAllEntityAttributesMap(long entityId) 
-			throws IllegalTypeException, IllegalGroupValueException
+	public AttributeExt getAttributeOneGroup(long entityId, String groupPath, String attributeTypeName) throws EngineException
 	{
-		List<StoredAttribute> attributes = attributeDAO.getAttributes(null, entityId, null);
-		Map<String, Map<String, AttributeExt>> ret = new HashMap<>();
-		for (StoredAttribute attribute: attributes)
-		{
-			Map<String, AttributeExt> attrsInGroup = ret.get(attribute.getAttribute().getGroupPath());
-			if (attrsInGroup == null)
-			{
-				attrsInGroup = new HashMap<>();
-				ret.put(attribute.getAttribute().getGroupPath(), attrsInGroup);
-			}
-			attrsInGroup.put(attribute.getAttribute().getName(), attribute.getAttribute());
-		}
-		return ret;
+		if (groupPath == null)
+			throw new IllegalArgumentException("For this method group must be specified");
+		if (attributeTypeName == null)
+			throw new IllegalArgumentException("For this method attribute name must be specified");
+		return getEntityAttributesInGroupAsMap(entityId, groupPath, attributeTypeName).get(attributeTypeName);
 	}
-	
-	private void filterMap(Map<String, Map<String, AttributeExt>> directAttributesByGroup,
-			String groupPath, String attributeTypeName)
-	{
-		if (groupPath != null)
-		{
-			Map<String, AttributeExt> v = directAttributesByGroup.get(groupPath); 
-			directAttributesByGroup.clear();
-			if (v != null)
-				directAttributesByGroup.put(groupPath, v);
-		}
-		
-		if (attributeTypeName != null)
-		{
-			for (Map<String, AttributeExt> e: directAttributesByGroup.values())
-			{
-				AttributeExt at = e.get(attributeTypeName);
-				e.clear();
-				if (at != null)
-					e.put(attributeTypeName, at);
-			}
-		}
-	}
-	
 
 	/**
 	 * Returns {@link AttributeType} which has the given metadata set. The metadata used as parameter must be
@@ -218,19 +138,24 @@ public class AttributesHelper
 		if (at == null)
 			return null;
 		long entityId = idResolver.getEntityId(entity);
-		Collection<AttributeExt> ret = getAllAttributesInternal(entityId, true, 
-				group, at.getName(), true);
-		return ret.size() == 1 ? ret.iterator().next() : null; 
+		return getAttributeOneGroup(entityId, group, at.getName());
+	}
+
+	public String getAttributeValueByMetadata(EntityParam entity, String group, String metadataId)
+			throws EngineException
+	{
+		AttributeExt attribute = getAttributeByMetadata(entity, group, metadataId);
+		if (attribute == null)
+			return null;
+		List<?> values = attribute.getValues();
+		if (values.isEmpty())
+			return null;
+		return values.get(0).toString();
 	}
 
 	
 	/**
 	 * Sets ACs of a given entity. Pure business logic - no authZ and transaction management.
-	 * @param entityId
-	 * @param group
-	 * @param classes
-	 * @param sql
-	 * @throws EngineException
 	 */
 	public void setAttributeClasses(long entityId, String group, Collection<String> classes) 
 			throws EngineException
@@ -239,8 +164,8 @@ public class AttributesHelper
 		
 		List<AttributeExt> attributes = attributeDAO.getEntityAttributes(entityId, null, group);
 		Collection<String> attributeNames = attributes.stream().
-				map(a -> a.getName()).
-				collect(Collectors.toList());
+				map(Attribute::getName).
+				collect(toList());
 		Map<String, AttributeType> allTypes = attributeTypeDAO.getAllAsMap();
 		acHelper.checkAttribtues(attributeNames, allTypes);
 
@@ -250,8 +175,16 @@ public class AttributesHelper
 	}
 	
 	
-	public Collection<AttributeExt> getAllAttributesInternal(long entityId, 
+	public Collection<AttributeExt> getAttributesInternal(long entityId, 
 			boolean effective, String groupPath, String attributeTypeName, 
+			boolean allowDisabled) throws EngineException
+	{
+		List<String> groupsPaths = groupPath != null ? singletonList(groupPath) : emptyList();
+		return getAttributesInternal(entityId, effective, groupsPaths, attributeTypeName, allowDisabled);
+	}
+
+	public Collection<AttributeExt> getAttributesInternal(long entityId,
+			boolean effective, List<String> groupsPaths, String attributeTypeName,
 			boolean allowDisabled) throws EngineException
 	{
 		if (!allowDisabled)
@@ -260,21 +193,27 @@ public class AttributesHelper
 			if (entityInformation.getEntityState() == EntityState.disabled)
 				throw new IllegalIdentityValueException("The entity is disabled");
 		}
-		if (groupPath != null)
+		if (groupsPaths != null)
 		{
 			Set<String> allGroups = membershipDAO.getEntityMembershipSimple(entityId);
-			if (!allGroups.contains(groupPath))
-				throw new IllegalGroupValueException("The entity is not a member of the group " 
-						+ groupPath);
+			if (!allGroups.containsAll(groupsPaths))
+				throw new IllegalGroupValueException("The entity is not a member of the group "
+					+ groupsPaths);
 		}
-		return getAllAttributes(entityId, groupPath, effective, attributeTypeName);
+		return getAllAttributes(entityId, groupsPaths, effective, attributeTypeName);
 	}
-	
-	public Collection<AttributeExt> getAllAttributes(long entityId, String groupPath, boolean effective, 
+
+	public AttributeExt getEffectiveAttributeOneGroup(long entityId, String groupPath, 
 			String attributeTypeName) throws EngineException
 	{
-		Map<String, Map<String, AttributeExt>> asMap = getAllAttributesAsMap(entityId, groupPath, effective, 
-				attributeTypeName);
+		return getAttributeOneGroup(entityId, groupPath, attributeTypeName);
+	}
+
+	public Collection<AttributeExt> getAllAttributes(long entityId, List<String> groupsPaths, boolean effective,
+	                                                 String attributeTypeName) throws EngineException
+	{
+		Map<String, Map<String, AttributeExt>> asMap = getEntityAttributesAsMap(entityId, groupsPaths, effective,
+			attributeTypeName);
 		List<AttributeExt> ret = new ArrayList<>();
 		for (Map<String, AttributeExt> entry: asMap.values())
 			ret.addAll(entry.values());
@@ -295,20 +234,17 @@ public class AttributesHelper
 	/**
 	 * Adds an attribute. This method performs engine level checks: whether the attribute type is not immutable,
 	 * and properly sets unverified state if attribute is added by ordinary user (not an admin).
-	 * <p>
 	 * 
-	 * @param entityId
-	 * @param update
-	 * @param at
 	 * @param honorInitialConfirmation if true then operation is run by privileged user, 
-	 * otherwise it is modification of self 
-	 * possessed attribute and verification status must be set to unverified.
-	 * @param attribute
-	 * @throws EngineException
+	 * otherwise it is modification of self possessed attribute and verification status must be set to unverified.
 	 */
 	public void addAttribute(long entityId, Attribute attribute, AttributeType at, boolean update,
 			boolean honorInitialConfirmation) throws EngineException
 	{
+		if (attribute == null)
+			throw new IllegalArgumentException("Trying to add null attribute for " + entityId);
+		if (at == null)
+			throw new IllegalArgumentException("Trying to add attribute " + attribute.getName() + " without type");
 		if (at.isInstanceImmutable())
 			throw new SchemaConsistencyException("The attribute with name " + at.getName() + 
 					" can not be manually modified");
@@ -328,12 +264,6 @@ public class AttributesHelper
 	
 	/**
 	 * Adds a system attribute. Use only internally.
-	 * 
-	 * @param entityId
-	 * @param update
-	 * @param at
-	 * @param attribute
-	 * @throws EngineException
 	 */
 	public void addSystemAttribute(long entityId, Attribute attribute, AttributeType at, boolean update) 
 			throws EngineException
@@ -353,20 +283,86 @@ public class AttributesHelper
 		StoredAttribute param = new StoredAttribute(aExt, entityId);
 		List<AttributeExt> existing = attributeDAO.getEntityAttributes(entityId, attribute.getName(), 
 				attribute.getGroupPath());
+			
 		if (existing.isEmpty())
 		{
 			if (!membershipDAO.isMember(entityId, attribute.getGroupPath()))
 				throw new IllegalGroupValueException("The entity is not a member "
 						+ "of the group specified in the attribute");
-			attributeDAO.create(param);
+			checkAttributeCapacityLimit(at, aExt);	
+			long createdAttrId = attributeDAO.create(param);
+			attrRegistry.registerAttributeInfo(attribute, createdAttrId);
+			audit.log(getAttrAudit(entityId, attribute, AuditEventAction.ADD));
 		} else
 		{
 			if (!update)
 				throw new IllegalAttributeValueException("The attribute already exists");
 			AttributeExt updated = existing.get(0);
 			param.getAttribute().setCreationTs(updated.getCreationTs());
+			checkAttributeCapacityLimit(at, aExt);
 			attributeDAO.updateAttribute(param);
+			audit.log(getAttrAudit(entityId, attribute, AuditEventAction.UPDATE));
 		}
+	}
+
+	private void checkAttributeCapacityLimit(AttributeType at, Attribute attr) throws CapacityLimitReachedException
+	{
+
+		if (isSystemAttribute(at))
+			return;
+
+		capacityLimitVerificator.assertInSystemLimitForSingleAdd(CapacityLimitName.AttributesCount,
+				() -> attributeDAO.getCountWithoutType(attributeTypeDAO.getAllAsMap().values().stream()
+						.filter(t -> isSystemAttribute(t)).map(t -> t.getName())
+						.collect(toList())));
+		capacityLimitVerificator.assertInSystemLimit(CapacityLimitName.AttributeValuesCount,
+				() -> Long.valueOf(attr.getValues().size()));
+		capacityLimitVerificator.assertInSystemLimit(CapacityLimitName.AttributeCumulativeValuesSize,
+				() -> Long.valueOf(attr.getValues().stream().filter(v -> v != null)
+						.mapToInt(String::length).sum()));
+
+		for (String v : attr.getValues())
+		{
+			if (v != null)
+				capacityLimitVerificator.assertInSystemLimit(CapacityLimitName.AttributeValueSize,
+						() -> Long.valueOf(v.length()));
+		}
+
+	}
+	
+	private boolean isSystemAttribute(AttributeType at)
+	{
+		return at.isInstanceImmutable() || at.isTypeImmutable();
+	}
+	
+	private AuditEventTriggerBuilder getAttrAudit(long entityId, Attribute attribute, AuditEventAction action)
+	{
+		return AuditEventTrigger.builder()
+				.type(AuditEventType.ATTRIBUTE)
+				.action(action)
+				.name(attribute.getName())
+				.subject(entityId)
+				.details(ImmutableMap.of("group", attribute.getGroupPath(),
+						"value", getTrimmedFirstValue(attribute)))
+				.tags(AuditEventTag.USERS);
+	}
+	
+	private String getTrimmedFirstValue(Attribute attr)
+	{
+		if (attr.getValues().isEmpty())
+			return "-NONE-";
+		
+		final int showLength = 30;
+		String fValue = attr.getValues().get(0);
+		AttributeValueSyntax<?> syntax = atHelper.getUnconfiguredSyntax(attr.getValueSyntax());
+		String deserialized = internalValueToExternal(syntax, fValue);
+		return deserialized.length() > showLength ? deserialized.substring(0, showLength-3) + "..." : deserialized;
+	}
+	
+	private <T> String internalValueToExternal(AttributeValueSyntax<T> syntax, String internalValue)
+	{
+		T deserialized = syntax.convertFromString(internalValue);
+		return syntax.serializeSimple(deserialized);
 	}
 	
 	/**
@@ -379,8 +375,6 @@ public class AttributesHelper
 	 * <p>
 	 * What is more it is checked in case of attribute update, when there is no-admin mode if the attribute 
 	 * being updated had at least one confirmed value. If yes, also at least one confirmed value must be preserved. 
-	 * 
-	 * @throws EngineException 
 	 */
 	@SuppressWarnings("unchecked")
 	private void enforceCorrectConfirmationState(long entityId, boolean update,
@@ -479,7 +473,6 @@ public class AttributesHelper
 	
 	/**
 	 * Checks if the given set of attributes fulfills rules of ACs of a specified group 
-	 * @throws EngineException 
 	 */
 	public void checkGroupAttributeClassesConsistency(List<Attribute> attributes, String path) 
 			throws EngineException
@@ -495,12 +488,6 @@ public class AttributesHelper
 	 * Same as {@link #addAttribute(SqlSession, long, boolean, AttributeType, boolean, Attribute)}
 	 * but for a whole list of attributes. It is assumed that attributes are always created. 
 	 * Attribute type is automatically resolved.
-	 *   
-	 * @param attributes
-	 * @param entityId
-	 * @param honorInitialConfirmation
-	 * @param sqlMap
-	 * @throws EngineException
 	 */
 	public void addAttributesList(List<Attribute> attributes, long entityId, boolean honorInitialConfirmation) 
 			throws EngineException
@@ -512,8 +499,6 @@ public class AttributesHelper
 	
 	/**
 	 * Creates or updates an attribute. No schema checking is performed.
-	 * @param toCreate
-	 * @param entityId
 	 */
 	public void createOrUpdateAttribute(Attribute toCreate, long entityId)
 	{
@@ -521,18 +506,35 @@ public class AttributesHelper
 		List<AttributeExt> existing = attributeDAO.getEntityAttributes(entityId, toCreate.getName(), 
 				toCreate.getGroupPath());
 		if (existing.isEmpty())
+		{
 			attributeDAO.create(sAttr);
-		else
+			if (toCreate.getName().startsWith(CredentialAttributeTypeProvider.CREDENTIAL_PREFIX))
+			{
+				audit.log(AuditEventTrigger.builder()
+						.type(AuditEventType.CREDENTIALS)
+						.action(AuditEventAction.ADD)
+						.name(toCreate.getName())
+						.subject(entityId)
+						.tags(AUTHN));
+			}
+		} else
 		{
 			sAttr.getAttribute().setCreationTs(existing.get(0).getCreationTs());
 			attributeDAO.updateAttribute(sAttr);
+			if (toCreate.getName().startsWith(CredentialAttributeTypeProvider.CREDENTIAL_PREFIX))
+			{
+				audit.log(AuditEventTrigger.builder()
+						.type(AuditEventType.CREDENTIALS)
+						.action(AuditEventAction.UPDATE)
+						.name(toCreate.getName())
+						.subject(entityId)
+						.tags(AUTHN));
+			}
 		}
 	}
 	
 	/**
 	 * Creates or updates an attribute. No schema checking is performed.
-	 * @param toCreate
-	 * @param entityId
 	 */
 	public void createAttribute(Attribute toCreate, long entityId)
 	{
@@ -548,10 +550,6 @@ public class AttributesHelper
 	
 	/**
 	 * Checks if the given {@link Attribute} is valid wrt the {@link AttributeType} constraints
-	 * @param attribute
-	 * @param at
-	 * @throws IllegalAttributeValueException
-	 * @throws IllegalAttributeTypeException
 	 */
 	public void validate(Attribute attribute, AttributeType at) 
 			throws IllegalAttributeValueException, IllegalAttributeTypeException
@@ -587,6 +585,189 @@ public class AttributesHelper
 								"Duplicated values detected: " + (i+1) + " and " 
 										+ (j+1));
 				}
+		}
+	}
+	
+	public Optional<VerifiableElementBase> getFirstVerifiableAttributeValueFilteredByMeta(String metadataId,
+			Collection<Attribute> list) throws EngineException
+	{
+		Optional<String> attrName = getAttributeName(metadataId);
+		if (!attrName.isPresent())
+			return Optional.empty();
+		return convertToVerifiableAttributeValue(attrName.get(),
+				getFirstValueOfAttributeFilteredByName(attrName.get(), list));
+	}
+	
+	private Optional<String> getAttributeName(String metadata) throws EngineException
+	{
+		AttributeType attrType = getAttributeTypeWithSingeltonMetadata(metadata);
+		if (attrType == null)
+			return Optional.empty();
+
+		return Optional.of(attrType.getName());
+	}
+	
+	private Optional<VerifiableElementBase> convertToVerifiableAttributeValue(String attributeName, Optional<String> value)
+	{
+		if (!value.isPresent())
+		{
+			return Optional.empty();
+		}
+		
+		AttributeValueSyntax<?> attributeSyntax = getAttributeSyntaxNotThrowing(attributeName);
+		
+		if (attributeSyntax != null && attributeSyntax.isEmailVerifiable())
+		{
+			return Optional.of((VerifiableElementBase) attributeSyntax.convertFromString(value.get()));
+		}else
+		{
+			return Optional.of(new VerifiableElementBase(value.get()));
+		}
+	}
+	
+	private AttributeValueSyntax<?> getAttributeSyntaxNotThrowing(String attributeName)
+	{
+		try
+		{
+			return atHelper.getUnconfiguredSyntaxForAttributeName(attributeName);
+		} catch (Exception e)
+		{
+			// ok
+			log.debug("Can not get attribute syntax for attribute " + attributeName);
+			return null;
+		}
+	}
+
+	public Optional<String> getFirstValueOfAttributeFilteredByMeta(String metadataId, Collection<Attribute> list) throws EngineException
+	{
+		Optional<String> attrName = getAttributeName(metadataId);
+		if (!attrName.isPresent())
+			return Optional.empty();
+
+		return getFirstValueOfAttributeFilteredByName(attrName.get(), list);
+	}
+	
+	private Optional<String> getFirstValueOfAttributeFilteredByName(String attrName, Collection<Attribute> list) throws EngineException
+	{
+		for (Attribute attr : list)
+		{
+			if (attr.getName().equals(attrName) && attr.getValues() != null && !attr.getValues().isEmpty())
+			{
+				return Optional.ofNullable(attr.getValues().get(0));
+			}
+		}
+		return Optional.empty();
+		
+	}
+	
+
+	
+	/**
+	 * See {@link #getAllAttributes(long, String, String, SqlSession)}, the only difference is that the result
+	 * is returned in a map indexed with groups (1st key) and attribute names (submap key).
+	 */
+	private Map<String, Map<String, AttributeExt>> getEntityAttributesAsMap(long entityId, List<String> groupsPaths,
+			boolean effective, String attributeTypeName) throws EngineException
+	{
+		Map<String, Map<String, AttributeExt>> directAttributesByGroup = getAllEntityAttributesMap(entityId);
+		if (!effective)
+		{
+			groupsPaths.forEach(g -> filterMap(directAttributesByGroup, g, attributeTypeName));
+			return directAttributesByGroup;
+		}
+		Map<String, Group> allUserGroupsMap = membershipDAO.getEntityMembershipGroups(entityId).stream()
+				.collect(Collectors.toMap(g -> g.getPathEncoded(), g -> g));
+		
+		List<String> groups = groupsPaths.isEmpty() ? 
+				new ArrayList<>(allUserGroupsMap.keySet()) 
+				: groupsPaths.stream().filter(allUserGroupsMap::containsKey).collect(Collectors.toList());
+		
+		Map<String, Map<String, AttributeExt>> ret = new HashMap<>();
+
+		Map<String, AttributesClass> allClasses = acDB.getAllAsMap();
+
+		List<Identity> identities = identityDAO.getByEntity(entityId);
+		Collection<Group> allUserGroups = allUserGroupsMap.values();
+		CachingMVELGroupProvider mvelGroupProvider = new CachingMVELGroupProvider(allUserGroupsMap);
+		for (String group: groups)
+		{
+			if (!allUserGroupsMap.containsKey(group))
+				continue;
+			Map<String, AttributeExt> inGroup = statementsHelper.getEffectiveAttributes(identities, group,
+					attributeTypeName, 
+					allUserGroups,
+					directAttributesByGroup, 
+					allClasses, 
+					allUserGroupsMap::get,
+					attributeTypeDAO::get, 
+					mvelGroupProvider::get);
+			ret.put(group, inGroup);
+		}
+		return ret;
+	}
+
+	/**
+	 * Returns map of attributes of a given entity in a given group, indexed by attribute names.
+	 */
+	private Map<String, AttributeExt> getEntityAttributesInGroupAsMap(long entityId, String groupPath,
+			String attributeTypeName) throws EngineException
+	{
+		Map<String, Map<String, AttributeExt>> directAttributesByGroup = getAllEntityAttributesMap(entityId);
+		Map<String, Group> allUserGroups = membershipDAO.getEntityMembershipGroups(entityId).stream()
+				.collect(Collectors.toMap(g -> g.getPathEncoded(), g -> g));
+		if (!allUserGroups.containsKey(groupPath))
+			return Collections.emptyMap();
+		Map<String, AttributesClass> allClasses = acDB.getAllAsMap();
+		List<Identity> identities = identityDAO.getByEntity(entityId);
+
+		CachingMVELGroupProvider mvelGroupProvider = new CachingMVELGroupProvider(allUserGroups);
+
+		return statementsHelper.getEffectiveAttributes(identities, groupPath,
+					attributeTypeName, 
+					allUserGroups.values(),
+					directAttributesByGroup, 
+					allClasses,
+					allUserGroups::get,
+					attributeTypeDAO::get, 
+					mvelGroupProvider::get);
+	}
+
+	/**
+	 * @return map indexed with groups. Values are maps of all attributes in given group, indexed with attribute names.
+	 */
+	public Map<String, Map<String, AttributeExt>> getAllEntityAttributesMap(long entityId)
+			throws IllegalTypeException, IllegalGroupValueException
+	{
+		List<StoredAttribute> attributes = attributeDAO.getAttributes(null, entityId, null);
+		Map<String, Map<String, AttributeExt>> ret = new HashMap<>();
+		for (StoredAttribute attribute: attributes)
+		{
+			Map<String, AttributeExt> attrsInGroup = ret.computeIfAbsent(attribute.getAttribute().getGroupPath(), k -> new HashMap<>());
+			attrsInGroup.put(attribute.getAttribute().getName(), attribute.getAttribute());
+		}
+		return ret;
+	}
+	
+	private void filterMap(Map<String, Map<String, AttributeExt>> directAttributesByGroup,
+			String groupPath, String attributeTypeName)
+	{
+		if (groupPath != null)
+		{
+			Map<String, AttributeExt> v = directAttributesByGroup.get(groupPath); 
+			directAttributesByGroup.clear();
+			if (v != null)
+				directAttributesByGroup.put(groupPath, v);
+		}
+		
+		if (attributeTypeName != null)
+		{
+			for (Map<String, AttributeExt> e: directAttributesByGroup.values())
+			{
+				AttributeExt at = e.get(attributeTypeName);
+				e.clear();
+				if (at != null)
+					e.put(attributeTypeName, at);
+			}
 		}
 	}
 }

@@ -82,7 +82,7 @@ import pl.edu.icm.unity.exceptions.WrongArgumentException;
 @Component
 public class JettyServer implements Lifecycle, NetworkServer
 {
-	private static final Logger log = Log.getLogger(Log.U_SERVER, UnityApplication.class);
+	private static final Logger log = Log.getLogger(Log.U_SERVER_CORE, UnityApplication.class);
 	private List<WebAppEndpointInstance> deployedEndpoints;
 	private Map<String, ServletContextHandler> usedContextPaths;
 	private ContextHandlerCollection mainContextHandler;
@@ -96,10 +96,11 @@ public class JettyServer implements Lifecycle, NetworkServer
 	private Server theServer;
 	
 	@Autowired
-	public JettyServer(UnityServerConfiguration cfg, PKIManagement pkiManagement)
+	public JettyServer(UnityServerConfiguration cfg, PKIManagement pkiManagement,
+			ListeningUrlsProvider listenUrlsProvider)
 	{
 		this.securityConfiguration = pkiManagement.getMainAuthnAndTrust();
-		this.listenUrls = createURLs(cfg.getJettyProperties());
+		this.listenUrls = listenUrlsProvider.getListenUrls();
 		this.serverSettings = cfg.getJettyProperties();
 		this.cfg = cfg;
 		initServer();
@@ -311,7 +312,7 @@ public class JettyServer implements Lifecycle, NetworkServer
 	protected SecuredServerConnector getSecuredConnectorInstance() throws ConfigurationException
 	{
 		HttpConnectionFactory httpConnFactory = getHttpConnectionFactory();
-		SslContextFactory secureContextFactory;
+		SslContextFactory.Server secureContextFactory;
 		try
 		{
 			secureContextFactory = SecuredServerConnector.createContextFactory(
@@ -333,9 +334,15 @@ public class JettyServer implements Lifecycle, NetworkServer
 		log.debug("Creating SSL NIO connector on: " + url);
 		SecuredServerConnector ssl = getSecuredConnectorInstance();
 
-		SslContextFactory factory = ssl.getSslContextFactory();
+		SslContextFactory.Server factory = ssl.getSslContextFactory();
 		factory.setNeedClientAuth(serverSettings.getBooleanValue(UnityHttpServerConfiguration.REQUIRE_CLIENT_AUTHN));
 		factory.setWantClientAuth(serverSettings.getBooleanValue(UnityHttpServerConfiguration.WANT_CLIENT_AUTHN));
+		String disabledProtocols = serverSettings.getValue(UnityHttpServerConfiguration.DISABLED_PROTOCOLS);
+		if (disabledProtocols != null)
+		{
+			disabledProtocols = disabledProtocols.trim();
+			factory.setExcludeProtocols(disabledProtocols.split("[ ]+"));
+		}
 		String disabledCiphers = serverSettings.getValue(UnityHttpServerConfiguration.DISABLED_CIPHER_SUITES);
 		if (disabledCiphers != null)
 		{
@@ -343,7 +350,7 @@ public class JettyServer implements Lifecycle, NetworkServer
 			if (disabledCiphers.length() > 1)
 				factory.setExcludeCipherSuites(disabledCiphers.split("[ ]+"));
 		}
-		log.debug("SSL protocol was set to: '" + factory.getProtocol() + "'");
+		log.info("SSL protocol was set to: '" + factory.getProtocol() + "'");
 		return ssl;
 	}
 
@@ -373,7 +380,7 @@ public class JettyServer implements Lifecycle, NetworkServer
 	 */
 	private ServerConnector createPlainConnector(URL url)
 	{
-		log.debug("Creating plain HTTP connector on: " + url);
+		log.info("Creating plain HTTP connector on: " + url);
 		return getPlainConnectorInstance();
 	}
 
@@ -423,21 +430,6 @@ public class JettyServer implements Lifecycle, NetworkServer
 		theServer.setErrorHandler(new JettyErrorHandler(webContentsDir));
 	}
 	
-	private static URL[] createURLs(UnityHttpServerConfiguration conf)
-	{
-		try
-		{
-			String scheme = conf.getBooleanValue(UnityHttpServerConfiguration.DISABLE_TLS) ? 
-					"http" : "https";
-			return new URL[] {new URL(scheme + "://" + conf.getValue(UnityHttpServerConfiguration.HTTP_HOST) + 
-					":" + conf.getValue(UnityHttpServerConfiguration.HTTP_PORT))};
-		} catch (MalformedURLException e)
-		{
-			throw new ConfigurationException("Can not create server url from host and port parameters: " 
-					+ e.getMessage(), e);
-		}
-	}
-
 	@Override
 	public boolean isRunning()
 	{
@@ -458,7 +450,7 @@ public class JettyServer implements Lifecycle, NetworkServer
 			try
 			{
 				deployHandler(new RedirectHandler(cfg.getValue(
-						UnityServerConfiguration.DEFAULT_WEB_PATH)));
+						UnityServerConfiguration.DEFAULT_WEB_PATH)), "sys:redirect");
 			} catch (EngineException e)
 			{
 				log.error("Cannot deploy redirect handler " + e.getMessage(), e);
@@ -475,7 +467,7 @@ public class JettyServer implements Lifecycle, NetworkServer
 			throws EngineException
 	{
 		ServletContextHandler handler = endpoint.getServletContextHandler();
-		deployHandler(handler);
+		deployHandler(handler, endpoint.getEndpointDescription().getName());
 		deployedEndpoints.add(endpoint);
 	}
 	
@@ -483,7 +475,7 @@ public class JettyServer implements Lifecycle, NetworkServer
 	 * Deploys a simple handler. It is only checked if the context path is free.
 	 */
 	@Override
-	public synchronized void deployHandler(ServletContextHandler handler) 
+	public synchronized void deployHandler(ServletContextHandler handler, String endpointId) 
 			throws EngineException
 	{
 		String contextPath = handler.getContextPath();
@@ -496,7 +488,7 @@ public class JettyServer implements Lifecycle, NetworkServer
 		addDoSFilter(handler);
 		addCORSFilter(handler);
 		
-		Handler wrappedHandler = applyClientIPDiscoveryHandler(handler);
+		Handler wrappedHandler = applyClientIPDiscoveryHandler(handler, endpointId);
 		mainContextHandler.addHandler(wrappedHandler);
 		try
 		{
@@ -507,6 +499,42 @@ public class JettyServer implements Lifecycle, NetworkServer
 			throw new EngineException("Can not start handler", e);
 		}
 		usedContextPaths.put(contextPath, handler);
+	}
+	
+	@Override
+	public synchronized void undeployAllHandlers() throws EngineException
+	{
+		for (ServletContextHandler handler : usedContextPaths.values())
+		{
+			try
+			{
+				handler.stop();
+			} catch (Exception e)
+			{
+				throw new EngineException("Can not stop handler", e);
+			}
+		}
+		usedContextPaths.clear();
+		
+		for (Handler handler : mainContextHandler.getHandlers().clone())
+		{
+			mainContextHandler.removeHandler(handler);
+		}	
+	}
+	
+	@Override
+	public synchronized void undeployHandler(String contextPath) throws EngineException
+	{
+		ServletContextHandler handler = usedContextPaths.get(contextPath);
+		try
+		{
+			handler.stop();
+		} catch (Exception e)
+		{
+			throw new EngineException("Can not stop handler", e);
+		}
+		mainContextHandler.removeHandler(handler);
+		usedContextPaths.remove(handler.getContextPath());
 	}
 	
 	@Override
@@ -539,20 +567,9 @@ public class JettyServer implements Lifecycle, NetworkServer
 	}
 	
 	@Override
-	public URL getAdvertisedAddress()
+	public Set<String> getUsedContextPaths()
 	{
-		String advertisedHost = serverSettings.getValue(UnityHttpServerConfiguration.ADVERTISED_HOST);
-		if (advertisedHost == null)
-			return getUrls()[0];
-		
-		try 
-		{
-			return new URL("https://" + advertisedHost);
-		} catch (MalformedURLException e) 
-		{
-			throw new IllegalStateException("Ups, URL can not " +
-					"be reconstructed, while it should", e);
-		}
+		return usedContextPaths.keySet();
 	}
 	
 	private FilterHolder createDoSFilterInstance()
@@ -625,7 +642,7 @@ public class JettyServer implements Lifecycle, NetworkServer
 	}
 
 
-	private ClientIPSettingHandler applyClientIPDiscoveryHandler(AbstractHandlerContainer baseHandler)
+	private ClientIPSettingHandler applyClientIPDiscoveryHandler(AbstractHandlerContainer baseHandler, String endpointId)
 	{
 		ClientIPDiscovery ipDiscovery = new ClientIPDiscovery(serverSettings.getIntValue(PROXY_COUNT),
 				serverSettings.getBooleanValue(ALLOW_NOT_PROXIED_TRAFFIC));
@@ -633,7 +650,7 @@ public class JettyServer implements Lifecycle, NetworkServer
 				serverSettings.getListOfValues(ALLOWED_IMMEDIATE_CLIENTS));
 		
 		log.info("Enabling client IP discovery filter");
-		ClientIPSettingHandler handler = new ClientIPSettingHandler(ipDiscovery, ipValidator);
+		ClientIPSettingHandler handler = new ClientIPSettingHandler(ipDiscovery, ipValidator, endpointId);
 		handler.setServer(theServer);
 		handler.setHandler(baseHandler);
 		return handler;

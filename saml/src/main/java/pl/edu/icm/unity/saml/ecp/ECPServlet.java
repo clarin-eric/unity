@@ -5,6 +5,7 @@
 package pl.edu.icm.unity.saml.ecp;
 
 import java.io.IOException;
+import java.util.function.Supplier;
 
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServlet;
@@ -14,10 +15,12 @@ import javax.servlet.http.HttpServletResponse;
 import eu.unicore.samly2.validators.ReplayAttackChecker;
 import pl.edu.icm.unity.engine.api.EntityManagement;
 import pl.edu.icm.unity.engine.api.PKIManagement;
-import pl.edu.icm.unity.engine.api.authn.remote.RemoteAuthnResultProcessor;
+import pl.edu.icm.unity.engine.api.authn.remote.RemoteAuthnResultTranslator;
 import pl.edu.icm.unity.engine.api.session.SessionManagement;
 import pl.edu.icm.unity.engine.api.token.TokensManagement;
-import pl.edu.icm.unity.saml.metadata.cfg.RemoteMetaManager;
+import pl.edu.icm.unity.rest.jwt.JWTAuthenticationConfig;
+import pl.edu.icm.unity.saml.metadata.cfg.SPRemoteMetaManager;
+import pl.edu.icm.unity.saml.sp.config.SAMLSPConfiguration;
 import pl.edu.icm.unity.types.authn.AuthenticationRealm;
 
 /**
@@ -30,18 +33,21 @@ import pl.edu.icm.unity.types.authn.AuthenticationRealm;
  */
 public class ECPServlet extends HttpServlet
 {
-	private ECPStep1Handler step1Handler;
-	private ECPStep2Handler step2Handler;
+	private final ECPStep1Handler step1Handler;
+	private final ECPStep2Handler step2Handler;
 
-	public ECPServlet(SAMLECPProperties samlProperties, RemoteMetaManager metadataManager,
+	public ECPServlet(JWTAuthenticationConfig jwtConfig, 
+			Supplier<SAMLSPConfiguration> configProvider,
+			SPRemoteMetaManager metadataManager,
 			ECPContextManagement samlContextManagement, 
 			String myAddress, ReplayAttackChecker replayAttackChecker, 
-			RemoteAuthnResultProcessor remoteAuthnProcessor,
+			RemoteAuthnResultTranslator remoteAuthnProcessor,
 			TokensManagement tokensMan, PKIManagement pkiManagement, EntityManagement identitiesMan,
 			SessionManagement sessionMan, AuthenticationRealm realm, String address)
 	{
-		step1Handler = new ECPStep1Handler(metadataManager, samlContextManagement, myAddress);
-		step2Handler = new ECPStep2Handler(samlProperties, metadataManager, samlContextManagement, myAddress,
+		step1Handler = new ECPStep1Handler(configProvider, metadataManager, samlContextManagement, myAddress);
+		step2Handler = new ECPStep2Handler(jwtConfig, configProvider,
+				metadataManager, samlContextManagement, myAddress,
 				replayAttackChecker, 
 				tokensMan, pkiManagement, remoteAuthnProcessor, 
 				identitiesMan, sessionMan, realm, address);

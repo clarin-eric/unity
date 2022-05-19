@@ -8,10 +8,12 @@
 
 package pl.edu.icm.unity.saml.idp;
 
-import java.io.IOException;
+
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.security.PublicKey;
 import java.security.cert.X509Certificate;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -21,7 +23,9 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import org.apache.log4j.Logger;
+import org.apache.logging.log4j.Logger;
+
+import com.vaadin.server.Resource;
 
 import eu.emi.security.authn.x509.X509CertChainValidator;
 import eu.emi.security.authn.x509.X509Credential;
@@ -38,13 +42,17 @@ import eu.unicore.util.configuration.DocumentationReferenceMeta;
 import eu.unicore.util.configuration.DocumentationReferencePrefix;
 import eu.unicore.util.configuration.PropertyMD;
 import eu.unicore.util.configuration.PropertyMD.DocumentationCategory;
+import pl.edu.icm.unity.MessageSource;
 import pl.edu.icm.unity.base.utils.Log;
 import pl.edu.icm.unity.engine.api.PKIManagement;
 import pl.edu.icm.unity.engine.api.idp.CommonIdPProperties;
+import pl.edu.icm.unity.engine.api.idp.PropertiesTranslationProfileLoader;
 import pl.edu.icm.unity.exceptions.EngineException;
 import pl.edu.icm.unity.exceptions.InternalException;
 import pl.edu.icm.unity.saml.SamlProperties;
 import pl.edu.icm.unity.saml.validator.UnityAuthnRequestValidator;
+import pl.edu.icm.unity.types.translation.TranslationProfile;
+import pl.edu.icm.unity.webui.common.file.ImageAccessService;
 import xmlbeans.org.oasis.saml2.assertion.NameIDType;
 import xmlbeans.org.oasis.saml2.protocol.AuthnRequestType;
 
@@ -55,7 +63,7 @@ import xmlbeans.org.oasis.saml2.protocol.AuthnRequestType;
  */
 public class SamlIdpProperties extends SamlProperties
 {
-	private static final Logger log = Log.getLegacyLogger(SamlIdpProperties.LOG_PFX, SamlIdpProperties.class);
+	private static final Logger log = Log.getLogger(SamlIdpProperties.LOG_PFX, SamlIdpProperties.class);
 	public enum RequestAcceptancePolicy {all, validSigner, validRequester, strict};
 	public enum ResponseSigningPolicy {always, never, asRequest};
 	public enum AssertionSigningPolicy {always, ifResponseUnsigned};
@@ -97,7 +105,9 @@ public class SamlIdpProperties extends SamlProperties
 	public static final String USER_EDIT_CONSENT = "userCanEditConsent";
 	
 	public static final String DEFAULT_TRANSLATION_PROFILE = "sys:saml";
-	
+	public static final int DEFAULT_SAML_REQUEST_VALIDITY = 600;
+	public static final int DEFAULT_AUTHENTICATION_TIMEOUT = 600;
+	public static final int DEFAULT_ATTR_ASSERTION_VALIDITY = 14400;
 	@DocumentationReferenceMeta
 	public final static Map<String, PropertyMD> defaults=new HashMap<String, PropertyMD>();
 
@@ -127,9 +137,9 @@ public class SamlIdpProperties extends SamlProperties
 						+ "what is useful for turning off the default mappings."));
 		defaults.put(IDENTITY_SAML, new PropertyMD().setStructuredListEntry(IDENTITY_MAPPING_PFX).setMandatory().setCategory(samlCat).
 				setDescription("SAML identity to be mapped"));	
-		defaults.put(SAML_REQUEST_VALIDITY, new PropertyMD("600").setPositive().setCategory(samlCat).
+		defaults.put(SAML_REQUEST_VALIDITY, new PropertyMD(String.valueOf(DEFAULT_SAML_REQUEST_VALIDITY)).setPositive().setCategory(samlCat).
 				setDescription("Defines maximum validity period (in seconds) of a SAML request. Requests older than this value are denied. It also controls the validity of an authentication assertion."));
-		defaults.put(AUTHENTICATION_TIMEOUT, new PropertyMD("600").setPositive().setCategory(samlCat).
+		defaults.put(AUTHENTICATION_TIMEOUT, new PropertyMD(String.valueOf(DEFAULT_AUTHENTICATION_TIMEOUT)).setPositive().setCategory(samlCat).
 				setDescription("Defines maximum time (in seconds) after which the authentication in progress is invalidated. This feature is used to clean up authentications started by users but not finished."));
 		defaults.put(SIGN_RESPONSE, new PropertyMD(ResponseSigningPolicy.asRequest).setCategory(samlCat).
 				setDescription("Defines when SAML responses should be signed. "
@@ -141,7 +151,7 @@ public class SamlIdpProperties extends SamlProperties
 				setDescription("Defines when SAML assertions (contained in SAML response) "
 						+ "should be signed: either always or if signing may be skipped "
 						+ "if wrapping request will be anyway signed"));
-		defaults.put(DEF_ATTR_ASSERTION_VALIDITY, new PropertyMD("14400").setPositive().setCategory(samlCat).
+		defaults.put(DEF_ATTR_ASSERTION_VALIDITY, new PropertyMD(String.valueOf(DEFAULT_ATTR_ASSERTION_VALIDITY)).setPositive().setCategory(samlCat).
 				setDescription("Controls the maximum validity period of an attribute assertion returned to client (in seconds). It is inserted whenever query is compliant with 'SAML V2.0 Deployment Profiles for X.509 Subjects', what usually is the case."));
 		defaults.put(ISSUER_URI, new PropertyMD().setCategory(samlCat).setMandatory().
 				setDescription("This property controls the server's URI which is inserted into SAML responses (the Issuer field). It should be a unique URI which identifies the server. The best approach is to use the server's URL."));
@@ -249,7 +259,7 @@ public class SamlIdpProperties extends SamlProperties
 	private IdentityTypeMapper idTypeMapper;
 	private Map<Integer, String> allowedRequestersByIndex;
 	
-	public SamlIdpProperties(Properties src, PKIManagement pkiManagement) throws ConfigurationException, IOException
+	public SamlIdpProperties(Properties src, PKIManagement pkiManagement) throws ConfigurationException
 	{
 		super(P, cleanupLegacyProperties(src), defaults, log);
 		sourceProperties = new Properties();
@@ -300,12 +310,12 @@ public class SamlIdpProperties extends SamlProperties
 		{
 			authnTrustChecker = new AcceptingSamlTrustChecker();
 			sloTrustChecker = new AcceptingSamlTrustChecker();
-			log.debug("All SPs will be authorized to submit authentication requests");
+			log.info("All SPs will be authorized to submit authentication requests");
 		} else if (spPolicy == RequestAcceptancePolicy.validSigner)
 		{
 			authnTrustChecker = new PKISamlTrustChecker(trustedValidator);
 			sloTrustChecker = new PKISamlTrustChecker(trustedValidator);
-			log.debug("All SPs using a valid certificate will be authorized to submit authentication requests");
+			log.info("All SPs using a valid certificate will be authorized to submit authentication requests");
 		} else if (spPolicy == RequestAcceptancePolicy.strict)
 		{
 			authnTrustChecker = createStrictTrustChecker();
@@ -437,7 +447,7 @@ public class SamlIdpProperties extends SamlProperties
 				X509Certificate spCert;
 				try
 				{
-					spCert = pkiManagement.getCertificate(spCertName);
+					spCert = pkiManagement.getCertificate(spCertName).value;
 					authnTrustChecker.addTrustedIssuer(
 							name, type, spCert.getPublicKey());
 				} catch (EngineException e)
@@ -451,6 +461,26 @@ public class SamlIdpProperties extends SamlProperties
 		}
 		return authnTrustChecker;
 	}
+	
+	public List<PublicKey> getTrustedKeysForSamlEntity(String idpKey)
+	{
+		Set<String> spCertNames = getAllowedSpCerts(idpKey);
+		List<PublicKey> trusted = new ArrayList<>();
+		for (String spCertName: spCertNames)
+		{
+			try
+			{
+				X509Certificate spCert = pkiManagement.getCertificate(spCertName).value;
+				trusted.add(spCert.getPublicKey());
+			} catch (EngineException e)
+			{
+				throw new ConfigurationException("Can't set certificate of trusted " +
+						"issuer named " + spCertName, e);
+			}
+		}
+		return trusted;
+	}
+	
 	
 	private void checkIssuer()
 	{
@@ -497,11 +527,30 @@ public class SamlIdpProperties extends SamlProperties
 		String spKey = getSPConfigKey(req.getIssuer());
 		if (spKey == null)
 			return null;
-		Integer requestedServiceIdx = req.isSetAssertionConsumerServiceIndex() ? 
-				req.getAssertionConsumerServiceIndex() : null;
-		return (requestedServiceIdx != null) ? 
-				allowedRequestersByIndex.get(requestedServiceIdx) 
+		Integer requestedServiceIdx = req.isSetAssertionConsumerServiceIndex()
+				? req.getAssertionConsumerServiceIndex()
+				: null;
+		return (requestedServiceIdx != null) ? allowedRequestersByIndex.get(requestedServiceIdx)
 				: getValue(spKey + ALLOWED_SP_RETURN_URL);
+	}
+
+	public String getDisplayedNameForRequester(NameIDType id)
+	{
+		String spKey = getSPConfigKey(id);
+		if (spKey == null)
+			return null;
+		return getValue(spKey + ALLOWED_SP_NAME);
+	}
+
+	public Resource getLogoForRequesterOrNull(NameIDType id, MessageSource msg, ImageAccessService imageAccessService)
+	{
+		String spKey = getSPConfigKey(id);
+		if (spKey == null)
+			return null;
+
+		String logoURI = getLocalizedValue(spKey + ALLOWED_SP_LOGO, msg.getLocale());
+		return imageAccessService.getConfiguredImageResourceFromNullableUri(logoURI)
+				.orElse(null);
 	}
 	
 	/**
@@ -525,7 +574,7 @@ public class SamlIdpProperties extends SamlProperties
 		{
 			try
 			{	 
-				certs.add(pkiManagement.getCertificate(spCertName));
+				certs.add(pkiManagement.getCertificate(spCertName).value);
 
 			} catch (EngineException e)
 			{
@@ -652,7 +701,7 @@ public class SamlIdpProperties extends SamlProperties
 		try
 		{
 			return new SamlIdpProperties(getProperties(), pkiManagement);
-		} catch (IOException e)
+		} catch (Exception e)
 		{
 			throw new ConfigurationException("Can not clone saml properties", e);
 		} 
@@ -666,4 +715,9 @@ public class SamlIdpProperties extends SamlProperties
 		return configProps;
 	}
 
+	public TranslationProfile getOutputTranslationProfile()
+	{
+		return PropertiesTranslationProfileLoader.getTranslationProfile(this, CommonIdPProperties.TRANSLATION_PROFILE,
+				CommonIdPProperties.EMBEDDED_TRANSLATION_PROFILE);
+	}
 }

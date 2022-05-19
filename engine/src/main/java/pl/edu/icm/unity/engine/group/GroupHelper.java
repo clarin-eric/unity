@@ -4,6 +4,9 @@
  */
 package pl.edu.icm.unity.engine.group;
 
+import static pl.edu.icm.unity.types.basic.audit.AuditEventTag.GROUPS;
+import static pl.edu.icm.unity.types.basic.audit.AuditEventTag.MEMBERS;
+
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashSet;
@@ -16,9 +19,13 @@ import org.apache.logging.log4j.Logger;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import com.google.common.collect.ImmutableMap;
+
 import pl.edu.icm.unity.base.utils.Log;
 import pl.edu.icm.unity.engine.api.identity.EntityResolver;
 import pl.edu.icm.unity.engine.attribute.AttributesHelper;
+import pl.edu.icm.unity.engine.audit.AuditEventTrigger;
+import pl.edu.icm.unity.engine.audit.AuditPublisher;
 import pl.edu.icm.unity.exceptions.IllegalAttributeTypeException;
 import pl.edu.icm.unity.exceptions.IllegalAttributeValueException;
 import pl.edu.icm.unity.exceptions.IllegalGroupValueException;
@@ -35,6 +42,8 @@ import pl.edu.icm.unity.types.basic.AttributeType;
 import pl.edu.icm.unity.types.basic.EntityParam;
 import pl.edu.icm.unity.types.basic.Group;
 import pl.edu.icm.unity.types.basic.GroupMembership;
+import pl.edu.icm.unity.types.basic.audit.AuditEventAction;
+import pl.edu.icm.unity.types.basic.audit.AuditEventType;
 
 /**
  * Shared group-related utility methods
@@ -43,7 +52,7 @@ import pl.edu.icm.unity.types.basic.GroupMembership;
 @Component
 public class GroupHelper
 {
-	private static final Logger log = Log.getLogger(Log.U_SERVER, GroupHelper.class);
+	private static final Logger log = Log.getLogger(Log.U_SERVER_CORE, GroupHelper.class);
 	
 	private MembershipDAO membershipDAO;
 	private EntityResolver entityResolver;
@@ -51,11 +60,13 @@ public class GroupHelper
 	private AttributesHelper attributesHelper;
 	private GroupDAO groupDAO;
 	private AttributeDAO dbAttributes;
+	private AuditPublisher audit;
 	
 	@Autowired
 	public GroupHelper(MembershipDAO membershipDAO, EntityResolver entityResolver,
 			AttributeTypeDAO attributeTypeDAO, AttributesHelper attributesHelper,
-			GroupDAO groupDAO, AttributeDAO dbAttributes)
+			GroupDAO groupDAO, AttributeDAO dbAttributes,
+			AuditPublisher audit)
 	{
 		this.membershipDAO = membershipDAO;
 		this.entityResolver = entityResolver;
@@ -63,18 +74,12 @@ public class GroupHelper
 		this.attributesHelper = attributesHelper;
 		this.groupDAO = groupDAO;
 		this.dbAttributes = dbAttributes;
+		this.audit = audit;
 	}
 
 	/**
 	 * Adds entity to the given group. The entity must be a member of the parent group
 	 * (unless adding to the root group).
-	 * @param path
-	 * @param entity
-	 * @param idp
-	 * @param translationProfile
-	 * @param creationTs
-	 * @throws IllegalGroupValueException
-	 * @throws IllegalIdentityValueException
 	 */
 	public void addMemberFromParent(String path, EntityParam entity, String idp, String translationProfile,
 			Date creationTs) 
@@ -93,7 +98,13 @@ public class GroupHelper
 
 		GroupMembership param = new GroupMembership(path, entityId, creationTs, translationProfile, idp);
 		membershipDAO.create(param);
-		log.debug("Added entity " + entityId + " to group " + group.toString());
+		audit.log(AuditEventTrigger.builder()
+				.type(AuditEventType.MEMBERSHIP)
+				.action(AuditEventAction.ADD)
+				.subject(entityId)
+				.name(group.getName())
+				.tags(MEMBERS, GROUPS));
+		log.info("Added entity " + entityId + " to group " + group.toString());
 	}
 	
 	public boolean isMember(long entityId, String path)
@@ -103,10 +114,6 @@ public class GroupHelper
 
 	/**
 	 * Checks if all group's attribute statements seems correct.
-	 * @param group
-	 * @throws IllegalAttributeValueException
-	 * @throws IllegalAttributeTypeException
-	 * @throws IllegalTypeException
 	 */
 	public void validateGroupStatements(Group group) throws IllegalAttributeValueException, 
 		IllegalAttributeTypeException, IllegalTypeException
@@ -119,11 +126,6 @@ public class GroupHelper
 
 	/**
 	 * Checks if the given group's statement seems correct
-	 * @param group
-	 * @param statement
-	 * @throws IllegalAttributeValueException
-	 * @throws IllegalAttributeTypeException
-	 * @throws IllegalTypeException
 	 */
 	public void validateGroupStatement(String group, AttributeStatement statement) 
 			throws IllegalAttributeValueException, IllegalAttributeTypeException, IllegalTypeException
@@ -160,9 +162,6 @@ public class GroupHelper
 	
 	/**
 	 * Remove from group
-	 * 
-	 * @param entityId
-	 * @param toRemove
 	 */
 	public void removeFromGroups(long entityId, Set<String> toRemove)
 	{
@@ -180,8 +179,15 @@ public class GroupHelper
 				if (Group.isChildOrSame(group, groupToRemove))
 				{
 					membershipDAO.deleteByKey(entityId, group);
+					audit.log(AuditEventTrigger.builder()
+							.type(AuditEventType.GROUP)
+							.action(AuditEventAction.UPDATE)
+							.name(group)
+							.subject(entityId)
+							.details(ImmutableMap.of("action", "remove"))
+							.tags(MEMBERS, GROUPS));
 					dbAttributes.deleteAttributesInGroup(entityId, group);
-					log.debug("Removed entity " + entityId + " from group " + group);
+					log.info("Removed entity " + entityId + " from group " + group);
 				}
 			}
 		}

@@ -18,7 +18,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 
 import com.vaadin.event.ShortcutAction.KeyCode;
 import com.vaadin.server.Resource;
-import com.vaadin.server.VaadinRequest;
 import com.vaadin.ui.Alignment;
 import com.vaadin.ui.Button;
 import com.vaadin.ui.Component;
@@ -30,14 +29,16 @@ import com.vaadin.ui.VerticalLayout;
 
 import eu.unicore.util.configuration.ConfigurationException;
 import pl.edu.icm.unity.JsonUtil;
+import pl.edu.icm.unity.MessageSource;
 import pl.edu.icm.unity.base.utils.Log;
 import pl.edu.icm.unity.engine.api.authn.AbstractCredentialRetrieval;
 import pl.edu.icm.unity.engine.api.authn.AbstractCredentialRetrievalFactory;
 import pl.edu.icm.unity.engine.api.authn.AuthenticationException;
 import pl.edu.icm.unity.engine.api.authn.AuthenticationResult;
 import pl.edu.icm.unity.engine.api.authn.AuthenticationResult.Status;
-import pl.edu.icm.unity.engine.api.authn.remote.SandboxAuthnResultCallback;
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
+import pl.edu.icm.unity.engine.api.authn.AuthenticationSubject;
+import pl.edu.icm.unity.engine.api.authn.AuthenticatorStepContext;
+import pl.edu.icm.unity.engine.api.authn.LocalAuthenticationResult;
 import pl.edu.icm.unity.engine.api.utils.PrototypeComponent;
 import pl.edu.icm.unity.stdext.credential.pass.PasswordCredentialResetSettings;
 import pl.edu.icm.unity.stdext.credential.pass.PasswordExchange;
@@ -68,7 +69,7 @@ public class PasswordRetrieval extends AbstractCredentialRetrieval<PasswordExcha
 	public static final String DESC = "WebPasswordRetrievalFactory.desc";
 	
 	private Logger log = Log.getLogger(Log.U_SERVER_WEB, PasswordRetrieval.class);
-	private UnityMessageSource msg;
+	private MessageSource msg;
 	private I18nString name;
 	private String registrationFormForUnknown;
 	private boolean enableAssociation;
@@ -76,7 +77,7 @@ public class PasswordRetrieval extends AbstractCredentialRetrieval<PasswordExcha
 	private String configuration;
 
 	@Autowired
-	public PasswordRetrieval(UnityMessageSource msg, CredentialEditorRegistry credEditorReg)
+	public PasswordRetrieval(MessageSource msg, CredentialEditorRegistry credEditorReg)
 	{
 		super(VaadinAuthentication.NAME);
 		this.msg = msg;
@@ -112,7 +113,7 @@ public class PasswordRetrieval extends AbstractCredentialRetrieval<PasswordExcha
 	}
 
 	@Override
-	public Collection<VaadinAuthenticationUI> createUIInstance(Context context)
+	public Collection<VaadinAuthenticationUI> createUIInstance(Context context, AuthenticatorStepContext authenticatorContext)
 	{
 		return Collections.<VaadinAuthenticationUI>singleton(
 				new PasswordRetrievalUI(credEditorReg.getEditor(PasswordVerificator.NAME)));
@@ -124,11 +125,16 @@ public class PasswordRetrieval extends AbstractCredentialRetrieval<PasswordExcha
 		return false;
 	}
 
+	@Override
+	public boolean isMultiOption()
+	{
+		return false;
+	}
+
 	private class PasswordRetrievalComponent extends CustomComponent implements Focusable
 	{
 		private CredentialEditor credEditor;
 		private AuthenticationCallback callback;
-		private SandboxAuthnResultCallback sandboxCallback;
 		private String presetAuthenticatedIdentity;
 		
 		private TextField usernameField;
@@ -167,7 +173,7 @@ public class PasswordRetrieval extends AbstractCredentialRetrieval<PasswordExcha
 			Button authenticateButton = new Button(msg.getMessage("AuthenticationUI.authnenticateButton"));
 			authenticateButton.addStyleName(Styles.signInButton.toString());
 			authenticateButton.addStyleName("u-passwordSignInButton");
-			authenticateButton.addClickListener(event -> triggerAuthentication());
+			authenticateButton.addClickListener(event -> { authenticateButton.removeClickShortcut(); triggerAuthentication(); });
 			ret.addComponent(authenticateButton);
 
 			passwordField.addFocusListener(e -> authenticateButton.setClickShortcut(KeyCode.ENTER));
@@ -198,26 +204,17 @@ public class PasswordRetrieval extends AbstractCredentialRetrieval<PasswordExcha
 
 			if (password.equals(""))
 			{
-				NotificationPopup.showError(msg.getMessage("AuthenticationUI.authnErrorTitle"), 
+				NotificationPopup.showErrorAutoClosing(msg.getMessage("AuthenticationUI.authnErrorTitle"), 
 						msg.getMessage("WebPasswordRetrieval.noPassword"));
 			} else if (username.equals(""))
 			{
-				NotificationPopup.showError(msg.getMessage("AuthenticationUI.authnErrorTitle"), 
+				NotificationPopup.showErrorAutoClosing(msg.getMessage("AuthenticationUI.authnErrorTitle"), 
 						msg.getMessage("WebPasswordRetrieval.noUser"));
 			} else 
 			{
-				callback.onStartedAuthentication(AuthenticationStyle.IMMEDIATE);
+				callback.onStartedAuthentication();
 				AuthenticationResult authenticationResult = getAuthenticationResult(username, password);
-				if (authenticationResult.getStatus() == Status.deny)
-				{
-					callback.onFailedAuthentication(authenticationResult, 
-							msg.getMessage("WebPasswordRetrieval.wrongPassword"), 
-							Optional.empty());
-				} else
-				{
-					setEnabled(false);
-					callback.onCompletedAuthentication(authenticationResult);
-				}
+				callback.onCompletedAuthentication(authenticationResult);
 			}
 		}
 		
@@ -225,7 +222,7 @@ public class PasswordRetrieval extends AbstractCredentialRetrieval<PasswordExcha
 		{
 			if (username.equals("") && password.equals(""))
 			{
-				return new AuthenticationResult(Status.notApplicable, null);
+				return LocalAuthenticationResult.notApplicable();
 			}
 
 			
@@ -233,19 +230,18 @@ public class PasswordRetrieval extends AbstractCredentialRetrieval<PasswordExcha
 			try
 			{
 				authenticationResult = credentialExchange.checkPassword(
-						username, password, sandboxCallback);
+						username, password,  
+						registrationFormForUnknown, enableAssociation, 
+						callback.getTriggeringContext());
 			} catch (AuthenticationException e)
 			{
-				log.debug("Authentication error during password checking", e);
+				log.info("Authentication error during password checking", e);
 				authenticationResult = e.getResult();
 			} catch (Exception e)
 			{
 				log.error("Runtime error during password checking", e);
-				authenticationResult = new AuthenticationResult(Status.deny, null);
+				authenticationResult = LocalAuthenticationResult.failed(e);
 			}
-			if (registrationFormForUnknown != null) 
-				authenticationResult.setFormForUnknownPrincipal(registrationFormForUnknown);
-			authenticationResult.setEnableAssociation(enableAssociation);
 			if (authenticationResult.getStatus() == Status.success || 
 					authenticationResult.getStatus() == Status.unknownRemotePrincipal)
 			{
@@ -268,7 +264,9 @@ public class PasswordRetrieval extends AbstractCredentialRetrieval<PasswordExcha
 			PasswordCredentialResetController passReset = new PasswordCredentialResetController(msg, 
 					credentialExchange.getCredentialResetBackend(), credEditor, 
 					credResetLauncher.getConfiguration());
-			credResetLauncher.startCredentialReset(passReset.getInitialUI());
+			AuthenticationSubject subject = presetAuthenticatedIdentity == null ? 
+					null : AuthenticationSubject.identityBased(presetAuthenticatedIdentity);
+			credResetLauncher.startCredentialReset(passReset.getInitialUI(Optional.ofNullable(subject)));
 		}
 
 		@Override
@@ -297,11 +295,6 @@ public class PasswordRetrieval extends AbstractCredentialRetrieval<PasswordExcha
 			this.callback = callback;
 		}
 
-		public void setSandboxCallback(SandboxAuthnResultCallback sandboxCallback)
-		{
-			this.sandboxCallback = sandboxCallback;
-		}
-		
 		public void setAuthenticatedIdentity(String authenticatedIdentity)
 		{
 			this.presetAuthenticatedIdentity = authenticatedIdentity;
@@ -364,18 +357,6 @@ public class PasswordRetrieval extends AbstractCredentialRetrieval<PasswordExcha
 		public void clear()
 		{
 			theComponent.clear();
-		}
-
-		@Override
-		public void refresh(VaadinRequest request) 
-		{
-			//nop
-		}
-
-		@Override
-		public void setSandboxAuthnCallback(SandboxAuthnResultCallback callback) 
-		{
-			theComponent.setSandboxCallback(callback);
 		}
 
 		/**

@@ -12,12 +12,13 @@ import org.springframework.beans.factory.annotation.Autowired;
 import com.vaadin.data.Binder;
 import com.vaadin.data.converter.StringToIntegerConverter;
 import com.vaadin.data.validator.IntegerRangeValidator;
+import com.vaadin.ui.CheckBox;
 import com.vaadin.ui.Component;
 import com.vaadin.ui.FormLayout;
 import com.vaadin.ui.TextField;
 
+import pl.edu.icm.unity.MessageSource;
 import pl.edu.icm.unity.engine.api.attributes.AttributeValueSyntax;
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
 import pl.edu.icm.unity.exceptions.IllegalAttributeTypeException;
 import pl.edu.icm.unity.stdext.attr.StringAttributeSyntax;
 import pl.edu.icm.unity.webui.common.CompactFormLayout;
@@ -35,7 +36,7 @@ import pl.edu.icm.unity.webui.common.boundededitors.IntegerBoundEditor;
 public class StringAttributeHandler extends TextOnlyAttributeHandler
 {
 	
-	public StringAttributeHandler(UnityMessageSource msg, AttributeValueSyntax<?> syntax)
+	public StringAttributeHandler(MessageSource msg, AttributeValueSyntax<?> syntax)
 	{
 		super(msg, syntax);
 	}
@@ -53,7 +54,6 @@ public class StringAttributeHandler extends TextOnlyAttributeHandler
 			sb.add(msg.getMessage("StringAttributeHandler.maxLenUndef"));
 		if (syntax.getRegexp() != null && !syntax.getRegexp().equals(""))
 			sb.add(msg.getMessage("StringAttributeHandler.regexp", syntax.getRegexp()));
-		
 		return sb;
 	}
 	
@@ -63,10 +63,11 @@ public class StringAttributeHandler extends TextOnlyAttributeHandler
 		private IntegerBoundEditor max;
 		private TextField min;
 		private TextField regexp;
-		private UnityMessageSource msg;
+		private CheckBox editWithTextArea;
+		private MessageSource msg;
 		private Binder<StringSyntaxBindingValue> binder;
 		
-		public StringSyntaxEditor(StringAttributeSyntax initial, UnityMessageSource msg)
+		public StringSyntaxEditor(StringAttributeSyntax initial, MessageSource msg)
 		{
 			this.initial = initial;
 			this.msg = msg;
@@ -93,6 +94,9 @@ public class StringAttributeHandler extends TextOnlyAttributeHandler
 			regexp = new TextField(msg.getMessage("StringAttributeHandler.regexpE"));
 			fl.addComponent(regexp);
 
+			editWithTextArea = new CheckBox(msg.getMessage("StringAttributeHandler.editWithTextAreaE"));
+			fl.addComponent(editWithTextArea);
+			
 			binder.forField(min).asRequired(msg.getMessage("fieldRequired"))
 					.withConverter(new StringToIntegerConverter(msg.getMessage(
 							"IntegerBoundEditor.notANumber")))
@@ -102,13 +106,15 @@ public class StringAttributeHandler extends TextOnlyAttributeHandler
 					.bind("min");
 			max.configureBinding(binder, "max");
 			binder.forField(regexp).bind("regexp");
-
+			binder.forField(editWithTextArea).bind("editWithTextArea");
+			
 			StringSyntaxBindingValue value = new StringSyntaxBindingValue();
 			if (initial != null)
 			{
 				value.setMax(initial.getMaxLength());
 				value.setMin(initial.getMinLength());
 				value.setRegexp(initial.getRegexp());
+				value.setEditWithTextArea(initial.isEditWithTextArea());
 			} else
 			{
 				
@@ -135,6 +141,7 @@ public class StringAttributeHandler extends TextOnlyAttributeHandler
 				StringSyntaxBindingValue value = binder.getBean();
 				ret.setMaxLength(value.getMax());
 				ret.setMinLength(value.getMin());
+				ret.setEditWithTextArea(value.isEditWithTextArea());
 				if (value.getRegexp() != null && !value.getRegexp().isEmpty())
 					ret.setRegexp(value.getRegexp());
 				return ret;
@@ -147,7 +154,8 @@ public class StringAttributeHandler extends TextOnlyAttributeHandler
 		public class StringSyntaxBindingValue extends MinMaxBindingValue<Integer>
 		{
 			private String regexp;
-
+			private boolean editWithTextArea;
+			
 			public String getRegexp()
 			{
 				return regexp;
@@ -156,6 +164,16 @@ public class StringAttributeHandler extends TextOnlyAttributeHandler
 			public void setRegexp(String regexp)
 			{
 				this.regexp = regexp;
+			}
+
+			public boolean isEditWithTextArea()
+			{
+				return editWithTextArea;
+			}
+
+			public void setEditWithTextArea(boolean editWithTextArea)
+			{
+				this.editWithTextArea = editWithTextArea;
 			}			
 		}
 		
@@ -165,10 +183,10 @@ public class StringAttributeHandler extends TextOnlyAttributeHandler
 	@org.springframework.stereotype.Component
 	public static class StringAttributeHandlerFactory implements WebAttributeHandlerFactory
 	{
-		private UnityMessageSource msg;
+		private MessageSource msg;
 
 		@Autowired
-		public StringAttributeHandlerFactory(UnityMessageSource msg)
+		public StringAttributeHandlerFactory(MessageSource msg)
 		{
 			this.msg = msg;
 		}

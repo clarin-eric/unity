@@ -9,16 +9,11 @@ import java.util.function.Function;
 import com.vaadin.ui.Component;
 import com.vaadin.ui.VerticalLayout;
 
-import pl.edu.icm.unity.engine.api.authn.AuthenticationResult;
-import pl.edu.icm.unity.engine.api.authn.UnsuccessfulAuthenticationCounter;
-import pl.edu.icm.unity.engine.api.authn.remote.UnknownRemoteUserException;
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
-import pl.edu.icm.unity.engine.api.utils.ExecutorsService;
-import pl.edu.icm.unity.webui.authn.AccessBlockedDialog;
+import pl.edu.icm.unity.engine.api.authn.RemoteAuthenticationResult.UnknownRemotePrincipalResult;
+import pl.edu.icm.unity.types.authn.AuthenticationOptionKey;
 import pl.edu.icm.unity.webui.authn.CancelHandler;
+import pl.edu.icm.unity.webui.authn.UnknownUserDialog;
 import pl.edu.icm.unity.webui.authn.VaadinAuthentication.VaadinAuthenticationUI;
-import pl.edu.icm.unity.webui.authn.StandardWebAuthenticationProcessor;
-import pl.edu.icm.unity.webui.authn.remote.UnknownUserDialog;
 
 /**
  * The login component of the 1st factor authentication. Wraps a single Vaadin retrieval UI and connects 
@@ -28,22 +23,17 @@ import pl.edu.icm.unity.webui.authn.remote.UnknownUserDialog;
  */
 public class FirstFactorAuthNPanel extends AuthNPanelBase implements AuthenticationUIController
 {
-	private final UnityMessageSource msg;
-	private final ExecutorsService execService;
-	private final Function<AuthenticationResult, UnknownUserDialog> unknownUserDialogProvider; 
+	private final Function<UnknownRemotePrincipalResult, UnknownUserDialog> unknownUserDialogProvider; 
 	private final boolean gridCompatible;
 	
-	public FirstFactorAuthNPanel(UnityMessageSource msg, 
-			ExecutorsService execService,
+	public FirstFactorAuthNPanel(
 			CancelHandler cancelHandler,
-			Function<AuthenticationResult, UnknownUserDialog> unknownUserDialogProvider,
+			Function<UnknownRemotePrincipalResult, UnknownUserDialog> unknownUserDialogProvider,
 			boolean gridCompatible,
 			VaadinAuthenticationUI authnUI,
-			String authnId)
+			AuthenticationOptionKey authnId)
 	{
 		super(authnUI, authnId, new VerticalLayout());
-		this.msg = msg;
-		this.execService = execService;
 		this.unknownUserDialogProvider = unknownUserDialogProvider;
 		this.gridCompatible = gridCompatible;
 
@@ -63,20 +53,8 @@ public class FirstFactorAuthNPanel extends AuthNPanelBase implements Authenticat
 		authenticatorContainer.addComponent(retrievalComponent);
 	}
 	
-	void showWaitScreenIfNeeded(String clientIp)
+	void showUnknownUserDialog(UnknownRemotePrincipalResult urpResult)
 	{
-		UnsuccessfulAuthenticationCounter counter = StandardWebAuthenticationProcessor.getLoginCounter();
-		if (counter.getRemainingBlockedTime(clientIp) > 0)
-		{
-			AccessBlockedDialog dialog = new AccessBlockedDialog(msg, execService);
-			dialog.show();
-			return;
-		}
-	}
-	
-	void showUnknownUserDialog(UnknownRemoteUserException ee)
-	{
-		UnknownUserDialog dialog = unknownUserDialogProvider.apply(ee.getResult()); 
-		dialog.show();
+		unknownUserDialogProvider.apply(urpResult).show(); 
 	}	
 }

@@ -13,7 +13,10 @@ import org.mvel2.MVEL;
 import org.springframework.stereotype.Component;
 
 import pl.edu.icm.unity.base.utils.Log;
+import pl.edu.icm.unity.engine.api.mvel.MVELExpressionContext;
 import pl.edu.icm.unity.engine.api.translation.form.GroupParam;
+import pl.edu.icm.unity.engine.api.translation.form.RegistrationContext;
+import pl.edu.icm.unity.engine.api.translation.form.RegistrationMVELContextKey;
 import pl.edu.icm.unity.engine.api.translation.form.RegistrationTranslationAction;
 import pl.edu.icm.unity.engine.api.translation.form.TranslatedRegistrationRequest;
 import pl.edu.icm.unity.exceptions.EngineException;
@@ -34,9 +37,11 @@ public class AddToGroupActionFactory extends AbstractRegistrationTranslationActi
 	public AddToGroupActionFactory()
 	{
 		super(NAME, new ActionParameterDefinition[] {
-				new ActionParameterDefinition("group", 
-						"RegTranslationAction.addToGroup.paramDesc.group", 
-						Type.EXPRESSION, true),
+				new ActionParameterDefinition("group", "RegTranslationAction.addToGroup.paramDesc.group",
+						Type.EXPRESSION, true,
+						MVELExpressionContext.builder().withTitleKey("RegTranslationAction.addToGroup.editor.title")
+								.withEvalToKey("RegTranslationAction.addIdentity.addToGroup.editor.evalTo")
+								.withVars(RegistrationMVELContextKey.toMap()).build()),
 		});
 	}
 
@@ -60,7 +65,7 @@ public class AddToGroupActionFactory extends AbstractRegistrationTranslationActi
 
 		@Override
 		protected void invokeWrapped(TranslatedRegistrationRequest state, Object mvelCtx,
-				String currentProfile) throws EngineException
+				RegistrationContext context, String currentProfile) throws EngineException
 		{
 			Object result = MVEL.executeExpression(expression, mvelCtx, new HashMap<>());
 			if (result == null)

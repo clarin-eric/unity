@@ -7,11 +7,12 @@ package pl.edu.icm.unity.types;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Map.Entry;
+import java.util.Properties;
 
 import org.springframework.context.NoSuchMessageException;
 
 import pl.edu.icm.unity.MessageSource;
-
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonValue;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -50,13 +51,6 @@ public class I18nString
 	/**
 	 * Loads {@link I18nString} from all message bundles which are installed in the system. The returned object 
 	 * has no default value set.
-	 * @param prefix
-	 * @param name
-	 * @param suffix
-	 * @param msg
-	 * @param msgKey
-	 * @param args
-	 * @return
 	 */
 	public I18nString(String key, MessageSource msg, Object... args)
 	{
@@ -104,6 +98,12 @@ public class I18nString
 			defaultValue;
 	}
 
+	public String getValue(String locale)
+	{
+		return (locale != null && values.containsKey(locale)) ? values.get(locale) : 
+			defaultValue;
+	}
+	
 	public String getValueRaw(String locale)
 	{
 		return values.get(locale);
@@ -146,6 +146,12 @@ public class I18nString
 	{
 		return (defaultValue == null || defaultValue.isEmpty()) && values.isEmpty();
 	}
+
+	public boolean hasNonDefaultValue()
+	{
+		return !values.isEmpty();
+	}
+
 	
 	@Override
 	public String toString()
@@ -170,7 +176,41 @@ public class I18nString
 		result = prime * result + ((values == null) ? 0 : values.hashCode());
 		return result;
 	}
-
+	
+	public void toProperties(Properties properties, String prefix, MessageSource msg)
+	{
+		if (!values.isEmpty())
+		{
+			for (Map.Entry<String, String> entry : values.entrySet())
+			{
+				properties.put(prefix + "." + entry.getKey(), entry.getValue());
+			}
+		}
+		if (defaultValue != null)
+		{
+			properties.put(prefix, defaultValue);
+		} else
+		{
+			properties.put(prefix,
+					values.get(msg.getDefaultLocaleCode()) != null
+							? values.get(msg.getDefaultLocaleCode())
+							: " ");
+		}
+	}
+	
+	public void replace(String oldV, String newV)
+	{
+		if (defaultValue != null)
+		{
+			defaultValue.replace(oldV, newV);
+		}
+		for (Entry<String, String> v : values.entrySet())
+		{
+			values.put(v.getKey(), v.getValue().replace(oldV, newV));
+		}
+		
+	}
+	
 	@Override
 	public boolean equals(Object obj)
 	{

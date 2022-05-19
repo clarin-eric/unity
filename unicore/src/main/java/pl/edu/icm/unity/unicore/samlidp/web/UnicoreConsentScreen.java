@@ -7,25 +7,26 @@ package pl.edu.icm.unity.unicore.samlidp.web;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import org.apache.logging.log4j.Logger;
 
-import com.vaadin.ui.CheckBox;
 import com.vaadin.ui.Component;
 import com.vaadin.ui.Label;
 import com.vaadin.ui.VerticalLayout;
 
 import eu.unicore.security.etd.DelegationRestrictions;
+import pl.edu.icm.unity.MessageSource;
 import pl.edu.icm.unity.base.utils.Log;
 import pl.edu.icm.unity.engine.api.PreferencesManagement;
 import pl.edu.icm.unity.engine.api.attributes.AttributeTypeSupport;
 import pl.edu.icm.unity.engine.api.identity.IdentityTypeSupport;
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
 import pl.edu.icm.unity.exceptions.EngineException;
 import pl.edu.icm.unity.saml.idp.SamlIdpProperties;
 import pl.edu.icm.unity.saml.idp.ctx.SAMLAuthnContext;
 import pl.edu.icm.unity.saml.idp.preferences.SamlPreferences.SPSettings;
-import pl.edu.icm.unity.saml.idp.web.SAMLContextSupport;
+import pl.edu.icm.unity.saml.idp.web.ROExposedAttributesComponent;
+import pl.edu.icm.unity.saml.idp.web.SamlSessionService;
 import pl.edu.icm.unity.saml.idp.web.SamlConsentScreen;
 import pl.edu.icm.unity.types.basic.Attribute;
 import pl.edu.icm.unity.types.basic.AttributeType;
@@ -33,9 +34,10 @@ import pl.edu.icm.unity.types.basic.DynamicAttribute;
 import pl.edu.icm.unity.types.basic.IdentityParam;
 import pl.edu.icm.unity.unicore.samlidp.preferences.SamlPreferencesWithETD;
 import pl.edu.icm.unity.unicore.samlidp.preferences.SamlPreferencesWithETD.SPETDSettings;
-import pl.edu.icm.unity.webui.authn.StandardWebAuthenticationProcessor;
+import pl.edu.icm.unity.webui.authn.StandardWebLogoutHandler;
 import pl.edu.icm.unity.webui.common.Styles;
 import pl.edu.icm.unity.webui.common.attributes.AttributeHandlerRegistry;
+import pl.edu.icm.unity.webui.common.file.ImageAccessService;
 import pl.edu.icm.unity.webui.common.safehtml.HtmlTag;
 import pl.edu.icm.unity.webui.common.safehtml.SafePanel;
 import pl.edu.icm.unity.webui.idpcommon.ExposedSelectableAttributesComponent;
@@ -57,10 +59,10 @@ class UnicoreConsentScreen extends SamlConsentScreen
 
 	private UnicoreConfirmationConsumer acceptHandler;
 
-	public UnicoreConsentScreen(UnityMessageSource msg, 
+	public UnicoreConsentScreen(MessageSource msg, ImageAccessService imageAccessService, 
 			AttributeHandlerRegistry handlersRegistry,
 			PreferencesManagement preferencesMan, 
-			StandardWebAuthenticationProcessor authnProcessor,
+			StandardWebLogoutHandler authnProcessor,
 			IdentityTypeSupport identityTypeSupport, 
 			AttributeTypeSupport aTypeSupport,
 			List<IdentityParam> validIdentities,
@@ -69,7 +71,7 @@ class UnicoreConsentScreen extends SamlConsentScreen
 			Runnable declineHandler, 
 			UnicoreConfirmationConsumer acceptHandler)
 	{
-		super(msg, handlersRegistry, preferencesMan, authnProcessor, identityTypeSupport, aTypeSupport, 
+		super(msg, imageAccessService, handlersRegistry, preferencesMan, authnProcessor, identityTypeSupport, aTypeSupport, 
 				validIdentities, attributes, attributeTypes, declineHandler, null);
 		this.acceptHandler = acceptHandler;
 	}
@@ -81,20 +83,22 @@ class UnicoreConsentScreen extends SamlConsentScreen
 		VerticalLayout eiLayout = new VerticalLayout();
 		eiLayout.setWidth(100, Unit.PERCENTAGE);
 		exposedInfoPanel.setContent(eiLayout);
-		idSelector = new IdentitySelectorComponent(msg, identityTypeSupport, validIdentities);
-		eiLayout.addComponent(idSelector);
 
+		createETDPart(eiLayout);
+		
+		idSelector = new IdentitySelectorComponent(msg, identityTypeSupport, validIdentities);
+		if (validIdentities.size() > 1)
+			eiLayout.addComponent(idSelector);
 		eiLayout.addComponent(HtmlTag.br());
 		boolean userCanEditConsent = samlCtx.getSamlConfiguration().getBooleanValue(SamlIdpProperties.USER_EDIT_CONSENT);
-		attrsPresenter = new ExposedSelectableAttributesComponent(msg, handlersRegistry, attributeTypes, 
-				aTypeSupport, attributes, userCanEditConsent);
-		eiLayout.addComponent(attrsPresenter);
+		Optional<IdentityParam> selectedIdentity = Optional.ofNullable(validIdentities.size() == 1 ? validIdentities.get(0) : null); 
+		attrsPresenter = userCanEditConsent ? 
+				new ExposedSelectableAttributesComponent(msg, identityTypeSupport, handlersRegistry, 
+						attributeTypes, aTypeSupport, attributes, selectedIdentity) :
+				new ROExposedAttributesComponent(msg, identityTypeSupport, attributes, handlersRegistry, 
+						selectedIdentity);
+		eiLayout.addComponent((Component)attrsPresenter);
 
-		eiLayout.addComponent(HtmlTag.br());
-		createETDPart(eiLayout);
-
-		rememberCB = new CheckBox(msg.getMessage("SamlIdPWebUI.rememberSettings"));
-		eiLayout.addComponent(rememberCB);
 		return exposedInfoPanel;
 	}
 	
@@ -148,7 +152,7 @@ class UnicoreConsentScreen extends SamlConsentScreen
 	{
 		try
 		{
-			SAMLAuthnContext samlCtx = SAMLContextSupport.getContext();
+			SAMLAuthnContext samlCtx = SamlSessionService.getVaadinContext();
 			SamlPreferencesWithETD preferences = SamlPreferencesWithETD.getPreferences(preferencesMan);
 			updatePreferencesFromUI(preferences, samlCtx, defaultAccept);
 			SamlPreferencesWithETD.savePreferences(preferencesMan, preferences);

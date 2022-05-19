@@ -10,13 +10,12 @@ import com.vaadin.ui.Button;
 import com.vaadin.ui.Component;
 import com.vaadin.ui.VerticalLayout;
 
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
-import pl.edu.icm.unity.exceptions.IllegalFormContentsException;
+import pl.edu.icm.unity.MessageSource;
 import pl.edu.icm.unity.exceptions.WrongArgumentException;
 import pl.edu.icm.unity.types.registration.EnquiryForm.EnquiryType;
 import pl.edu.icm.unity.types.registration.EnquiryResponse;
 import pl.edu.icm.unity.webui.common.AbstractDialog;
-import pl.edu.icm.unity.webui.common.NotificationPopup;
+import pl.edu.icm.unity.webui.forms.FormsUIHelper;
 
 /**
  * Dialog allowing to fill an enquiry form. It takes an editor component as argument.
@@ -30,7 +29,7 @@ public class EnquiryFormFillDialog extends AbstractDialog
 	private Callback callback;
 	private EnquiryType type;
 	
-	public EnquiryFormFillDialog(UnityMessageSource msg, String caption, 
+	public EnquiryFormFillDialog(MessageSource msg, String caption, 
 			EnquiryResponseEditor editor, Callback callback, EnquiryType type)
 	{
 		super(msg, caption, msg.getMessage("RegistrationRequestEditorDialog.submitRequest"), 
@@ -95,9 +94,7 @@ public class EnquiryFormFillDialog extends AbstractDialog
 			close();
 		} catch (Exception e)
 		{
-			if (e instanceof IllegalFormContentsException)
-				editor.markErrorsFromException((IllegalFormContentsException) e);
-			NotificationPopup.showError(msg, msg.getMessage("Generic.formError"), e);
+			FormsUIHelper.handleFormSubmissionError(e, msg, editor);
 		}
 	}
 	

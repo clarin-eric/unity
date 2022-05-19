@@ -5,7 +5,11 @@
 
 package pl.edu.icm.unity.engine.api.authn;
 
+import java.util.List;
+
+import pl.edu.icm.unity.types.authn.AuthenticationOptionsSelector;
 import pl.edu.icm.unity.types.authn.AuthenticatorInstanceMetadata;
+import pl.edu.icm.unity.types.authn.IdPInfo;
 
 
 /**
@@ -29,34 +33,19 @@ public interface AuthenticatorInstance
 	 * verificators the verificator configuration is only set for the
 	 * underlying verificator, it is not exposed in the instanceDescription.
 	 */
-	void updateConfiguration(String vConfiguration, String localCredential);
+	void updateConfiguration(String vConfiguration, String retrievalConfiguration, String localCredential);
 
-	/**
-	 * Get authenticator retrieval
-	 * 
-	 * @return
-	 */
 	CredentialRetrieval getRetrieval();
 
-	/**
-	 * Get authenticator instance
-	 * 
-	 * @return
-	 */
 	AuthenticatorInstanceMetadata getMetadata();
 
-	/**
-	 * Set authenticator revision
-	 * 
-	 * @param revision
-	 *                to set
-	 */
 	void setRevision(long revision);
 
-	/**
-	 * Get authenticator revision
-	 * 
-	 * @return authenticator revision
-	 */
 	long getRevision();
+	
+	CredentialVerificator getCredentialVerificator();
+	
+	List<AuthenticationOptionsSelector> getAuthnOptionSelectors();
+	
+	List<IdPInfo> extractIdPs();
 }

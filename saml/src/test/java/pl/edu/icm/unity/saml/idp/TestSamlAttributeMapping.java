@@ -16,11 +16,10 @@ import org.apache.xmlbeans.XmlAnySimpleType;
 import org.apache.xmlbeans.XmlBase64Binary;
 import org.junit.Test;
 
-import pl.edu.icm.unity.saml.idp.DefaultSamlAttributesMapper;
-import pl.edu.icm.unity.saml.idp.SamlAttributeMapper;
+import pl.edu.icm.unity.attr.ImageType;
+import pl.edu.icm.unity.attr.UnityImage;
+import pl.edu.icm.unity.stdext.attr.ImageAttribute;
 import pl.edu.icm.unity.stdext.attr.IntegerAttribute;
-import pl.edu.icm.unity.stdext.attr.JpegImageAttribute;
-import pl.edu.icm.unity.stdext.attr.JpegImageAttributeSyntax;
 import pl.edu.icm.unity.stdext.attr.StringAttribute;
 import pl.edu.icm.unity.stdext.attr.VerifiableEmailAttribute;
 import pl.edu.icm.unity.types.basic.Attribute;
@@ -61,12 +60,13 @@ public class TestSamlAttributeMapping
 	{
 		SamlAttributeMapper mapper = new DefaultSamlAttributesMapper();
 		BufferedImage bi = new BufferedImage(10, 20, BufferedImage.TYPE_INT_ARGB);
-		Attribute unityA = JpegImageAttribute.of("attr1", "/", bi);
+		UnityImage image = new UnityImage(bi, ImageType.JPG);
+		Attribute unityA = ImageAttribute.of("attr1", "/", image);
 		AttributeType samlA = mapper.convertToSaml(unityA);
 		assertEquals("attr1", samlA.getName());
 		assertEquals(1, samlA.sizeOfAttributeValueArray());
 		byte[] fromSaml = ((XmlBase64Binary)samlA.getAttributeValueArray(0)).getByteArrayValue();
-		byte[] orig = new JpegImageAttributeSyntax().serialize(bi);
+		byte[] orig = image.getImage();
 		assertTrue(Arrays.equals(orig, fromSaml));
 	}
 	

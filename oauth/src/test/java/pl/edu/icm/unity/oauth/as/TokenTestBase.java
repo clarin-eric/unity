@@ -5,14 +5,13 @@
 package pl.edu.icm.unity.oauth.as;
 
 import static org.hamcrest.CoreMatchers.is;
-import static org.hamcrest.CoreMatchers.notNullValue;
 import static org.junit.Assert.assertThat;
+import static pl.edu.icm.unity.oauth.client.HttpRequestConfigurer.secureRequest;
 
 import java.net.URI;
 import java.util.HashSet;
 import java.util.List;
 
-import org.junit.Before;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import com.google.common.collect.Lists;
@@ -27,6 +26,7 @@ import com.nimbusds.oauth2.sdk.http.HTTPRequest;
 import com.nimbusds.oauth2.sdk.http.HTTPResponse;
 import com.nimbusds.oauth2.sdk.token.AccessToken;
 import com.nimbusds.oauth2.sdk.token.BearerAccessToken;
+import com.nimbusds.openid.connect.sdk.OIDCScopeValue;
 import com.nimbusds.openid.connect.sdk.UserInfoRequest;
 
 import eu.unicore.util.httpclient.ServerHostnameCheckingMode;
@@ -36,10 +36,9 @@ import pl.edu.icm.unity.engine.api.AuthenticationFlowManagement;
 import pl.edu.icm.unity.engine.api.AuthenticatorManagement;
 import pl.edu.icm.unity.engine.api.PKIManagement;
 import pl.edu.icm.unity.engine.api.token.TokensManagement;
-import pl.edu.icm.unity.oauth.as.OAuthAuthzContext.ScopeInfo;
+import pl.edu.icm.unity.oauth.as.OAuthASProperties.RefreshTokenIssuePolicy;
 import pl.edu.icm.unity.oauth.as.OAuthSystemAttributesProvider.GrantFlow;
 import pl.edu.icm.unity.oauth.as.token.OAuthTokenEndpoint;
-import pl.edu.icm.unity.oauth.client.CustomHTTPSRequest;
 import pl.edu.icm.unity.stdext.attr.StringAttribute;
 import pl.edu.icm.unity.stdext.attr.StringAttributeSyntax;
 import pl.edu.icm.unity.stdext.identity.UsernameIdentity;
@@ -63,7 +62,7 @@ import pl.edu.icm.unity.types.endpoint.ResolvedEndpoint;
  */
 public abstract class TokenTestBase extends DBIntegrationTestBase
 {
-	protected static final String OAUTH_ENDP_CFG = "unity.oauth2.as.issuerUri=https://localhost:2443/oauth2\n"
+	private static final String OAUTH_ENDP_CFG = "unity.oauth2.as.issuerUri=https://localhost:2443/oauth2\n"
 			+ "unity.oauth2.as.signingCredential=MAIN\n"
 			+ "unity.oauth2.as.clientsGroup=/oauth-clients\n"
 			+ "unity.oauth2.as.usersGroup=/oauth-users\n"
@@ -76,7 +75,13 @@ public abstract class TokenTestBase extends DBIntegrationTestBase
 			+ "unity.oauth2.as.scopes.2.name=bar\n"
 			+ "unity.oauth2.as.scopes.2.description=Provides access to bar info\n"
 			+ "unity.oauth2.as.scopes.2.attributes.1=c\n"
+			+ "unity.oauth2.as.scopes.99.name=" + OIDCScopeValue.OFFLINE_ACCESS.getValue() + "\n"
 			+ "unity.oauth2.as.refreshTokenValidity=3600\n";
+			
+	
+
+	private static final String OIDC_ENDP_CFG = OAUTH_ENDP_CFG 
+			+ "unity.oauth2.as.scopes.3.name=openid\n";
 
 	public static final String REALM_NAME = "testr";
 
@@ -110,7 +115,7 @@ public abstract class TokenTestBase extends DBIntegrationTestBase
 				new URI("https://localhost:52443/oauth/tokeninfo"),
 				(BearerAccessToken) token);
 		HTTPRequest bare2 = uiRequest.toHTTPRequest();
-		HTTPRequest wrapped2 = new CustomHTTPSRequest(bare2, pkiMan.getValidator("MAIN"),
+		HTTPRequest wrapped2 = secureRequest(bare2, pkiMan.getValidator("MAIN"),
 				ServerHostnameCheckingMode.NONE);
 		HTTPResponse httpResponse = wrapped2.send();
 
@@ -121,13 +126,11 @@ public abstract class TokenTestBase extends DBIntegrationTestBase
 	/**
 	 * Only simple add user so the token may be added - attributes etc are
 	 * loaded by the WebAuths endpoint which is skipped here.
-	 * 
-	 * @throws Exception
 	 */
 	protected void createUser() throws Exception
 	{
 		idsMan.addEntity(new IdentityParam(UsernameIdentity.ID, "userA"), "cr-pass",
-				EntityState.valid, false);
+				EntityState.valid);
 	}
 	
 	protected void setupMockAuthn() throws Exception
@@ -137,8 +140,17 @@ public abstract class TokenTestBase extends DBIntegrationTestBase
 		authnMan.createAuthenticator("Apass", "password", "", "credential1");
 	}
 	
-	@Before
-	public void setup()
+	protected void setupPlain(RefreshTokenIssuePolicy refreshTokenPolicy)
+	{
+		setup(false, refreshTokenPolicy);
+	}
+
+	protected void setupOIDC(RefreshTokenIssuePolicy refreshTokenPolicy)
+	{
+		setup(true, refreshTokenPolicy);
+	}
+	
+	private void setup(boolean withOIDC, RefreshTokenIssuePolicy refreshTokenPolicy)
 	{
 		try
 		{
@@ -156,12 +168,15 @@ public abstract class TokenTestBase extends DBIntegrationTestBase
 					"flow1", Policy.NEVER,
 					Sets.newHashSet("Apass")));
 			
+			String cfg = (withOIDC ? OIDC_ENDP_CFG : OAUTH_ENDP_CFG)
+					+ "unity.oauth2.as.refreshTokenIssuePolicy=" + refreshTokenPolicy.toString() + "\n";
+			
 			EndpointConfiguration config = new EndpointConfiguration(
 					new I18nString("endpointIDP"), "desc", Lists.newArrayList("flow1"),
-					OAUTH_ENDP_CFG, REALM_NAME);
+					cfg, REALM_NAME);
 			endpointMan.deploy(OAuthTokenEndpoint.NAME, "endpointIDP", "/oauth",
 					config);
-			List<ResolvedEndpoint> endpoints = endpointMan.getEndpoints();
+			List<ResolvedEndpoint> endpoints = endpointMan.getDeployedEndpoints();
 			assertThat(endpoints.size(), is(1));
 
 			httpServer.start();
@@ -180,34 +195,34 @@ public abstract class TokenTestBase extends DBIntegrationTestBase
 	 * @param scope requested scope in code flow
 	 * @param ca user auth 
 	 * @return Parsed access token response
-	 * @throws Exception
 	 */
 	protected AccessTokenResponse init(List<String> scopes, ClientAuthentication ca)
 			throws Exception
 	{
 		IdentityParam identity = initUser("userA");
-		OAuthAuthzContext ctx = OAuthTestUtils.createContext(OAuthTestUtils.getConfig(),
+		OAuthAuthzContext ctx = OAuthTestUtils.createContext(OAuthTestUtils.getOIDCConfig(),
 				new ResponseType(ResponseType.Value.CODE),
 				GrantFlow.authorizationCode, clientId1.getEntityId());
 
 		ctx.setRequestedScopes(new HashSet<>(scopes));
 		for (String scope: scopes)
-			ctx.addEffectiveScopeInfo(new ScopeInfo(scope, scope, Lists.newArrayList(scope + " attr")));
+			ctx.addEffectiveScopeInfo(OAuthScope.builder().withName(scope).withDescription(scope)
+					.withAttributes(Lists.newArrayList(scope + " attr")).withEnabled(true).build());					
+					
 		ctx.setOpenIdMode(true);
 		AuthorizationSuccessResponse resp1 = OAuthTestUtils
-				.initOAuthFlowAccessCode(tokensMan, ctx, identity);
+				.initOAuthFlowAccessCode(OAuthTestUtils.getOAuthProcessor(tokensMan), ctx, identity);
 
 		TokenRequest request = new TokenRequest(
 				new URI("https://localhost:52443/oauth/token"), ca,
 				new AuthorizationCodeGrant(resp1.getAuthorizationCode(),
 						new URI("https://return.host.com/foo")));
 		HTTPRequest bare = request.toHTTPRequest();
-		HTTPRequest wrapped = new CustomHTTPSRequest(bare, pkiMan.getValidator("MAIN"),
+		HTTPRequest wrapped = secureRequest(bare, pkiMan.getValidator("MAIN"),
 				ServerHostnameCheckingMode.NONE);
 
 		HTTPResponse resp2 = wrapped.send();
 		AccessTokenResponse parsedResp = AccessTokenResponse.parse(resp2);
-		assertThat(parsedResp.getTokens().getRefreshToken(), notNullValue());
 		return parsedResp;
 	}
 }

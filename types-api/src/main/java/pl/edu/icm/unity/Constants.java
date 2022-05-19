@@ -18,9 +18,14 @@ public class Constants
 {
 	public static final String SIMPLE_DATE_FORMAT = "yyyy.MM.dd HH:mm:ss";
 	
-	public static final ObjectMapper MAPPER = new ObjectMapper()
-                            .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+	public static final ObjectMapper MAPPER = new ObjectMapper().findAndRegisterModules();
 	
 	public static final DateTimeFormatter DT_FORMATTER_MEDIUM = 
 			DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM);
+	
+	public static final DateTimeFormatter DT_FORMATTER_STANDARD = 
+			DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+	
+	public static final DateTimeFormatter DT_FORMATTER_STANDARD_WITH_SECOND_FRACTION = 
+			DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");
 }

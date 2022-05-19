@@ -29,12 +29,13 @@ import com.google.common.collect.Lists;
 import pl.edu.icm.unity.engine.DBIntegrationTestBase;
 import pl.edu.icm.unity.engine.api.TranslationProfileManagement;
 import pl.edu.icm.unity.engine.api.authn.remote.RemoteAttribute;
-import pl.edu.icm.unity.engine.api.authn.remote.RemoteAuthnResultProcessor;
+import pl.edu.icm.unity.engine.api.authn.remote.RemoteAuthnResultTranslator;
 import pl.edu.icm.unity.engine.api.authn.remote.RemoteGroupMembership;
 import pl.edu.icm.unity.engine.api.authn.remote.RemoteIdentity;
-import pl.edu.icm.unity.engine.api.authn.remote.RemotelyAuthenticatedContext;
+import pl.edu.icm.unity.engine.api.authn.remote.RemotelyAuthenticatedPrincipal;
 import pl.edu.icm.unity.engine.api.authn.remote.RemotelyAuthenticatedInput;
 import pl.edu.icm.unity.engine.api.translation.TranslationActionInstance;
+import pl.edu.icm.unity.engine.api.translation.TranslationProfileGenerator;
 import pl.edu.icm.unity.engine.api.translation.in.AttributeEffectMode;
 import pl.edu.icm.unity.engine.api.translation.in.GroupEffectMode;
 import pl.edu.icm.unity.engine.api.translation.in.IdentityEffectMode;
@@ -44,7 +45,7 @@ import pl.edu.icm.unity.engine.api.translation.in.MappedAttribute;
 import pl.edu.icm.unity.engine.api.translation.in.MappedGroup;
 import pl.edu.icm.unity.engine.api.translation.in.MappedIdentity;
 import pl.edu.icm.unity.engine.api.translation.in.MappingResult;
-import pl.edu.icm.unity.engine.authz.AuthorizationManagerImpl;
+import pl.edu.icm.unity.engine.authz.InternalAuthorizationManagerImpl;
 import pl.edu.icm.unity.engine.server.EngineInitialization;
 import pl.edu.icm.unity.engine.translation.in.InputTranslationProfile;
 import pl.edu.icm.unity.engine.translation.in.InputTranslationProfileRepository;
@@ -96,7 +97,7 @@ public class TestInputTranslationProfiles extends DBIntegrationTestBase
 	@Autowired
 	private InputTranslationEngine inputTrEngine;
 	@Autowired
-	private RemoteAuthnResultProcessor remoteProcessor;
+	private RemoteAuthnResultTranslator remoteProcessor;
 	@Autowired
 	private InputTranslationActionsRegistry intactionReg;
 	@Autowired
@@ -246,8 +247,8 @@ public class TestInputTranslationProfiles extends DBIntegrationTestBase
 		EntityParam ep = new EntityParam(new IdentityTaV(IdentifierIdentity.ID, "id"));
 		idsMan.addEntity(new IdentityParam(IdentifierIdentity.ID, "id"), 
 				EngineInitialization.DEFAULT_CREDENTIAL_REQUIREMENT, 
-				EntityState.valid, false);
-		idsMan.addIdentity(new IdentityParam(IdentifierIdentity.ID, "id2", "test", "p1"), ep, false);
+				EntityState.valid);
+		idsMan.addIdentity(new IdentityParam(IdentifierIdentity.ID, "id2", "test", "p1"), ep);
 		groupsMan.addMemberFromParent("/A", ep, null, "test", "p1");
 		groupsMan.addMemberFromParent("/B", ep, null, "test", "p1");
 		Attribute attr = StringAttribute.of("o", "/", "v1");
@@ -359,7 +360,7 @@ public class TestInputTranslationProfiles extends DBIntegrationTestBase
 		}
 		
 		idsMan.addEntity(new IdentityParam(IdentifierIdentity.ID, "test"), 
-				EngineInitialization.DEFAULT_CREDENTIAL_REQUIREMENT, EntityState.valid, false);
+				EngineInitialization.DEFAULT_CREDENTIAL_REQUIREMENT, EntityState.valid);
 
 		
 		tx.runInTransactionThrowing(() -> {
@@ -537,7 +538,7 @@ public class TestInputTranslationProfiles extends DBIntegrationTestBase
 				new IdentityParam(UsernameIdentity.ID, "added"), "dummy"));
 		
 		setupPasswordAuthn();
-		Identity baseUser = createUsernameUserWithRole(AuthorizationManagerImpl.USER_ROLE);
+		Identity baseUser = createUsernameUserWithRole(InternalAuthorizationManagerImpl.USER_ROLE);
 		EntityParam baseUserP = new EntityParam(baseUser);
 
 		tx.runInTransactionThrowing(() -> {
@@ -576,7 +577,7 @@ public class TestInputTranslationProfiles extends DBIntegrationTestBase
 	{
 		Identity toBeMappedOn = idsMan.addEntity(new IdentityParam(IdentifierIdentity.ID, "known"), 
 				EngineInitialization.DEFAULT_CREDENTIAL_REQUIREMENT,
-				EntityState.valid, false);
+				EntityState.valid);
 		List<TranslationRule> rules = new ArrayList<>();
 		TranslationAction action1 = new TranslationAction(MapIdentityActionFactory.NAME, new String[] {
 				IdentifierIdentity.ID, 
@@ -595,8 +596,8 @@ public class TestInputTranslationProfiles extends DBIntegrationTestBase
 		tprofMan.addProfile(tp1Cfg);
 		RemotelyAuthenticatedInput input = new RemotelyAuthenticatedInput("test");
 		
-		RemotelyAuthenticatedContext processed  = tx.runInTransactionRetThrowing(() -> {
-			return remoteProcessor.processRemoteInput(input, "p1", false, Optional.empty());
+		RemotelyAuthenticatedPrincipal processed  = tx.runInTransactionRetThrowing(() -> {
+			return remoteProcessor.translateRemoteInput(input,TranslationProfileGenerator.generateIncludeInputProfile("", "p1"), false, Optional.empty());
 		});
 		
 		assertNotNull(processed.getLocalMappedPrincipal());
@@ -696,7 +697,7 @@ public class TestInputTranslationProfiles extends DBIntegrationTestBase
 		
 		Identity identity = idsMan.addEntity(idParam, 
 				EngineInitialization.DEFAULT_CREDENTIAL_REQUIREMENT, 
-				EntityState.valid, false, Lists.newArrayList(attr));
+				EntityState.valid, Lists.newArrayList(attr));
 		EntityParam ep = new EntityParam(identity);
 		
 		List<TranslationRule> rules = new ArrayList<>();
@@ -752,7 +753,7 @@ public class TestInputTranslationProfiles extends DBIntegrationTestBase
 		
 		Identity identity = idsMan.addEntity(idParam, 
 				EngineInitialization.DEFAULT_CREDENTIAL_REQUIREMENT, 
-				EntityState.valid, false, Lists.newArrayList(attr));
+				EntityState.valid, Lists.newArrayList(attr));
 		EntityParam ep = new EntityParam(identity);
 		
 		List<TranslationRule> rules = new ArrayList<>();
@@ -806,7 +807,7 @@ public class TestInputTranslationProfiles extends DBIntegrationTestBase
 		IdentityParam idParam = new IdentityParam(EmailIdentity.ID, "id@example.com");
 		Identity identity = idsMan.addEntity(idParam, 
 				EngineInitialization.DEFAULT_CREDENTIAL_REQUIREMENT, 
-				EntityState.valid, false, Lists.newArrayList());
+				EntityState.valid, Lists.newArrayList());
 		EntityParam ep = new EntityParam(identity);
 		
 		rules = new ArrayList<>();
@@ -865,7 +866,7 @@ public class TestInputTranslationProfiles extends DBIntegrationTestBase
 		IdentityParam idParam = new IdentityParam(EmailIdentity.ID, "id@example.com");
 		Identity identity = idsMan.addEntity(idParam, 
 				EngineInitialization.DEFAULT_CREDENTIAL_REQUIREMENT, 
-				EntityState.valid, false, Lists.newArrayList());
+				EntityState.valid, Lists.newArrayList());
 		EntityParam ep = new EntityParam(identity);
 		
 		TranslationProfile tp1Cfg = new TranslationProfile("tp1", "",

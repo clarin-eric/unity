@@ -18,6 +18,8 @@ import pl.edu.icm.unity.types.authn.LocalCredentialState;
  */
 public interface CredentialManagement
 {
+	public static final String DEFAULT_CREDENTIAL = "sys:password";
+			
 	/**
 	 * @return list of available credential types.
 	 * @throws EngineException
@@ -62,4 +64,10 @@ public interface CredentialManagement
 	 * @throws EngineException
 	 */
 	Collection<CredentialDefinition> getCredentialDefinitions() throws EngineException;
+	
+	/**
+	 * @return Credential definition with given name
+	 * @throws EngineException
+	 */
+	CredentialDefinition getCredentialDefinition(String name) throws EngineException;
 }

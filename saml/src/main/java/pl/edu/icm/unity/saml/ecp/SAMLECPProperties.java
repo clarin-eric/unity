@@ -13,6 +13,7 @@ import eu.unicore.util.configuration.DocumentationReferenceMeta;
 import eu.unicore.util.configuration.PropertyMD;
 import eu.unicore.util.configuration.PropertyMD.DocumentationCategory;
 import pl.edu.icm.unity.engine.api.PKIManagement;
+import pl.edu.icm.unity.rest.jwt.JWTAuthenticationConfig;
 import pl.edu.icm.unity.rest.jwt.JWTAuthenticationProperties;
 import pl.edu.icm.unity.saml.sp.SAMLSPProperties;
 
@@ -27,7 +28,7 @@ public class SAMLECPProperties extends SAMLSPProperties
 	public static final String JWT_P = "jwt.";
 	
 	@DocumentationReferenceMeta
-	public final static Map<String, PropertyMD> ECP_META = new HashMap<String, PropertyMD>();
+	public final static Map<String, PropertyMD> ECP_META = new HashMap<>();
 	
 	static
 	{
@@ -53,8 +54,9 @@ public class SAMLECPProperties extends SAMLSPProperties
 		super(properties, ECP_META, pkiMan);
 	}
 	
-	public JWTAuthenticationProperties getJWTProperties()
+	public JWTAuthenticationConfig getJWTConfig()
 	{
-		return new JWTAuthenticationProperties(P + JWT_P, properties);
+		JWTAuthenticationProperties jwtproperties = new JWTAuthenticationProperties(P + JWT_P, properties);
+		return jwtproperties.toConfig();
 	}
 }

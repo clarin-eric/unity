@@ -4,52 +4,31 @@
  */
 package pl.edu.icm.unity.engine.forms;
 
-import java.util.HashMap;
-import java.util.Map;
+import java.util.Optional;
 
-/**
- * Stores information about which elements were prefilled by invitation
- * 
- * @author K. Benedyczak
- */
+import pl.edu.icm.unity.types.registration.invite.InvitationWithCode;
+
 public class InvitationPrefillInfo
 {
-	private boolean byInvitation;
-	private Map<Integer, Boolean> prefilledIdentitites = new HashMap<>();
-	private Map<Integer, Boolean> prefilledAttributes = new HashMap<>();
+	private Optional<InvitationWithCode> invitation;
 	
 	public InvitationPrefillInfo()
 	{
-		this(false);
+		this(null);
 	}
 
-	public InvitationPrefillInfo(boolean byInvitation)
+	public InvitationPrefillInfo(InvitationWithCode invitation)
 	{
-		this.byInvitation = byInvitation;
+		this.invitation = Optional.ofNullable(invitation);
 	}
 
 	public boolean isByInvitation()
 	{
-		return byInvitation;
-	}
-
-	public void setPrefilledIdentity(int index)
-	{
-		prefilledIdentitites.put(index, true);
+		return invitation.isPresent();
 	}
 	
-	public boolean isIdentityPrefilled(int index)
+	public Optional<InvitationWithCode> getInvitation()
 	{
-		return prefilledIdentitites.getOrDefault(index, false);
-	}
-
-	public void setPrefilledAttribute(int index)
-	{
-		prefilledAttributes.put(index, true);
-	}
-	
-	public boolean isAttributePrefilled(int index)
-	{
-		return prefilledAttributes.getOrDefault(index, false);
+		return invitation;
 	}
 }

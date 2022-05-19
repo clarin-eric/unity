@@ -26,17 +26,18 @@ import pl.edu.icm.unity.engine.api.PKIManagement;
 import pl.edu.icm.unity.engine.api.authn.AbstractCredentialVerificatorFactory;
 import pl.edu.icm.unity.engine.api.authn.AuthenticationException;
 import pl.edu.icm.unity.engine.api.authn.AuthenticationResult;
-import pl.edu.icm.unity.engine.api.authn.AuthenticationResult.Status;
+import pl.edu.icm.unity.engine.api.authn.InvocationContext;
+import pl.edu.icm.unity.engine.api.authn.LocalAuthenticationResult;
+import pl.edu.icm.unity.engine.api.authn.InvocationContext.InvocationMaterial;
 import pl.edu.icm.unity.engine.api.authn.remote.AbstractRemoteVerificator;
 import pl.edu.icm.unity.engine.api.authn.remote.RemoteAttribute;
-import pl.edu.icm.unity.engine.api.authn.remote.RemoteAuthnResultProcessor;
+import pl.edu.icm.unity.engine.api.authn.remote.RemoteAuthnResultTranslator;
 import pl.edu.icm.unity.engine.api.authn.remote.RemoteIdentity;
 import pl.edu.icm.unity.engine.api.authn.remote.RemotelyAuthenticatedInput;
-import pl.edu.icm.unity.engine.api.authn.remote.SandboxAuthnResultCallback;
-import pl.edu.icm.unity.engine.api.token.TokensManagement;
 import pl.edu.icm.unity.engine.api.utils.PrototypeComponent;
 import pl.edu.icm.unity.exceptions.EngineException;
 import pl.edu.icm.unity.exceptions.InternalException;
+import pl.edu.icm.unity.oauth.as.OAuthTokenRepository;
 import pl.edu.icm.unity.oauth.client.AttributeFetchResult;
 import pl.edu.icm.unity.oauth.client.UserProfileFetcher;
 import pl.edu.icm.unity.oauth.client.profile.OpenIdProfileFetcher;
@@ -45,6 +46,8 @@ import pl.edu.icm.unity.oauth.rp.AccessTokenExchange;
 import pl.edu.icm.unity.oauth.rp.OAuthRPProperties;
 import pl.edu.icm.unity.oauth.rp.verificator.ResultsCache.CacheEntry;
 import pl.edu.icm.unity.stdext.identity.IdentifierIdentity;
+import pl.edu.icm.unity.types.translation.TranslationProfile;
+import pl.edu.icm.unity.webui.authn.CommonWebAuthnProperties;
 
 /**
  * Verificator of bearer access token.
@@ -62,17 +65,17 @@ public class BearerTokenVerificator extends AbstractRemoteVerificator implements
 	private OAuthRPProperties verificatorProperties;
 	private TokenVerificatorProtocol tokenChecker;
 	private PKIManagement pkiMan;
-	private TokensManagement tokensMan;
-	private String translationProfile;
+	private OAuthTokenRepository tokensDAO;
+	private TranslationProfile translationProfile;
 	private ResultsCache cache;
 	
 	@Autowired
-	public BearerTokenVerificator(PKIManagement pkiMan, TokensManagement tokensMan, 
-			RemoteAuthnResultProcessor processor)
+	public BearerTokenVerificator(PKIManagement pkiMan, OAuthTokenRepository tokensDAO, 
+			RemoteAuthnResultTranslator processor)
 	{
 		super(NAME, DESC, AccessTokenExchange.ID, processor);
 		this.pkiMan = pkiMan;
-		this.tokensMan = tokensMan;
+		this.tokensDAO = tokensDAO;
 	}
 
 	@Override
@@ -96,9 +99,10 @@ public class BearerTokenVerificator extends AbstractRemoteVerificator implements
 		{
 			Properties properties = new Properties();
 			properties.load(new StringReader(source));
-			verificatorProperties = new OAuthRPProperties(properties, pkiMan, tokensMan);
+			verificatorProperties = new OAuthRPProperties(properties, pkiMan, tokensDAO);
 			tokenChecker = verificatorProperties.getTokenChecker();
-			translationProfile = verificatorProperties.getValue(OAuthRPProperties.TRANSLATION_PROFILE);
+			translationProfile = getTranslationProfile(verificatorProperties, CommonWebAuthnProperties.TRANSLATION_PROFILE,
+					CommonWebAuthnProperties.EMBEDDED_TRANSLATION_PROFILE);			
 			int ttl = -1;
 			if (verificatorProperties.isSet(OAuthRPProperties.CACHE_TIME))
 				ttl = verificatorProperties.getIntValue(OAuthRPProperties.CACHE_TIME);
@@ -114,26 +118,22 @@ public class BearerTokenVerificator extends AbstractRemoteVerificator implements
 	}
 
 	@Override
-	public AuthenticationResult checkToken(BearerAccessToken token, SandboxAuthnResultCallback sandboxCallback) 
+	public AuthenticationResult checkToken(BearerAccessToken token) 
 			throws AuthenticationException
 	{
-		RemoteAuthnState state = startAuthnResponseProcessing(sandboxCallback, 
-				Log.U_SERVER_TRANSLATION, Log.U_SERVER_OAUTH);
 		try
 		{
-			return checkTokenInterruptible(token, state);
+			return checkTokenInterruptible(token);
 		} catch (AuthenticationException e)
 		{
-			finishAuthnResponseProcessing(state, e);
 			throw e;
 		} catch (Exception e)
 		{
-			finishAuthnResponseProcessing(state, e);
 			throw new AuthenticationException("Authentication error ocurred", e);
 		}
 	}
 	
-	public AuthenticationResult checkTokenInterruptible(BearerAccessToken token, RemoteAuthnState state) 
+	public AuthenticationResult checkTokenInterruptible(BearerAccessToken token) 
 			throws Exception
 	{
 		CacheEntry cached = cache.getCached(token.getValue());
@@ -144,14 +144,15 @@ public class BearerTokenVerificator extends AbstractRemoteVerificator implements
 			{
 				if (!checkScopes(status))
 				{
-					return new AuthenticationResult(Status.deny, null, null);
+					return LocalAuthenticationResult.failed();
 				}
 				RemotelyAuthenticatedInput input = assembleBaseResult(status, 
 						cached.getAttributes(), getName());
-				return getResult(input, translationProfile, state);				
+				updateInvocationContext(status);				
+				return getResultForNonInteractiveAuthn(input, translationProfile);				
 			} else
 			{
-				return new AuthenticationResult(Status.deny, null, null);
+				return LocalAuthenticationResult.failed();
 			}
 		}
 		
@@ -161,21 +162,28 @@ public class BearerTokenVerificator extends AbstractRemoteVerificator implements
 			if (!checkScopes(status))
 			{
 				cache.cache(token.getValue(), status, null);
-				return new AuthenticationResult(Status.deny, null, null);
+				return LocalAuthenticationResult.failed();
 			}
 			
 			AttributeFetchResult attrs;
 			attrs = getUserProfileInformation(token);
 			cache.cache(token.getValue(), status, attrs);
 			RemotelyAuthenticatedInput input = assembleBaseResult(status, attrs, getName());
-			return getResult(input, translationProfile, state);
+			updateInvocationContext(status);				
+			return getResultForNonInteractiveAuthn(input, translationProfile);
 		} else
 		{
 			cache.cache(token.getValue(), status, null);
-			return new AuthenticationResult(Status.deny, null, null);
+			return LocalAuthenticationResult.failed();
 		}
 	}
 
+	private void updateInvocationContext(TokenStatus status)
+	{
+		InvocationContext current = InvocationContext.getCurrent();
+		current.setInvocationMaterial(InvocationMaterial.OAUTH_DELEGATION);
+		current.setScopes(status.getScope().toStringList());
+	}
 	
 	private boolean checkScopes(TokenStatus status)
 	{

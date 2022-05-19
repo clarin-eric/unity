@@ -4,6 +4,7 @@
  */
 package pl.edu.icm.unity.saml.metadata.srv;
 
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -15,8 +16,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import pl.edu.icm.unity.base.utils.Log;
-import pl.edu.icm.unity.engine.api.PKIManagement;
-import pl.edu.icm.unity.engine.api.config.UnityServerConfiguration;
+import pl.edu.icm.unity.engine.api.files.FileStorageService;
+import pl.edu.icm.unity.engine.api.files.URIAccessService;
 import pl.edu.icm.unity.engine.api.utils.ExecutorsService;
 import xmlbeans.org.oasis.saml2.metadata.EntitiesDescriptorDocument;
 
@@ -37,14 +38,11 @@ class RemoteMetadataServiceImpl implements RemoteMetadataService
 	private Map<String, String> consumers2URL = new HashMap<>();	
 	
 	@Autowired
-	public RemoteMetadataServiceImpl(ExecutorsService executorsService, PKIManagement pkiManagement,
-			UnityServerConfiguration config)
+	public RemoteMetadataServiceImpl(FileStorageService fileStorageService, URIAccessService uriAccessService, 
+			ExecutorsService executorsService)
 	{
 		this.executorsService = executorsService;
-		NetworkClient client = new NetworkClient(pkiManagement);
-		String workspaceDirectory = config.getValue(
-				UnityServerConfiguration.WORKSPACE_DIRECTORY);
-		this.downloader = new MetadataDownloader(workspaceDirectory, client);
+		this.downloader = new MetadataDownloader(uriAccessService, fileStorageService);
 	}
 
 	RemoteMetadataServiceImpl(ExecutorsService executorsService, MetadataDownloader downloader)
@@ -63,7 +61,7 @@ class RemoteMetadataServiceImpl implements RemoteMetadataService
 	}
 	
 	@Override
-	public synchronized void registerConsumer(String key, long refreshIntervalMs,
+	public synchronized void registerConsumer(String key, Duration refreshInterval,
 			String customTruststore, BiConsumer<EntitiesDescriptorDocument, String> consumer)
 	{
 		String url = consumers2URL.get(key);
@@ -78,7 +76,7 @@ class RemoteMetadataServiceImpl implements RemoteMetadataService
 			metadataHandlersByURL.put(url, handler);
 		}
 		checkTruststoresConsistency(handler, customTruststore);
-		handler.addConsumer(new MetadataConsumer(refreshIntervalMs, consumer, key));
+		handler.addConsumer(new MetadataConsumer(refreshInterval, consumer, key));
 		log.info("Registered consumer {} of metadata from {}", key, url);
 	}
 

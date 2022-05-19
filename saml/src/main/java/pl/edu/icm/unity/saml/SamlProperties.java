@@ -8,6 +8,8 @@
 
 package pl.edu.icm.unity.saml;
 
+import static org.apache.commons.lang3.StringUtils.isBlank;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -16,9 +18,10 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 
-import org.apache.log4j.Logger;
+import org.apache.logging.log4j.Logger;
 
 import eu.unicore.samly2.SAMLBindings;
+import eu.unicore.samly2.SAMLConstants;
 import eu.unicore.util.configuration.PropertyMD;
 import eu.unicore.util.configuration.PropertyMD.DocumentationCategory;
 import pl.edu.icm.unity.engine.api.config.UnityPropertiesHelper;
@@ -39,7 +42,28 @@ public abstract class SamlProperties extends UnityPropertiesHelper
 	 * Note that adding a new binding here requires a couple of changes in the code. 
 	 * E.g. support in SAML Metadata-> config conversion, ECP, web retrieval, ....
 	 */
-	public enum Binding {HTTP_REDIRECT, HTTP_POST, SOAP};
+	public enum Binding 
+	{
+		HTTP_REDIRECT, 
+		HTTP_POST, 
+		SOAP;
+		
+		public static Binding of(SAMLBindings samlBinding)
+		{
+			return Binding.valueOf(samlBinding.name());
+		}
+		
+		public static Binding ofSAMLBinding(String samlBinding)
+		{
+			if (SAMLConstants.BINDING_HTTP_POST.equals(samlBinding))
+				return HTTP_POST;
+			if (SAMLConstants.BINDING_HTTP_REDIRECT.equals(samlBinding))
+				return HTTP_REDIRECT;
+			if (SAMLConstants.BINDING_SOAP.equals(samlBinding))
+				return SOAP;
+			throw new IllegalStateException("Unsupported binding: " + samlBinding);
+		}
+	};
 	
 	public static final String PUBLISH_METADATA = "publishMetadata";
 	public static final String SIGN_METADATA = "signMetadata";
@@ -62,6 +86,8 @@ public abstract class SamlProperties extends UnityPropertiesHelper
 	public static final String IDENTITY_MAPPING_PFX = "identityMapping.";
 	public static final String IDENTITY_LOCAL = "localIdentity";
 	public static final String IDENTITY_SAML = "samlIdentity";
+	
+	public static final int DEFAULT_METADATA_REFRESH = 3600;
 	
 	public static final DocumentationCategory samlMetaCat = new DocumentationCategory("SAML metadata settings", "6");
 	public static final DocumentationCategory remoteMeta = new DocumentationCategory(
@@ -92,7 +118,7 @@ public abstract class SamlProperties extends UnityPropertiesHelper
 				+ "In case of HTTPS the server's certificate will be checked against the main "
 				+ "Unity server's truststore"
 				+ " only if " + METADATA_HTTPS_TRUSTSTORE + " is set."));
-		defaults.put(METADATA_REFRESH, new PropertyMD("3600").setCategory(remoteMeta).
+		defaults.put(METADATA_REFRESH, new PropertyMD(String.valueOf(DEFAULT_METADATA_REFRESH)).setCategory(remoteMeta).
 				setStructuredListEntry(metasPrefix).setDescription(
 				"How often the metadata should be reloaded."));
 		defaults.put(METADATA_HTTPS_TRUSTSTORE, new PropertyMD().setCategory(remoteMeta).
@@ -141,17 +167,17 @@ public abstract class SamlProperties extends UnityPropertiesHelper
 		String redirectRetSlo = getValue(configKey + REDIRECT_LOGOUT_RET_URL);
 		String soapSlo = getValue(configKey + SOAP_LOGOUT_URL);
 
-		if (redirectRetSlo == null)
+		if (isBlank(redirectRetSlo))
 			redirectRetSlo = redirectSlo;
-		if (postRetSlo == null)
+		if (isBlank(postRetSlo))
 			postRetSlo = postSlo;
 		
 		List<SAMLEndpointDefinition> ret = new ArrayList<>(3);
-		if (postSlo != null)
+		if (!isBlank(postSlo))
 			ret.add(new SAMLEndpointDefinition(Binding.HTTP_POST, postSlo, postRetSlo));
-		if (redirectSlo != null)
+		if (!isBlank(redirectSlo))
 			ret.add(new SAMLEndpointDefinition(Binding.HTTP_REDIRECT, redirectSlo, redirectRetSlo));
-		if (soapSlo != null)
+		if (!isBlank(soapSlo))
 			ret.add(new SAMLEndpointDefinition(Binding.SOAP, soapSlo, soapSlo));
 		return ret;
 	}

@@ -4,19 +4,25 @@
  */
 package pl.edu.icm.unity.webui.forms.enquiry;
 
+import java.util.List;
+import java.util.Map;
+
+import pl.edu.icm.unity.MessageSource;
 import pl.edu.icm.unity.engine.api.AttributeTypeManagement;
 import pl.edu.icm.unity.engine.api.CredentialManagement;
 import pl.edu.icm.unity.engine.api.GroupsManagement;
-import pl.edu.icm.unity.engine.api.authn.remote.RemotelyAuthenticatedContext;
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
+import pl.edu.icm.unity.engine.api.authn.remote.RemotelyAuthenticatedPrincipal;
 import pl.edu.icm.unity.exceptions.EngineException;
+import pl.edu.icm.unity.types.policyAgreement.PolicyAgreementConfiguration;
 import pl.edu.icm.unity.types.registration.EnquiryForm;
 import pl.edu.icm.unity.types.registration.EnquiryForm.EnquiryType;
 import pl.edu.icm.unity.types.registration.EnquiryResponse;
 import pl.edu.icm.unity.webui.common.FormValidationException;
 import pl.edu.icm.unity.webui.common.attributes.AttributeHandlerRegistry;
 import pl.edu.icm.unity.webui.common.credentials.CredentialEditorRegistry;
+import pl.edu.icm.unity.webui.common.file.ImageAccessService;
 import pl.edu.icm.unity.webui.common.identities.IdentityEditorRegistry;
+import pl.edu.icm.unity.webui.common.policyAgreement.PolicyAgreementRepresentationBuilder;
 import pl.edu.icm.unity.webui.forms.BaseRequestEditor;
 import pl.edu.icm.unity.webui.forms.PrefilledSet;
 import pl.edu.icm.unity.webui.forms.RegistrationLayoutsContainer;
@@ -27,22 +33,32 @@ import pl.edu.icm.unity.webui.forms.RegistrationLayoutsContainer;
  */
 public class EnquiryResponseEditor extends BaseRequestEditor<EnquiryResponse>
 {
-	private EnquiryForm enquiryForm;
-	private PrefilledSet prefilled;
+	private final EnquiryForm enquiryForm;
+	private final PrefilledSet prefilled;
+	private final List<PolicyAgreementConfiguration> filteredPolicyAgreement;
 	private RegistrationLayoutsContainer layoutContainer;
+	private final Map<String, Object> messageParams;
 	
-	public EnquiryResponseEditor(UnityMessageSource msg, EnquiryForm form,
-			RemotelyAuthenticatedContext remotelyAuthenticated,
+	public EnquiryResponseEditor(MessageSource msg, EnquiryForm form,
+			RemotelyAuthenticatedPrincipal remotelyAuthenticated,
 			IdentityEditorRegistry identityEditorRegistry,
 			CredentialEditorRegistry credentialEditorRegistry,
 			AttributeHandlerRegistry attributeHandlerRegistry,
 			AttributeTypeManagement atMan, CredentialManagement credMan,
-			GroupsManagement groupsMan, PrefilledSet prefilled) throws Exception
+			GroupsManagement groupsMan, ImageAccessService imageAccessService,
+			PolicyAgreementRepresentationBuilder policyAgreementsRepresentationBuilder,
+			List<PolicyAgreementConfiguration> filteredPolicyAgreement,
+			PrefilledSet prefilled,
+			Map<String, Object> messageParams) throws Exception
 	{
 		super(msg, form, remotelyAuthenticated, identityEditorRegistry, credentialEditorRegistry, 
-				attributeHandlerRegistry, atMan, credMan, groupsMan);
+				attributeHandlerRegistry, atMan, credMan, groupsMan, imageAccessService, 
+				policyAgreementsRepresentationBuilder);
 		this.enquiryForm = form;
+		this.filteredPolicyAgreement = filteredPolicyAgreement;
 		this.prefilled = prefilled;
+		this.messageParams = messageParams;
+
 		validateMandatoryRemoteInput();
 		initUI();
 	}
@@ -61,9 +77,11 @@ public class EnquiryResponseEditor extends BaseRequestEditor<EnquiryResponse>
 		return ret;
 	}
 	
+	
+	
 	private void initUI() throws EngineException
 	{
-		layoutContainer = createLayouts();
+		layoutContainer = createLayouts(messageParams);
 		
 		createControls(layoutContainer, enquiryForm.getEffectiveFormLayout(msg), prefilled);
 	}
@@ -81,6 +99,12 @@ public class EnquiryResponseEditor extends BaseRequestEditor<EnquiryResponse>
 	void focusFirst()
 	{
 		focusFirst(layoutContainer.registrationFormLayout);
+	}
+
+	@Override
+	protected boolean isPolicyAgreementsIsFiltered(PolicyAgreementConfiguration toCheck)
+	{
+		return !filteredPolicyAgreement.contains(toCheck);
 	}	
 }
 

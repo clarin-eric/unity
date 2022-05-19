@@ -14,7 +14,7 @@ import java.util.stream.Stream;
 
 import pl.edu.icm.unity.MessageSource;
 import pl.edu.icm.unity.types.I18nString;
-import pl.edu.icm.unity.types.authn.AuthenticationOptionKey;
+import pl.edu.icm.unity.types.authn.AuthenticationOptionsSelector;
 import pl.edu.icm.unity.types.registration.layout.BasicFormElement;
 import pl.edu.icm.unity.types.registration.layout.FormCaptionElement;
 import pl.edu.icm.unity.types.registration.layout.FormElement;
@@ -67,6 +67,7 @@ public final class FormLayoutUtils
 		if (form.isCollectComments())
 			elements.add(new BasicFormElement(FormLayoutElement.COMMENTS));
 		elements.addAll(getDefaultBasicParamsLayout(FormLayoutElement.AGREEMENT, form.getAgreements(), true));
+		elements.addAll(getDefaultBasicParamsLayout(FormLayoutElement.POLICY_AGREEMENT, form.getPolicyAgreements(), true));
 		return elements;
 	}
 	
@@ -119,8 +120,7 @@ public final class FormLayoutUtils
 	private static void updateSecondaryLayout(RegistrationFormLayouts layouts, RegistrationForm form)
 	{
 		if (layouts.getSecondaryLayout() == null)
-			layouts.setSecondaryLayout(new FormLayout(new ArrayList<>()));
-		
+			return;
 		FormLayout secondaryLayout = layouts.getSecondaryLayout();
 		Set<String> definedElements = getDefinedElements(secondaryLayout);
 		updateFormParametersInLayout(secondaryLayout, form, definedElements);
@@ -174,7 +174,7 @@ public final class FormLayoutUtils
 
 		
 		int externalSignUpSize = form.getExternalSignupSpec().getSpecs().size();
-		List<AuthenticationOptionKey> gridSpecs = form.getExternalSignupGridSpec().getSpecs();
+		List<AuthenticationOptionsSelector> gridSpecs = form.getExternalSignupGridSpec().getSpecs();
 
 		for (int i = 0; i < externalSignUpSize; i++)
 		{
@@ -231,6 +231,8 @@ public final class FormLayoutUtils
 			addParameterIfMissing(layout, FormLayoutElement.ATTRIBUTE, i, definedElements);
 		for (int i = 0; i < form.getAgreements().size(); i++)
 			addParameterIfMissing(layout, FormLayoutElement.AGREEMENT, i, definedElements);
+		for (int i = 0; i < form.getPolicyAgreements().size(); i++)
+			addParameterIfMissing(layout, FormLayoutElement.POLICY_AGREEMENT, i, definedElements);
 		for (int i = 0; i < form.getGroupParams().size(); i++)
 			addParameterIfMissing(layout, FormLayoutElement.GROUP, i, definedElements);
 		for (int i = 0; i < form.getCredentialParams().size(); i++)
@@ -239,6 +241,7 @@ public final class FormLayoutUtils
 		removeParametersWithIndexLargerThen(layout, FormLayoutElement.IDENTITY, form.getIdentityParams().size());
 		removeParametersWithIndexLargerThen(layout, FormLayoutElement.ATTRIBUTE, form.getAttributeParams().size());
 		removeParametersWithIndexLargerThen(layout, FormLayoutElement.AGREEMENT, form.getAgreements().size());
+		removeParametersWithIndexLargerThen(layout, FormLayoutElement.POLICY_AGREEMENT, form.getPolicyAgreements().size());
 		removeParametersWithIndexLargerThen(layout, FormLayoutElement.GROUP, form.getGroupParams().size());
 		removeParametersWithIndexLargerThen(layout, FormLayoutElement.CREDENTIAL, form.getCredentialParams().size());
 	}
@@ -347,6 +350,8 @@ public final class FormLayoutUtils
 			checkLayoutElement(getIdOfElement(FormLayoutElement.ATTRIBUTE, i), definedElements);
 		for (int i = 0; i < form.getAgreements().size(); i++)
 			checkLayoutElement(getIdOfElement(FormLayoutElement.AGREEMENT, i), definedElements);
+		for (int i = 0; i < form.getPolicyAgreements().size(); i++)
+			checkLayoutElement(getIdOfElement(FormLayoutElement.POLICY_AGREEMENT, i), definedElements);
 		for (int i = 0; i < form.getGroupParams().size(); i++)
 			checkLayoutElement(getIdOfElement(FormLayoutElement.GROUP, i), definedElements);
 		if (withCredentials)
@@ -378,7 +383,7 @@ public final class FormLayoutUtils
 	private static void checkRemoteSignupElements(RegistrationForm registrationform, Set<String> definedElements)
 	{
 		
-		List<AuthenticationOptionKey> gridSpecs = registrationform.getExternalSignupGridSpec().getSpecs();
+		List<AuthenticationOptionsSelector> gridSpecs = registrationform.getExternalSignupGridSpec().getSpecs();
 		for (int i = 0; i < registrationform.getExternalSignupSpec().getSpecs().size(); i++)
 		{
 			if (!gridSpecs.contains(registrationform.getExternalSignupSpec().getSpecs().get(i)))

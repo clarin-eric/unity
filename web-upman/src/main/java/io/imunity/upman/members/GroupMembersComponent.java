@@ -10,9 +10,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
-import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
+import com.google.common.collect.Lists;
 import com.vaadin.server.SerializablePredicate;
 import com.vaadin.ui.Alignment;
 import com.vaadin.ui.Button;
@@ -20,13 +20,13 @@ import com.vaadin.ui.CustomComponent;
 import com.vaadin.ui.FormLayout;
 import com.vaadin.ui.HorizontalLayout;
 import com.vaadin.ui.Label;
-import com.vaadin.ui.TextField;
+import com.vaadin.ui.RadioButtonGroup;
 import com.vaadin.ui.VerticalLayout;
 
+import io.imunity.upman.ProjectController;
 import io.imunity.upman.UpManUI;
-import io.imunity.upman.utils.UpManGridHelper;
+import pl.edu.icm.unity.MessageSource;
 import pl.edu.icm.unity.engine.api.authn.InvocationContext;
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
 import pl.edu.icm.unity.engine.api.project.DelegatedGroup;
 import pl.edu.icm.unity.engine.api.project.GroupAuthorizationRole;
 import pl.edu.icm.unity.types.I18nString;
@@ -38,8 +38,10 @@ import pl.edu.icm.unity.webui.common.HamburgerMenu;
 import pl.edu.icm.unity.webui.common.Images;
 import pl.edu.icm.unity.webui.common.NotificationPopup;
 import pl.edu.icm.unity.webui.common.NotificationTray;
-import pl.edu.icm.unity.webui.common.SidebarStyles;
+import pl.edu.icm.unity.webui.common.SearchField;
 import pl.edu.icm.unity.webui.common.SingleActionHandler;
+import pl.edu.icm.unity.webui.common.Styles;
+import pl.edu.icm.unity.webui.common.grid.FilterableGridHelper;
 import pl.edu.icm.unity.webui.common.groups.MandatoryGroupSelection;
 import pl.edu.icm.unity.webui.confirmations.ConfirmationInfoFormatter;
 import pl.edu.icm.unity.webui.exceptions.ControllerException;
@@ -53,19 +55,24 @@ import pl.edu.icm.unity.webui.exceptions.ControllerException;
 
 class GroupMembersComponent extends CustomComponent
 {
-	private UnityMessageSource msg;
+	private MessageSource msg;
 	private GroupMembersController controller;
-	
-	private GroupMemebersGrid groupMemebersGrid;
-	private String group;
-	private String project;
 
-	public GroupMembersComponent(UnityMessageSource msg, GroupMembersController controller, String project, ConfirmationInfoFormatter formatter)
+	private GroupMemebersGrid groupMemebersGrid;
+	private Group group;
+	private String project;
+	private GroupAuthorizationRole role;
+	private ProjectController projectController;
+
+	public GroupMembersComponent(MessageSource msg, GroupMembersController controller,
+			ProjectController projectController, String project, ConfirmationInfoFormatter formatter)
 			throws ControllerException
 	{
 		this.msg = msg;
 		this.controller = controller;
 		this.project = project;
+		this.projectController = projectController;
+
 		Map<String, String> additionalProjectAttributes = controller
 				.getAdditionalAttributeNamesForProject(project);
 		setSizeFull();
@@ -82,23 +89,22 @@ class GroupMembersComponent extends CustomComponent
 
 		List<SingleActionHandler<GroupMemberEntry>> rawActions = new ArrayList<>();
 		rawActions.addAll(commonActions);
-		rawActions.add(getAddManagerPrivilegesAction(true));
-		rawActions.add(getRevokeManagerPrivilegesAction(true, s -> false));
+		rawActions.add(getSetProjectRoleAction());
+		rawActions.add(getSetSubProjectRoleAction());
 
 		groupMemebersGrid = new GroupMemebersGrid(msg, rawActions, additionalProjectAttributes, formatter);
 
 		HamburgerMenu<GroupMemberEntry> hamburgerMenu = new HamburgerMenu<>();
-		hamburgerMenu.addStyleNames(SidebarStyles.indentSmall.toString());
-		hamburgerMenu.addStyleName(SidebarStyles.sidebar.toString());
 		groupMemebersGrid.addSelectionListener(hamburgerMenu.getSelectionListener());
 
 		hamburgerMenu.addActionHandlers(commonActions);
-		hamburgerMenu.addActionHandler(getAddManagerPrivilegesAction(false));
-		hamburgerMenu.addActionHandler(
-				getRevokeManagerPrivilegesAction(false, s -> checkIfAllManagersSelected(s)));
-		TextField search = UpManGridHelper.generateSearchField(groupMemebersGrid, msg);
-		
+		hamburgerMenu.addActionHandler(getSetProjectRoleAction());
+		hamburgerMenu.addActionHandler(getSetSubProjectRoleAction());
+		SearchField search = FilterableGridHelper.generateSearchField(groupMemebersGrid, msg);
+
 		HorizontalLayout menuBar = new HorizontalLayout(hamburgerMenu, search);
+		menuBar.setSpacing(false);
+		menuBar.setMargin(false);
 		menuBar.setComponentAlignment(search, Alignment.MIDDLE_RIGHT);
 		menuBar.setWidth(100, Unit.PERCENTAGE);
 		main.addComponents(menuBar, groupMemebersGrid);
@@ -129,7 +135,7 @@ class GroupMembersComponent extends CustomComponent
 
 	public void removeFromGroup(Set<GroupMemberEntry> items)
 	{
-		removeFromGroup(group, items);
+		removeFromGroup(group.toString(), items);
 	}
 
 	private void removeFromGroup(String groupFrom, Set<GroupMemberEntry> items)
@@ -153,7 +159,7 @@ class GroupMembersComponent extends CustomComponent
 		try
 		{
 			controller.removeFromGroup(project, groupFrom, items);
-			NotificationTray.showSuccess( msg.getMessage("GroupMembersComponent.removed"));
+			NotificationTray.showSuccess(msg.getMessage("GroupMembersComponent.removed"));
 
 		} catch (ControllerException e)
 		{
@@ -169,93 +175,80 @@ class GroupMembersComponent extends CustomComponent
 				.withHandler(this::showAddToGroupDialog).build();
 	}
 
-	private SingleActionHandler<GroupMemberEntry> getAddManagerPrivilegesAction(boolean hideIfInactive)
+	private SingleActionHandler<GroupMemberEntry> getSetProjectRoleAction()
 	{
-		SingleActionHandler<GroupMemberEntry> handler = SingleActionHandler.builder(GroupMemberEntry.class)
-				.withCaption(msg.getMessage("GroupMembersComponent.addManagerPrivilegesAction"))
-				.withIcon(Images.trending_up.getResource()).multiTarget()
-				.withHandler(this::addManagerPrivileges)
-				.withDisabledPredicate(e -> !e.getRole().equals(GroupAuthorizationRole.regular))
-				.build();
-		handler.setHideIfInactive(hideIfInactive);
-		return handler;
+		return SingleActionHandler.builder(GroupMemberEntry.class)
+				.withCaption(msg.getMessage("GroupMembersComponent.setProjectRoleAction"))
+				.withIcon(Images.star_open.getResource()).multiTarget()
+				.withHandler(this::showSetProjectRoleDialog)
+				.withDisabledPredicate(e -> !project.equals(group.toString())).hideIfInactive().build();
 	}
 
-	public void addManagerPrivileges(Set<GroupMemberEntry> items)
+	private SingleActionHandler<GroupMemberEntry> getSetSubProjectRoleAction()
 	{
-		try
-		{
-			controller.addManagerPrivileges(project, items);
-		} catch (ControllerException e)
-		{
-			NotificationPopup.showError(e);
-		}
-		reloadMemebersGrid();
+		return SingleActionHandler.builder(GroupMemberEntry.class)
+				.withCaption(msg.getMessage("GroupMembersComponent.setSubProjectRoleAction"))
+				.withIcon(Images.star_open.getResource()).multiTarget()
+				.withHandler(this::showSetSubProjectRoleDialog)
+				.withDisabledPredicate(e -> project.equals(group.toString())
+						|| !group.getDelegationConfiguration().enabled
+						|| !role.equals(GroupAuthorizationRole.projectsAdmin))
+				.hideIfInactive().build();
 	}
 
-	private SingleActionHandler<GroupMemberEntry> getRevokeManagerPrivilegesAction(boolean hideIfInactive,
-			Predicate<Set<GroupMemberEntry>> disabledCompositePredicate)
+	private void showSetProjectRoleDialog(Set<GroupMemberEntry> items)
 	{
-		SingleActionHandler<GroupMemberEntry> handler = SingleActionHandler.builder(GroupMemberEntry.class)
-				.withCaption(msg.getMessage("GroupMembersComponent.revokeManagerPrivilegesAction"))
-				.withIcon(Images.trending_down.getResource()).multiTarget()
-				.withHandler(this::revokeManagerPrivileges)
-				.withDisabledPredicate(e -> !e.getRole().equals(GroupAuthorizationRole.manager)
-						|| groupMemebersGrid.getManagersCount() < 2)
-				.withDisabledCompositePredicate(disabledCompositePredicate).build();
-		handler.setHideIfInactive(hideIfInactive);
-		return handler;
+		new RoleSelectionDialog(msg, "RoleSelectionDialog.projectCaption", "RoleSelectionDialog.projectRole",
+				role -> {
+					updateProjectRole(items, role);
+				},
+				items.size() == 1 ? items.iterator().next().getRole() : GroupAuthorizationRole.regular)
+						.show();
 	}
 
-	private boolean checkIfAllManagersSelected(Set<GroupMemberEntry> items)
+	private void showSetSubProjectRoleDialog(Set<GroupMemberEntry> items)
 	{
-		int selectedManagerCount = 0;
-		for (GroupMemberEntry e : items)
-		{
-			if (e.getRole().equals(GroupAuthorizationRole.manager))
-			{
-				selectedManagerCount++;
-			}
-		}
-		if (selectedManagerCount == groupMemebersGrid.getManagersCount())
-		{
-			return true;
-		}
-		return false;
+		new RoleSelectionDialog(msg, "RoleSelectionDialog.subprojectCaption",
+				"RoleSelectionDialog.subprojectRole", role -> {
+					updateRoleConfirmed(items, role);
+					reloadMemebersGrid();
+				},
+				items.size() == 1 ? items.iterator().next().getRole() : GroupAuthorizationRole.regular)
+						.show();
 	}
 
-	public void revokeManagerPrivileges(Set<GroupMemberEntry> items)
+	private void updateProjectRole(Set<GroupMemberEntry> items, GroupAuthorizationRole role)
 	{
-		if (checkIfSelfProjectOperation(project, items))
+		if (role.equals(GroupAuthorizationRole.regular) && checkIfSelfProjectOperation(group.toString(), items))
 		{
 			new ConfirmDialog(msg,
 					msg.getMessage("GroupMembersComponent.confirmSelfRevokeManagerPrivileges",
 							getProjectDisplayedNameSafe(project)),
 					() -> {
 
-						confirmedRevokeManagerPrivileges(items);
+						updateRoleConfirmed(items, role);
 						UpManUI.reloadProjects();
 					}).show();
-
 		} else
 		{
-			confirmedRevokeManagerPrivileges(items);
+			updateRoleConfirmed(items, role);
 			reloadMemebersGrid();
 		}
 	}
 
-	private void confirmedRevokeManagerPrivileges(Set<GroupMemberEntry> items)
+	private void updateRoleConfirmed(Set<GroupMemberEntry> items, GroupAuthorizationRole role)
 	{
 		try
 		{
-			controller.revokeManagerPrivileges(project, items);
+			controller.updateRole(project, group.toString(), role, items);
 		} catch (ControllerException e)
 		{
 			NotificationPopup.showError(e);
 		}
+		
 	}
 
-	public void setGroup(String group)
+	public void setGroup(Group group)
 	{
 		this.group = group;
 		reloadMemebersGrid();
@@ -266,18 +259,30 @@ class GroupMembersComponent extends CustomComponent
 		List<GroupMemberEntry> groupMembers = new ArrayList<>();
 		try
 		{
-			groupMembers.addAll(controller.getGroupMembers(project, group));
+			groupMembers.addAll(controller.getGroupMembers(project, group.toString()));
+			role = projectController.getProjectRole(project);
 		} catch (ControllerException e)
 		{
 			NotificationPopup.showError(e);
 		}
 
-		groupMemebersGrid.setValue(groupMembers);
+		groupMemebersGrid.setItems(groupMembers);
+
+		if (group.toString().equals(project))
+		{
+			groupMemebersGrid.switchToProjectMode();
+		} else if (group.getDelegationConfiguration().enabled)
+		{
+			groupMemebersGrid.switchToSubprojectMode();
+		} else
+		{
+			groupMemebersGrid.switchToRegularSubgroupMode();
+		}
+
 	}
 
 	private boolean checkIfSelfProjectOperation(String group, Set<GroupMemberEntry> items)
 	{
-		boolean selfOperation = false;
 		if (project.equals(group))
 		{
 			long managerId = InvocationContext.getCurrent().getLoginSession().getEntityId();
@@ -285,10 +290,10 @@ class GroupMembersComponent extends CustomComponent
 			for (GroupMemberEntry e : items)
 			{
 				if (e.getEntityId() == managerId)
-					selfOperation = true;
+					return true;
 			}
 		}
-		return selfOperation;
+		return false;
 	}
 
 	private String getProjectDisplayedNameSafe(String projectPath)
@@ -321,12 +326,76 @@ class GroupMembersComponent extends CustomComponent
 		}).show();
 	}
 
+	private List<GroupAuthorizationRole> getAvailableRoles()
+	{
+		if (role.equals(GroupAuthorizationRole.projectsAdmin))
+		{
+			return Lists.newArrayList(GroupAuthorizationRole.regular, GroupAuthorizationRole.manager,
+					GroupAuthorizationRole.projectsAdmin);
+		}
+
+		else if (role.equals(GroupAuthorizationRole.manager))
+		{
+			return Lists.newArrayList(GroupAuthorizationRole.regular, GroupAuthorizationRole.manager);
+		}
+
+		return Lists.newArrayList();
+	}
+
+	private class RoleSelectionDialog extends AbstractDialog
+	{
+		private Consumer<GroupAuthorizationRole> selectionConsumer;
+		private RadioButtonGroup<GroupAuthorizationRole> roleSelection;
+		private String roleCaption;
+		private GroupAuthorizationRole initRole;
+
+		public RoleSelectionDialog(MessageSource msg, String captionKey, String roleCaption,
+				Consumer<GroupAuthorizationRole> selectionConsumer, GroupAuthorizationRole initRole)
+		{
+			super(msg, msg.getMessage(captionKey));
+			this.selectionConsumer = selectionConsumer;
+			this.roleCaption = roleCaption;
+			this.initRole = initRole;
+			setSizeEm(38, 18);
+		}
+
+		@Override
+		protected Button createConfirmButton()
+		{
+			Button ok = super.createConfirmButton();
+			ok.addStyleName(Styles.buttonAction.toString());
+			return ok;
+		}
+
+		@Override
+		protected FormLayout getContents()
+		{
+			roleSelection = new RadioButtonGroup<>();
+			roleSelection.setCaption(msg.getMessage(roleCaption));
+			roleSelection.setItems(getAvailableRoles());
+			roleSelection.setItemCaptionGenerator(
+					e -> msg.getMessage("Role." + e.toString().toLowerCase()));
+			roleSelection.setValue(initRole);
+			FormLayout main = new CompactFormLayout();
+			main.addComponents(roleSelection);
+			main.setSizeFull();
+			return main;
+		}
+
+		@Override
+		protected void onConfirm()
+		{
+			selectionConsumer.accept(roleSelection.getValue());
+			close();
+		}
+	}
+
 	private class TargetGroupSelectionDialog extends AbstractDialog
 	{
 		private Consumer<String> selectionConsumer;
 		private MandatoryGroupSelection groupSelection;
 
-		public TargetGroupSelectionDialog(UnityMessageSource msg, Consumer<String> selectionConsumer)
+		public TargetGroupSelectionDialog(MessageSource msg, Consumer<String> selectionConsumer)
 		{
 			super(msg, msg.getMessage("AddToGroupDialog.caption"));
 			this.selectionConsumer = selectionConsumer;
@@ -337,10 +406,10 @@ class GroupMembersComponent extends CustomComponent
 		protected Button createConfirmButton()
 		{
 			Button ok = super.createConfirmButton();
-			ok.addStyleName(SidebarStyles.buttonAction.toString());
+			ok.addStyleName(Styles.buttonAction.toString());
 			return ok;
 		}
-		
+
 		@Override
 		protected FormLayout getContents()
 		{
@@ -363,7 +432,7 @@ class GroupMembersComponent extends CustomComponent
 				g.setDisplayedName(new I18nString(dg.displayedName));
 				return g;
 			}).collect(Collectors.toList()));
-			
+
 			FormLayout main = new CompactFormLayout();
 			main.addComponents(info, groupSelection);
 			main.setSizeFull();

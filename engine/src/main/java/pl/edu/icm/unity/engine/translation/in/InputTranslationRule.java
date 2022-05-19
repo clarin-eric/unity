@@ -9,9 +9,9 @@ import org.apache.logging.log4j.Logger;
 import pl.edu.icm.unity.base.utils.Log;
 import pl.edu.icm.unity.engine.api.authn.remote.RemotelyAuthenticatedInput;
 import pl.edu.icm.unity.engine.api.translation.TranslationCondition;
+import pl.edu.icm.unity.engine.api.translation.TranslationIncludeProfileAction;
 import pl.edu.icm.unity.engine.api.translation.in.InputTranslationAction;
 import pl.edu.icm.unity.engine.api.translation.in.MappingResult;
-import pl.edu.icm.unity.engine.translation.TranslationIncludeProfileAction;
 import pl.edu.icm.unity.engine.translation.TranslationRuleInstance;
 import pl.edu.icm.unity.engine.translation.TranslationRuleInvocationContext;
 import pl.edu.icm.unity.exceptions.EngineException;
@@ -36,9 +36,9 @@ public class InputTranslationRule extends TranslationRuleInstance<InputTranslati
 		TranslationRuleInvocationContext context = new TranslationRuleInvocationContext();
 		if (conditionInstance.evaluate(mvelCtx))
 		{	
-			log.debug("Condition OK");
+			log.debug("Condition fulfilled");
 			MappingResult result = actionInstance.invoke(input, mvelCtx, profileName);
-			if ( actionInstance instanceof TranslationIncludeProfileAction)
+			if (actionInstance instanceof TranslationIncludeProfileAction)
 			{
 				TranslationIncludeProfileAction includeAction = (TranslationIncludeProfileAction) actionInstance;
 				context.setIncludedProfile(includeAction.getIncludedProfile());			

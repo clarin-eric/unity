@@ -37,15 +37,17 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.google.common.collect.Lists;
 
+import pl.edu.icm.unity.attr.ImageType;
+import pl.edu.icm.unity.attr.UnityImage;
 import pl.edu.icm.unity.exceptions.EngineException;
 import pl.edu.icm.unity.stdext.attr.EnumAttribute;
 import pl.edu.icm.unity.stdext.attr.EnumAttributeSyntax;
 import pl.edu.icm.unity.stdext.attr.FloatingPointAttribute;
 import pl.edu.icm.unity.stdext.attr.FloatingPointAttributeSyntax;
+import pl.edu.icm.unity.stdext.attr.ImageAttribute;
+import pl.edu.icm.unity.stdext.attr.ImageAttributeSyntax;
 import pl.edu.icm.unity.stdext.attr.IntegerAttribute;
 import pl.edu.icm.unity.stdext.attr.IntegerAttributeSyntax;
-import pl.edu.icm.unity.stdext.attr.JpegImageAttribute;
-import pl.edu.icm.unity.stdext.attr.JpegImageAttributeSyntax;
 import pl.edu.icm.unity.stdext.attr.StringAttribute;
 import pl.edu.icm.unity.stdext.attr.StringAttributeSyntax;
 import pl.edu.icm.unity.stdext.attr.VerifiableEmailAttribute;
@@ -73,7 +75,7 @@ public class TestWrite extends RESTAdminTestBase
 	public void setRemoveAttribute() throws Exception
 	{
 		Identity identity = idsMan.addEntity(new IdentityParam("userName", "userC"), 
-				"cr-pass", EntityState.valid, false);
+				"cr-pass", EntityState.valid);
 		long entityId = identity.getEntityId();
 		aTypeMan.addAttributeType(new AttributeType("stringA", StringAttributeSyntax.ID));
 		aTypeMan.addAttributeType(new AttributeType("intA", IntegerAttributeSyntax.ID));
@@ -85,7 +87,7 @@ public class TestWrite extends RESTAdminTestBase
 		AttributeType email =  new AttributeType("emailA", VerifiableEmailAttributeSyntax.ID);
 		email.setMaxElements(2);
 		aTypeMan.addAttributeType(email);
-		aTypeMan.addAttributeType(new AttributeType("jpegA", JpegImageAttributeSyntax.ID));
+		aTypeMan.addAttributeType(new AttributeType("jpegA", ImageAttributeSyntax.ID));
 		
 		setSingleAttribute(entityId, StringAttribute.of("stringA", "/", "value1"));
 
@@ -100,8 +102,7 @@ public class TestWrite extends RESTAdminTestBase
 				new VerifiableEmail("some2@example.com", new ConfirmationInfo(true))));
 		
 		BufferedImage image = new BufferedImage(10, 10, BufferedImage.TYPE_INT_ARGB);
-		setSingleAttribute(entityId, JpegImageAttribute.of(
-				"jpegA", "/", image));
+		setSingleAttribute(entityId,ImageAttribute.of("jpegA", "/", new UnityImage(image, ImageType.JPG)));
 
 		HttpDelete removeAttribute = new HttpDelete("/restadm/v1/entity/" + entityId + "/attribute/stringA");
 		HttpResponse response = client.execute(host, removeAttribute, localcontext);
@@ -113,7 +114,7 @@ public class TestWrite extends RESTAdminTestBase
 	public void setAttributes() throws Exception
 	{
 		Identity identity = idsMan.addEntity(new IdentityParam("userName", "userC"), 
-				"cr-pass", EntityState.valid, false);
+				"cr-pass", EntityState.valid);
 		long entityId = identity.getEntityId();
 		aTypeMan.addAttributeType(new AttributeType("stringA", StringAttributeSyntax.ID));
 		aTypeMan.addAttributeType(new AttributeType("intA", IntegerAttributeSyntax.ID));
@@ -125,7 +126,7 @@ public class TestWrite extends RESTAdminTestBase
 		AttributeType email =  new AttributeType("emailA", VerifiableEmailAttributeSyntax.ID);
 		email.setMaxElements(2);
 		aTypeMan.addAttributeType(email);
-		aTypeMan.addAttributeType(new AttributeType("jpegA", JpegImageAttributeSyntax.ID));
+		aTypeMan.addAttributeType(new AttributeType("jpegA", ImageAttributeSyntax.ID));
 		
 
 		
@@ -345,5 +346,24 @@ public class TestWrite extends RESTAdminTestBase
 		
 		Entity entity = idsMan.getEntity(new EntityParam(new IdentityTaV(UsernameIdentity.ID, "user-triggered")));
 		assertThat(entity, is(notNullValue()));
+	}
+	
+	@Test
+	public void shouldChangeEntityStatus() throws Exception
+	{
+		Identity identity = idsMan.addEntity(new IdentityParam("userName", "userC"), 
+				"cr-pass", EntityState.valid);
+		long entityId = identity.getEntityId();
+		Entity entity = idsMan.getEntity(new EntityParam((entityId)));
+		assertThat(entity, is(notNullValue()));
+		assertThat(entity.getEntityInformation().getEntityState(), is(EntityState.valid));
+		
+		HttpPut changeStatus = new HttpPut("/restadm/v1/entity/" + entityId + "/status/" + EntityState.disabled.toString());		
+		HttpResponse response = client.execute(host, changeStatus, localcontext);
+		assertThat(response.getStatusLine().getStatusCode(), is(Status.NO_CONTENT.getStatusCode()));
+		
+		entity = idsMan.getEntity(new EntityParam((entityId)));
+		assertThat(entity, is(notNullValue()));
+		assertThat(entity.getEntityInformation().getEntityState(), is(EntityState.disabled));
 	}
 }

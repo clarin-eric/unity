@@ -9,21 +9,26 @@
 package pl.edu.icm.unity.types.basic;
 
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Deque;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonValue;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import pl.edu.icm.unity.Constants;
 import pl.edu.icm.unity.JsonUtil;
+import pl.edu.icm.unity.MessageSource;
 import pl.edu.icm.unity.exceptions.InternalException;
 import pl.edu.icm.unity.types.I18nDescribedObject;
 import pl.edu.icm.unity.types.I18nString;
@@ -43,15 +48,19 @@ import pl.edu.icm.unity.types.NamedObject;
  * 
  * @author K. Benedyczak
  */
-public class Group extends I18nDescribedObject implements NamedObject
-{        
+public class Group extends I18nDescribedObject implements NamedObject, Comparable<Group>
+{
 	private String[] path;
 
 	private AttributeStatement[] attributeStatements = new AttributeStatement[0];
 	private Set<String> attributesClasses = new HashSet<String>();
 	private GroupDelegationConfiguration delegationConfiguration;
 	private boolean publicGroup = false;
+	private Map<String, GroupProperty> properties = new HashMap<>();
 
+	private String encodedPath;
+	
+	
 	public Group(Group parent, String name)
 	{
 		if (name == null || name.equals("") || name.contains("/"))
@@ -66,6 +75,7 @@ public class Group extends I18nDescribedObject implements NamedObject
 		description = new I18nString();
 		delegationConfiguration = new GroupDelegationConfiguration(false);
 		publicGroup = false;
+		encodedPath = encodePath();
 	}
 
 	public Group(String path)
@@ -75,6 +85,21 @@ public class Group extends I18nDescribedObject implements NamedObject
 		description = new I18nString();
 		delegationConfiguration = new GroupDelegationConfiguration(false);
 		publicGroup = false;
+	}
+	
+	public List<String> getPathsChain()
+	{
+		List<String> paths = new ArrayList<>();	
+		paths.add(getPathEncoded());
+		if (isTopLevel())
+			return paths;
+		Group grp = clone();
+		do
+		{
+			grp = new Group(grp.getParentPath());
+			paths.add(grp.getPathEncoded());
+		} while (!grp.isTopLevel());
+		return paths;	
 	}
 
 	@JsonCreator
@@ -94,6 +119,7 @@ public class Group extends I18nDescribedObject implements NamedObject
 		target.setAttributeStatements(attributeStatements.clone());
 		target.setDelegationConfiguration(delegationConfiguration);
 		target.setPublic(publicGroup);
+		target.setProperties(properties.values());
 		return target;
 	}
 
@@ -106,6 +132,11 @@ public class Group extends I18nDescribedObject implements NamedObject
 	public static boolean isChild(String group, String potentialParent)
 	{
 		return isChild(group, potentialParent, false);
+	}
+	
+	public static boolean isDirectChild(String group, String potentialParent)
+	{
+		return isChild(group, potentialParent, false) && !group.substring(potentialParent.length() + 1).contains("/");
 	}
 
 	/**
@@ -134,6 +165,40 @@ public class Group extends I18nDescribedObject implements NamedObject
 		if (!group.startsWith(potentialParent))
 			return false;
 		return true;
+	}
+	
+	public static Set<Group> getRootsOfSet(Set<Group> source)
+	{
+		Set<Group> onlyParents = new HashSet<>(source);
+
+		for (Group g1 : source)
+		{
+			for (Group g2 : source)
+			{
+				if (g2.isChildNotSame(g1))
+				{
+					onlyParents.remove(g2);
+				}
+			}
+		}
+		return onlyParents;
+	}
+	
+	public static Set<Group> getOnlyChildrenOfSet(Set<Group> source)
+	{
+		Set<Group> onlyChildren = new HashSet<>(source);
+
+		for (Group g1 : source)
+		{
+			for (Group g2 : source)
+			{
+				if (g1.isChildNotSame(g2))
+				{
+					onlyChildren.remove(g2);
+				}
+			}
+		}
+		return onlyChildren;
 	}
 
 	/**
@@ -183,6 +248,11 @@ public class Group extends I18nDescribedObject implements NamedObject
 				return false;
 		return true;
 	}
+	
+	public boolean isChildNotSame(Group test)
+	{
+		return isChild(toString(), test.toString(), false);
+	}
 
 	public boolean isTopLevel()
 	{
@@ -194,17 +264,34 @@ public class Group extends I18nDescribedObject implements NamedObject
 		return path;
 	}
 
+	public String getPathEncoded()
+	{
+		return encodedPath;
+	}
+
 	@Override
 	public String getName()
 	{
 		return toString();
 	}
 
+	/**
+	 * This is likely a go-to method to present group name to a person.
+	 * If displayed name was set to non default value (which is sadly group path :/) then it is returned.
+	 * Otherwise last component of the path is returned. 
+	 */
+	public I18nString getDisplayedNameShort(MessageSource msg)
+	{
+		I18nString displayedName = getDisplayedName();
+		return toString().equals(displayedName.getValue(msg)) ? new I18nString(getNameShort()) : displayedName;
+	}
+	
 	public void setPath(String path)
 	{
 		if (path.equals("/"))
 		{
 			this.path = new String[0];
+			this.encodedPath = encodePath();
 			return;
 		}
 		if (path.startsWith("/"))
@@ -214,8 +301,20 @@ public class Group extends I18nDescribedObject implements NamedObject
 		this.path = path.split("/");
 		if (this.path.length == 1 && this.path[0].equals(""))
 			this.path = new String[0];
+		this.encodedPath = encodePath();
 	}
 
+	private String encodePath()
+	{
+		if (path.length == 0)
+			return "/";
+		StringBuilder ret = new StringBuilder(path.length * 10);
+		for (int i = 0; i < path.length; i++)
+			ret.append("/").append(path[i]);
+		return ret.toString();		
+	}
+	
+	
 	public String getRelativeName()
 	{
 		return path.length == 0 ? "/" : path[path.length - 1];
@@ -272,6 +371,16 @@ public class Group extends I18nDescribedObject implements NamedObject
 	{
 		this.publicGroup = publicGroup;
 	}
+	
+	public Map<String, GroupProperty> getProperties()
+	{
+		return properties;
+	}
+
+	public void setProperties(Collection<GroupProperty> properties)
+	{
+		this.properties = properties.stream().collect(Collectors.toMap(p -> p.key, p -> p));
+	}
 
 	/**
 	 * @return last component of the group path
@@ -280,16 +389,11 @@ public class Group extends I18nDescribedObject implements NamedObject
 	{
 		return path.length == 0 ? "/" : path[path.length - 1];
 	}
-
+	
 	@Override
 	public String toString()
 	{
-		if (path.length == 0)
-			return "/";
-		StringBuilder ret = new StringBuilder(path.length * 10);
-		for (int i = 0; i < path.length; i++)
-			ret.append("/").append(path[i]);
-		return ret.toString();
+		return getPathEncoded();
 	}
 
 	private void fromJson(ObjectNode main)
@@ -317,7 +421,6 @@ public class Group extends I18nDescribedObject implements NamedObject
 		ArrayNode aces = main.putArray("attributesClasses");
 		for (String ac : getAttributesClasses())
 			aces.add(ac);
-
 		
 		GroupDelegationConfiguration delegationConfig = getDelegationConfiguration();
 		if (delegationConfig == null)
@@ -325,6 +428,7 @@ public class Group extends I18nDescribedObject implements NamedObject
 			delegationConfig = new GroupDelegationConfiguration(false);
 		}
 		main.set("delegationConfiguration",  Constants.MAPPER.valueToTree(delegationConfig));
+		main.set("properties",  Constants.MAPPER.valueToTree(properties.values()));
 		main.put("publicGroup", isPublic());
 
 		return main;
@@ -355,22 +459,16 @@ public class Group extends I18nDescribedObject implements NamedObject
 
 		if (JsonUtil.notNull(main, "delegationConfiguration"))
 		{
-			ObjectMapper jsonMapper = Constants.MAPPER;
-			String v;
 			try
 			{
-				v = jsonMapper.writeValueAsString(
-						main.get("delegationConfiguration"));
-				GroupDelegationConfiguration config = jsonMapper.readValue(v,
-						GroupDelegationConfiguration.class);
-				setDelegationConfiguration(config);
+				GroupDelegationConfiguration delegationConfig = Constants.MAPPER.treeToValue(
+						main.get("delegationConfiguration"), GroupDelegationConfiguration.class);
+				setDelegationConfiguration(delegationConfig);
 			} catch (Exception e)
 			{
 				throw new InternalException(
-						"Can't deserialize group delegation configuration from JSON: ",
-						e);
+						"Can't deserialize group delegation configuration from JSON", e);
 			}
-
 		} else
 		{
 			setDelegationConfiguration(new GroupDelegationConfiguration(false));
@@ -383,6 +481,17 @@ public class Group extends I18nDescribedObject implements NamedObject
 		{
 			setPublic(false);
 		}
+		
+		if (JsonUtil.notNull(main, "properties"))
+		{
+			ArrayNode attrsNode = (ArrayNode) main.get("properties");
+			attrsNode.forEach(n -> {
+				ObjectNode attrNode = (ObjectNode) n;
+				GroupProperty readP = Constants.MAPPER.convertValue(attrNode, 
+						 GroupProperty.class);
+				properties.put(readP.key, readP);				
+			});
+		}
 	}
 
 	@Override
@@ -393,8 +502,17 @@ public class Group extends I18nDescribedObject implements NamedObject
 		result = prime * result + Arrays.hashCode(attributeStatements);
 		result = prime * result
 				+ ((attributesClasses == null) ? 0 : attributesClasses.hashCode());
+		result = prime * result
+				+ ((properties == null) ? 0 : properties.hashCode());
 		result = prime * result + Arrays.hashCode(path);
 		return result;
+	}
+	
+	@Override
+	public int compareTo(Group toCompare)
+	{
+		return toString().compareTo(toCompare.toString());	
+		
 	}
 
 	@Override
@@ -414,6 +532,12 @@ public class Group extends I18nDescribedObject implements NamedObject
 			if (other.attributesClasses != null)
 				return false;
 		} else if (!attributesClasses.equals(other.attributesClasses))
+			return false;
+		if (properties == null)
+		{
+			if (other.properties != null)
+				return false;
+		} else if (!properties.equals(other.properties))
 			return false;
 		if (delegationConfiguration == null)
 		{

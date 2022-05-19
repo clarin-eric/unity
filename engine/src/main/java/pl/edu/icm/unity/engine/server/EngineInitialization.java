@@ -4,6 +4,9 @@
  */
 package pl.edu.icm.unity.engine.server;
 
+import static pl.edu.icm.unity.engine.api.config.UnityServerConfiguration.CONFIG_ONLY_ERA_CONTROL;
+import static pl.edu.icm.unity.engine.api.config.UnityServerConfiguration.USE_CONFIG_FILE_AS_INITIAL_TEMPLATE_ONLY;
+
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -11,6 +14,7 @@ import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -26,7 +30,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import org.apache.commons.io.FileUtils;
-import org.apache.log4j.Logger;
+import org.apache.logging.log4j.Logger;
 import org.apache.log4j.PropertyConfigurator;
 import org.eclipse.jetty.servlet.FilterHolder;
 import org.eclipse.jetty.servlet.ServletHolder;
@@ -39,7 +43,8 @@ import com.google.common.collect.Lists;
 
 import eu.unicore.util.configuration.ConfigurationException;
 import pl.edu.icm.unity.JsonUtil;
-import pl.edu.icm.unity.base.event.Event;
+import pl.edu.icm.unity.MessageSource;
+import pl.edu.icm.unity.base.event.PersistableEvent;
 import pl.edu.icm.unity.base.utils.Log;
 import pl.edu.icm.unity.engine.api.AttributesManagement;
 import pl.edu.icm.unity.engine.api.AuthenticationFlowManagement;
@@ -50,20 +55,23 @@ import pl.edu.icm.unity.engine.api.EndpointManagement;
 import pl.edu.icm.unity.engine.api.EntityCredentialManagement;
 import pl.edu.icm.unity.engine.api.EntityManagement;
 import pl.edu.icm.unity.engine.api.GroupsManagement;
+import pl.edu.icm.unity.engine.api.PKIManagement;
 import pl.edu.icm.unity.engine.api.RealmsManagement;
 import pl.edu.icm.unity.engine.api.TranslationProfileManagement;
 import pl.edu.icm.unity.engine.api.attributes.SystemAttributesProvider;
 import pl.edu.icm.unity.engine.api.config.UnityServerConfiguration;
 import pl.edu.icm.unity.engine.api.confirmation.EmailConfirmationServletProvider;
+import pl.edu.icm.unity.engine.api.endpoint.ServletProvider;
 import pl.edu.icm.unity.engine.api.event.EventCategory;
 import pl.edu.icm.unity.engine.api.identity.IdentityTypeDefinition;
 import pl.edu.icm.unity.engine.api.identity.IdentityTypesRegistry;
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
 import pl.edu.icm.unity.engine.api.server.ServerInitializer;
 import pl.edu.icm.unity.engine.api.utils.ExecutorsService;
+import pl.edu.icm.unity.engine.api.wellknown.AttributesContentPublicServletProvider;
 import pl.edu.icm.unity.engine.api.wellknown.PublicWellKnownURLServletProvider;
 import pl.edu.icm.unity.engine.attribute.AttributeTypeHelper;
-import pl.edu.icm.unity.engine.authz.AuthorizationManagerImpl;
+import pl.edu.icm.unity.engine.audit.AuditEventListener;
+import pl.edu.icm.unity.engine.authz.InternalAuthorizationManagerImpl;
 import pl.edu.icm.unity.engine.authz.RoleAttributeTypeProvider;
 import pl.edu.icm.unity.engine.bulkops.BulkOperationsUpdater;
 import pl.edu.icm.unity.engine.credential.CredentialRepository;
@@ -76,6 +84,7 @@ import pl.edu.icm.unity.engine.events.EventProcessor;
 import pl.edu.icm.unity.engine.group.AttributeStatementsCleaner;
 import pl.edu.icm.unity.engine.identity.EntitiesScheduledUpdater;
 import pl.edu.icm.unity.engine.identity.IdentityCleaner;
+import pl.edu.icm.unity.engine.msg.MessageRepository;
 import pl.edu.icm.unity.engine.msgtemplate.MessageTemplateInitializatior;
 import pl.edu.icm.unity.engine.scripts.ScriptTriggeringEventListener;
 import pl.edu.icm.unity.engine.translation.TranslationProfileChecker;
@@ -119,21 +128,24 @@ import pl.edu.icm.unity.types.translation.ProfileType;
 import pl.edu.icm.unity.types.translation.TranslationProfile;
 
 /**
- * Responsible for loading the initial state from database and starting background processes.
+ * Responsible for loading the initial state from database and starting
+ * background processes.
  * 
  * FIXME - this class needs refactoring: should be split into several classes
+ * 
  * @author K. Benedyczak
  */
 @Component
 public class EngineInitialization extends LifecycleBase
 {
-	private static final Logger log = Log.getLegacyLogger(Log.U_SERVER_CFG, UnityServerConfiguration.class);
+	private static final Logger log = Log.getLogger(Log.U_SERVER_CFG, UnityServerConfiguration.class);
 	public static final int ENGINE_INITIALIZATION_MOMENT = 0;
-	public static final String DEFAULT_CREDENTIAL = "sys:password";
+	public static final String DEFAULT_CREDENTIAL = CredentialManagement.DEFAULT_CREDENTIAL;
 	public static final String DEFAULT_CREDENTIAL_REQUIREMENT = SystemAllCredentialRequirements.NAME;
 
+
 	@Autowired
-	private UnityMessageSource msg;
+	private MessageSource msg;
 	@Autowired
 	private InternalEndpointManagement internalEndpointManager;
 	@Autowired
@@ -210,8 +222,10 @@ public class EngineInitialization extends LifecycleBase
 	private EventProcessor eventsProcessor;
 	@Autowired
 	private ScriptTriggeringEventListener scriptEventsConsumer;
+	@Autowired
+	private AuditEventListener auditEventListener;
 	@Autowired(required = false)
-	private PublicWellKnownURLServletProvider publicWellKnownURLServlet;	
+	private PublicWellKnownURLServletProvider publicWellKnownURLServlet;
 	@Autowired
 	TranslationProfileChecker profileHelper;
 	@Autowired
@@ -225,27 +239,48 @@ public class EngineInitialization extends LifecycleBase
 	@Autowired
 	@Qualifier("insecure")
 	private AuthenticationFlowManagement authnFlowManagement;
+	@Autowired(required = false)
+	private AttributesContentPublicServletProvider attributesContentServletFactory;
+	@Autowired
+	@Qualifier("insecure")
+	private PKIManagement pkiManagement;
+	@Autowired
+	private MessageRepository messageRepository;
 	
 	private long endpointsLoadTime;
-	
+
 	@Override
 	public void start()
 	{
-		installEventListeners();
-		endpointsLoadTime = System.currentTimeMillis();
-		boolean skipLoading = config.getBooleanValue(
-				UnityServerConfiguration.IGNORE_CONFIGURED_CONTENTS_SETTING);
-		if (!skipLoading)
-			initializeDatabaseContents();
-		else
-			log.info("Unity is configured to SKIP DATABASE LOADING FROM CONFIGURATION");
-		startLogConfigurationMonitoring();
-		initializeBackgroundTasks();
-		deployConfirmationServlet();
-		deployPublicWellKnownURLServlet();
-		super.start();
+		try
+		{
+			initializeMessageRepository();
+			installEventListeners();
+			endpointsLoadTime = System.currentTimeMillis();
+			boolean skipLoading = config
+				.getBooleanValue(UnityServerConfiguration.IGNORE_CONFIGURED_CONTENTS_SETTING);
+			if (!skipLoading)
+				initializeDatabaseContents();
+			else
+				log.info("Unity is configured to SKIP DATABASE LOADING FROM CONFIGURATION");
+			startLogConfigurationMonitoring();
+			initializeBackgroundTasks();
+			deployConfirmationServlet();
+			deployAttributeContentPublicServlet();
+			deployPublicWellKnownURLServlet();
+			super.start();
+		} catch (Exception e)
+		{
+			log.error("Fatal error initializating server.", e);
+			throw e;
+		}
 	}
-	
+
+	private void initializeMessageRepository()
+	{
+		tx.runInTransaction(() -> messageRepository.reload());
+	}
+
 	@Override
 	public int getPhase()
 	{
@@ -256,12 +291,12 @@ public class EngineInitialization extends LifecycleBase
 	{
 		int interval = config.getIntValue(UnityServerConfiguration.UPDATE_INTERVAL);
 		endpointsUpdater.setInitialUpdate(endpointsLoadTime);
-		executors.getService().scheduleWithFixedDelay(endpointsUpdater, interval+interval/10, 
-				interval, TimeUnit.SECONDS);
+		executors.getService().scheduleWithFixedDelay(endpointsUpdater, interval + interval / 10, interval,
+				TimeUnit.SECONDS);
 
-		executors.getService().scheduleWithFixedDelay(bulkOperationsUpdater, interval+10, 
-				interval, TimeUnit.SECONDS);
-		
+		executors.getService().scheduleWithFixedDelay(bulkOperationsUpdater, interval + 10, interval,
+				TimeUnit.SECONDS);
+
 		Runnable attributeStatementsUpdater = new Runnable()
 		{
 			@Override
@@ -276,11 +311,10 @@ public class EngineInitialization extends LifecycleBase
 				}
 			}
 		};
-		//the cleaner is just a cleaner. No need to call it very often.
-		executors.getService().scheduleWithFixedDelay(attributeStatementsUpdater, 
-				interval*10, interval*10, TimeUnit.SECONDS);
-		
-		
+		// the cleaner is just a cleaner. No need to call it very often.
+		executors.getService().scheduleWithFixedDelay(attributeStatementsUpdater, interval * 10, interval * 10,
+				TimeUnit.SECONDS);
+
 		Runnable expiredIdentitiesCleaner = new Runnable()
 		{
 			@Override
@@ -295,12 +329,12 @@ public class EngineInitialization extends LifecycleBase
 				} catch (Exception e)
 				{
 					log.error("Can't clean expired identities", e);
-				}			}
+				}
+			}
 		};
-		executors.getService().scheduleWithFixedDelay(expiredIdentitiesCleaner, 
-				interval*100, interval*100, TimeUnit.SECONDS);
-		
-		
+		executors.getService().scheduleWithFixedDelay(expiredIdentitiesCleaner, interval * 100, interval * 100,
+				TimeUnit.SECONDS);
+
 		Runnable entitiesUpdaterTask = new Runnable()
 		{
 			@Override
@@ -309,57 +343,117 @@ public class EngineInitialization extends LifecycleBase
 				try
 				{
 					Date nextUpdate = entitiesUpdater.updateEntities();
-					executors.getService().schedule(this, 
-						nextUpdate.getTime()-System.currentTimeMillis(), TimeUnit.MILLISECONDS);
+					executors.getService().schedule(this,
+							nextUpdate.getTime() - System.currentTimeMillis(),
+							TimeUnit.MILLISECONDS);
 				} catch (Exception e)
 				{
 					log.error("Can't perform the scheduled entity operations", e);
 				}
-			}			
+			}
 		};
-		executors.getService().schedule(entitiesUpdaterTask, (int)(interval*0.5), TimeUnit.SECONDS);
-		
-		//wait to ensure that we return only when endpoint updates will be caught
+		executors.getService().schedule(entitiesUpdaterTask, (int) (interval * 0.5), TimeUnit.SECONDS);
+
+		// wait to ensure that we return only when endpoint updates will
+		// be caught
 		try
 		{
 			Thread.sleep(1000 - (System.currentTimeMillis() - endpointsLoadTime));
 		} catch (InterruptedException e)
 		{
-			//ok
+			// ok
 		}
-		
+
 	}
 
-	
 	public void initializeDatabaseContents()
 	{
-		Boolean isColdStart = determineIfColdStart();
+		boolean isColdStart = determineIfColdStart();
+		boolean loadElementsConfiguredInFile = isColdStart || !config.getBooleanValue(USE_CONFIG_FILE_AS_INITIAL_TEMPLATE_ONLY);
+		
+		if (loadElementsConfiguredInFile)
+			initializeSystemContentsFromConfigFile(isColdStart);
+		else
+			initializeSystemContentsFromDBOnly();
+
+		eventsProcessor.fireEvent(new PersistableEvent(EventCategory.POST_INIT, Boolean.toString(isColdStart)));
+	}
+
+	private void initializeSystemContentsFromConfigFile(boolean isColdStart)
+	{
 		initializeIdentityTypes();
-		initializeAttributeTypes();
+		initializeSystemAttributeTypes();
+		
 		initializeAdminUser();
+		
 		initializeCredentials();
 		initializeCredentialReqirements();
-	
+
 		notificationChannelLoader.initialize();
-		
+
 		msgTemplateLoader.initializeMsgTemplates();
 		
+		pkiManagement.loadCertificatesFromConfigFile();
+
 		runInitializers();
-		
-		eventsProcessor.fireEvent(new Event(EventCategory.PRE_INIT, isColdStart.toString()));
-		
-		initializeTranslationProfiles();
+
+		eventsProcessor.fireEvent(new PersistableEvent(EventCategory.PRE_INIT, Boolean.toString(isColdStart)));
+
+		boolean updateExisting = config.getBooleanValue(CONFIG_ONLY_ERA_CONTROL);
+		initializeTranslationProfiles(updateExisting);
 		checkSystemTranslationProfiles();
-		boolean eraClean = config.getBooleanValue(
-				UnityServerConfiguration.CONFIG_ONLY_ERA_CONTROL);
-		if (eraClean)
+		if (updateExisting)
 			removeERA();
 		initializeAuthenticators();
 		initializeAuthenticationFlows();
 		initializeRealms();
 		initializeEndpoints();
+	}
 
-		eventsProcessor.fireEvent(new Event(EventCategory.POST_INIT, isColdStart.toString()));
+	private void initializeSystemContentsFromDBOnly()
+	{
+		boolean isColdStart = false;
+		loadCertificatesFromFileAfterMigration();
+		initializeIdentityTypes();
+		initializeSystemAttributeTypes();
+		initializeAdminUser();
+		notificationChannelLoader.initialize();
+		runInitializers();
+
+		eventsProcessor.fireEvent(new PersistableEvent(EventCategory.PRE_INIT, Boolean.toString(isColdStart)));
+		deployPersistedEndpoints();
+	}
+
+	private void loadCertificatesFromFileAfterMigration()
+	{
+		try
+		{
+			//this condition is incorrect - we should check what was the DB version at server start, before migration was run.
+			//with this if, user who deletes all certificates will get certs from file after restart.
+			if (pkiManagement.getAllCertificateNames().isEmpty())
+			{
+				log.info("Loading certificates configured in files despite " 
+						+ USE_CONFIG_FILE_AS_INITIAL_TEMPLATE_ONLY 
+						+ " as no certificates are present");
+				pkiManagement.loadCertificatesFromConfigFile();
+			}
+		} catch (EngineException e)
+		{
+			throw new InternalException("Initialization problem: can't populate DB with trusted certificates", e);
+		}		
+	}
+	
+	
+	private void deployPersistedEndpoints()
+	{
+		try
+		{
+			internalEndpointManager.loadPersistedEndpoints();
+		} catch (EngineException e)
+		{
+			throw new InternalException("Initialization problem: can't deploy endpoints stored in DB", e);
+		}
+		logEndpoints();
 	}
 
 	private boolean determineIfColdStart()
@@ -375,86 +469,94 @@ public class EngineInitialization extends LifecycleBase
 			throw new InternalException("Initialization problem when checking identity types.", e);
 		}
 	}
-	
+
 	private void installEventListeners()
 	{
 		eventsProcessor.addEventListener(scriptEventsConsumer);
+		eventsProcessor.addEventListener(auditEventListener);
 	}
-	
+
 	private void deployPublicWellKnownURLServlet()
 	{
-		if (publicWellKnownURLServlet == null)
-		{
-			log.info("Public well-known URL servlet is not available, skipping its deploymnet");
-			return;
-		}	
-		
-		log.info("Deploing public well-known URL servlet");
-		ServletHolder holder = publicWellKnownURLServlet.getServiceServlet();
-		FilterHolder filterHolder = new FilterHolder(publicWellKnownURLServlet.getServiceFilter());
-		try
-		{
-			sharedEndpointManagement.deployInternalEndpointServlet(PublicWellKnownURLServletProvider.SERVLET_PATH, 
-					holder, true);
-			sharedEndpointManagement.deployInternalEndpointFilter(PublicWellKnownURLServletProvider.SERVLET_PATH, 
-					filterHolder);
-		} catch (EngineException e)
-		{
-			throw new InternalException("Cannot deploy public well-known URL servlet", e);
-		}
+		deploySharedEndpointServletWithVaadinSupport(publicWellKnownURLServlet, 
+				PublicWellKnownURLServletProvider.SERVLET_PATH,
+				"public well-known URL");
 	}
-		
+
 	private void deployConfirmationServlet()
 	{
-		if (confirmationServletFactory == null)
+		deploySharedEndpointServletWithVaadinSupport(confirmationServletFactory, 
+				EmailConfirmationServletProvider.SERVLET_PATH,
+				"confirmation");
+	}
+	
+	private void deployAttributeContentPublicServlet()
+	{
+		deploySharedEndpointServletWithoutVaadinSupport(attributesContentServletFactory, 
+				AttributesContentPublicServletProvider.SERVLET_PATH,
+				"public attribute exposure");
+	}
+
+	private void deploySharedEndpointServletWithVaadinSupport(ServletProvider servletProvider, String path, String name)
+	{
+		deploySharedEndpointServlet(servletProvider, path, name, true);
+	}
+
+	private void deploySharedEndpointServletWithoutVaadinSupport(ServletProvider servletProvider, String path, String name)
+	{
+		deploySharedEndpointServlet(servletProvider, path, name, false);
+	}
+	
+	private void deploySharedEndpointServlet(ServletProvider servletProvider, String path, String name, 
+			boolean mapVaadinResource)
+	{
+		if (servletProvider == null)
 		{
-			log.info("Confirmation servlet factory is not available, skipping its deploymnet");
+			log.info("{} servlet factory is not available, skipping its deploymnet", name);
 			return;
-		}	
-		
-		log.info("Deploing confirmation servlet");
-		ServletHolder holder = confirmationServletFactory.getServiceServlet();
-		FilterHolder filterHolder = new FilterHolder(confirmationServletFactory.getServiceFilter());
+		}
+
+		log.info("Deploing {} servlet", name);
+		ServletHolder holder = servletProvider.getServiceServlet();
+		List<FilterHolder> filterHolders = servletProvider.getServiceFilters();
 		try
 		{
-			sharedEndpointManagement.deployInternalEndpointServlet(
-					EmailConfirmationServletProvider.SERVLET_PATH, holder, true);
-			sharedEndpointManagement.deployInternalEndpointFilter(
-					EmailConfirmationServletProvider.SERVLET_PATH, filterHolder);
+			sharedEndpointManagement.deployInternalEndpointServlet(path, holder, mapVaadinResource);
+			for (FilterHolder filter: filterHolders)
+				sharedEndpointManagement.deployInternalEndpointFilter(path, filter);
 		} catch (EngineException e)
 		{
-			throw new InternalException("Cannot deploy internal confirmation servlet", e);
+			throw new InternalException("Can not deploy " + name + " servlet", e);
 		}
 	}
 	
-	
+
 	private void initializeIdentityTypes()
 	{
 		log.info("Checking if all identity types are defined");
 		Collection<IdentityTypeDefinition> idTypes = idTypesReg.getAll();
 		tx.runInTransaction(() -> {
 			Map<String, IdentityType> defined = dbIdentities.getAllAsMap();
-			for (IdentityTypeDefinition it: idTypes)
+			for (IdentityTypeDefinition it : idTypes)
 			{
 				if (!defined.containsKey(it.getId()))
 				{
 					log.info("Adding identity type " + it.getId());
 					IdentityType idType = new IdentityType(it.getId(), it.getId());
-					idType.setDescription(idType.getDescription());
-					idType.setExtractedAttributes(idType.getExtractedAttributes());
+					idType.setDescription(msg.getMessage(it.getDefaultDescriptionKey()));
 					dbIdentities.create(idType);
 				}
 			}
 		});
 	}
-	
-	private void initializeAttributeTypes() 
+
+	private void initializeSystemAttributeTypes()
 	{
 		log.info("Checking if all system attribute types are defined");
 		tx.runInTransaction(() -> {
 			Map<String, AttributeType> existing = attributeTypeDAO.getAllAsMap();
-			for (SystemAttributesProvider attrTypesProvider: sysTypeProviders)
-				for (AttributeType at: attrTypesProvider.getSystemAttributes())
+			for (SystemAttributesProvider attrTypesProvider : sysTypeProviders)
+				for (AttributeType at : attrTypesProvider.getSystemAttributes())
 				{
 					AttributeType existingAt = existing.get(at.getName());
 					if (existingAt == null)
@@ -470,7 +572,7 @@ public class EngineInitialization extends LifecycleBase
 				}
 		});
 	}
-	
+
 	private void initializeAdminUser()
 	{
 		try
@@ -483,40 +585,39 @@ public class EngineInitialization extends LifecycleBase
 			try
 			{
 				idManagement.getEntity(new EntityParam(admin));
-				log.info("There is a user " + adminU + 
-						" in the database, admin account will not be created. It is a good idea to remove or comment the "
-						+ UnityServerConfiguration.INITIAL_ADMIN_USER + " setting from the main configuration file to "
+				log.info("There is a user " + adminU
+						+ " in the database, admin account will not be created. It is a good idea to remove or comment the "
+						+ UnityServerConfiguration.INITIAL_ADMIN_USER
+						+ " setting from the main configuration file to "
 						+ "disable this message and use it only to add a default user in case of locked access.");
 			} catch (UnknownIdentityException e)
 			{
 				log.info("Database contains no admin user, creating the configured admin user");
 				CredentialDefinition credDef = credRepo.get(DEFAULT_CREDENTIAL);
 				Identity adminId = createAdminSafe(admin, SystemAllCredentialRequirements.NAME);
-				
+
 				EntityParam adminEntity = new EntityParam(adminId.getEntityId());
 				PasswordToken ptoken = new PasswordToken(adminP);
-		
-				//Set password without verification
-				tx.runInTransactionThrowing(() -> {	
+
+				// Set password without verification
+				tx.runInTransactionThrowing(() -> {
 					entityCredHelper.setEntityCredentialInternalWithoutVerify(
-									adminEntity.getEntityId(),
-									credDef.getName(),
-									ptoken.toJson());					
+							adminEntity.getEntityId(), credDef.getName(), ptoken.toJson());
 				});
-				
+
 				if (config.getBooleanValue(UnityServerConfiguration.INITIAL_ADMIN_USER_OUTDATED))
-					idCredManagement.setEntityCredentialStatus(adminEntity, credDef.getName(), 
+					idCredManagement.setEntityCredentialStatus(adminEntity, credDef.getName(),
 							LocalCredentialState.outdated);
-				
-				Attribute roleAt = EnumAttribute.of(RoleAttributeTypeProvider.AUTHORIZATION_ROLE,
-						"/", Lists.newArrayList(AuthorizationManagerImpl.SYSTEM_MANAGER_ROLE));
+
+				Attribute roleAt = EnumAttribute.of(RoleAttributeTypeProvider.AUTHORIZATION_ROLE, "/",
+						Lists.newArrayList(InternalAuthorizationManagerImpl.SYSTEM_MANAGER_ROLE));
 				attrManagement.createAttribute(adminEntity, roleAt);
 				log.warn("IMPORTANT:\n"
-						+ "Database was initialized with a default admin user and password." +
-						" Log in and change the admin's password immediatelly! U: " + 
-						adminU + " P: " + adminP + "\n"
-						+ "The credential used for this user is named: '" + credDef.getName() + 
-						"' make sure that this credential is enabled for the admin UI endpoint. "
+						+ "Database was initialized with a default admin user and password."
+						+ " Log in and change the admin's password immediatelly! U: " + adminU
+						+ " P: " + adminP + "\n"
+						+ "The credential used for this user is named: '" + credDef.getName()
+						+ "' make sure that this credential is enabled for the admin UI endpoint. "
 						+ "If not add an authenticator using this credential to the admin endpoint.");
 			}
 		} catch (EngineException e)
@@ -524,26 +625,27 @@ public class EngineInitialization extends LifecycleBase
 			throw new InternalException("Initialization problem when creating admin user", e);
 		}
 	}
-	
+
 	private Identity createAdminSafe(IdentityParam admin, String crDef) throws EngineException
 	{
 		try
 		{
-			return idManagement.addEntity(admin, crDef, EntityState.valid, false);
+			return idManagement.addEntity(admin, crDef, EntityState.valid);
 		} catch (SchemaConsistencyException e)
 		{
-			//most probably '/' group attribute class forbids to insert admin. As we need the admin
-			//remove ACs and repeat.
+			// most probably '/' group attribute class forbids to
+			// insert admin. As we need the admin
+			// remove ACs and repeat.
 			log.warn("There was a schema consistency error adding the admin user. All "
 					+ "attribute classes of the '/' group will be removed. Error: " + e.toString());
 			GroupContents root = groupManagement.getContents("/", GroupContents.METADATA);
 			log.info("Removing ACs: " + root.getGroup().getAttributesClasses());
 			root.getGroup().setAttributesClasses(new HashSet<>());
-			groupManagement.updateGroup("/", root.getGroup());
-			return idManagement.addEntity(admin, crDef, EntityState.valid, false);
+			groupManagement.updateGroup("/", root.getGroup(), "reset root group attributes", "");
+			return idManagement.addEntity(admin, crDef, EntityState.valid);
 		}
 	}
-	
+
 	/**
 	 * Removes all database endpoints, realms and authenticators
 	 */
@@ -563,26 +665,25 @@ public class EngineInitialization extends LifecycleBase
 		{
 			log.info("Removing all persisted realms");
 			Collection<AuthenticationRealm> realms = realmManagement.getRealms();
-			for (AuthenticationRealm ar: realms)
+			for (AuthenticationRealm ar : realms)
 				realmManagement.removeRealm(ar.getName());
 		} catch (EngineException e)
 		{
 			log.fatal("Can't remove realms which are stored in database", e);
 			throw new InternalException("Can't remove realms which are stored in database", e);
 		}
-		
+
 		log.info("Removing all persisted authenticators");
 		tx.runInTransaction(() -> {
-			authenticatorDAO.deleteAll();	
+			authenticatorDAO.deleteAll();
 		});
 		log.info("Removing all persisted authentication flows");
 		tx.runInTransaction(() -> {
-			authenticationFlowDAO.deleteAll();	
+			authenticationFlowDAO.deleteAll();
 		});
-		
-		
+
 	}
-	
+
 	private void initializeRealms()
 	{
 		try
@@ -590,34 +691,35 @@ public class EngineInitialization extends LifecycleBase
 			log.info("Loading configured realms");
 			Collection<AuthenticationRealm> realms = realmManagement.getRealms();
 			Set<String> realmKeys = config.getStructuredListKeys(UnityServerConfiguration.REALMS);
-			for (String realmKey: realmKeys)
+			for (String realmKey : realmKeys)
 			{
-				String name = config.getValue(realmKey+UnityServerConfiguration.REALM_NAME);
-				String description = config.getValue(realmKey+
-						UnityServerConfiguration.REALM_DESCRIPTION);
-				int blockAfter = config.getIntValue(realmKey+
-						UnityServerConfiguration.REALM_BLOCK_AFTER_UNSUCCESSFUL);
-				int blockFor = config.getIntValue(realmKey+UnityServerConfiguration.REALM_BLOCK_FOR);
-				RememberMePolicy remeberMePolicy = config.getEnumValue(realmKey+
-						UnityServerConfiguration.REALM_REMEMBER_ME_POLICY, RememberMePolicy.class);
-				int remeberMeFor = config.getIntValue(realmKey+
-						UnityServerConfiguration.REALM_REMEMBER_ME_FOR);
-				int maxInactive = config.getIntValue(realmKey+
-						UnityServerConfiguration.REALM_MAX_INACTIVITY);
-				
-				AuthenticationRealm realm = new AuthenticationRealm(name, description, blockAfter, 
+				String name = config.getValue(realmKey + UnityServerConfiguration.REALM_NAME);
+				String description = config
+						.getValue(realmKey + UnityServerConfiguration.REALM_DESCRIPTION);
+				int blockAfter = config.getIntValue(
+						realmKey + UnityServerConfiguration.REALM_BLOCK_AFTER_UNSUCCESSFUL);
+				int blockFor = config.getIntValue(realmKey + UnityServerConfiguration.REALM_BLOCK_FOR);
+				RememberMePolicy remeberMePolicy = config.getEnumValue(
+						realmKey + UnityServerConfiguration.REALM_REMEMBER_ME_POLICY,
+						RememberMePolicy.class);
+				int remeberMeFor = config
+						.getIntValue(realmKey + UnityServerConfiguration.REALM_REMEMBER_ME_FOR);
+				int maxInactive = config
+						.getIntValue(realmKey + UnityServerConfiguration.REALM_MAX_INACTIVITY);
+
+				AuthenticationRealm realm = new AuthenticationRealm(name, description, blockAfter,
 						blockFor, remeberMePolicy, remeberMeFor, maxInactive);
-				
+
 				if (realms.stream().filter(r -> r.getName().equals(name)).findAny().isPresent())
 					realmManagement.updateRealm(realm);
 				else
 					realmManagement.addRealm(realm);
-				
+
 				description = description == null ? "" : description;
-				log.info(" - " + name + ": " + description + " [blockAfter " + 
-						blockAfter + ", blockFor " + blockFor + 
-						", rememberMePolicy " + remeberMePolicy.toString() + 
-						", rememberMeFor " + remeberMeFor + ", maxInactive " + maxInactive);
+				log.info(" - " + name + ": " + description + " [blockAfter " + blockAfter
+						+ ", blockFor " + blockFor + ", rememberMePolicy "
+						+ remeberMePolicy.toString() + ", rememberMeFor " + remeberMeFor
+						+ ", maxInactive " + maxInactive);
 			}
 		} catch (EngineException e)
 		{
@@ -636,125 +738,130 @@ public class EngineInitialization extends LifecycleBase
 			log.fatal("Can't load endpoints which are configured", e);
 			throw new InternalException("Can't load endpoints which are configured", e);
 		}
-		
+		logEndpoints();
+	}
+
+	private void logEndpoints()
+	{
 		try
 		{
-			List<ResolvedEndpoint> endpoints = endpointManager.getEndpoints();
+			List<ResolvedEndpoint> endpoints = endpointManager.getDeployedEndpoints();
 			log.info("Initialized the following endpoints:");
-			for (ResolvedEndpoint endpoint: endpoints)
+			for (ResolvedEndpoint endpoint : endpoints)
 			{
-				log.info(" - " + endpoint.getName() + ": " + endpoint.getType().getName() + 
-						" " + endpoint.getEndpoint().getConfiguration().getDescription() + 
-						" at " + 
-						endpoint.getEndpoint().getContextAddress() + " in realm " + 
-						endpoint.getRealm().getName());
+				log.info(" - " + endpoint.getName() + ": " + endpoint.getType().getName() + " "
+						+ endpoint.getEndpoint().getConfiguration().getDescription() + " at "
+						+ endpoint.getEndpoint().getContextAddress()
+						+ (endpoint.getRealm() == null ? "" : " in realm " + endpoint.getRealm().getName()));
 			}
 		} catch (Exception e)
 		{
 			log.fatal("Can't list loaded endpoints", e);
 			throw new InternalException("Can't list loaded endpoints", e);
-		}		
+		}
 		endpointsLoadTime = System.currentTimeMillis();
 	}
 	
 	private void loadEndpointsFromConfiguration() throws IOException, EngineException
 	{
 		log.info("Loading all configured endpoints");
-		
-		List<ResolvedEndpoint> existing = endpointManager.getEndpoints();
-		
+
+		List<ResolvedEndpoint> existing = endpointManager.getDeployedEndpoints();
+
 		Set<String> endpointsList = config.getStructuredListKeys(UnityServerConfiguration.ENDPOINTS);
-		for (String endpointKey: endpointsList)
+		for (String endpointKey : endpointsList)
 		{
-			String description = config.getValue(endpointKey+UnityServerConfiguration.ENDPOINT_DESCRIPTION);
-			String type = config.getValue(endpointKey+UnityServerConfiguration.ENDPOINT_TYPE);
-			File configFile = config.getFileValue(endpointKey+UnityServerConfiguration.ENDPOINT_CONFIGURATION, false);
-			String address = config.getValue(endpointKey+UnityServerConfiguration.ENDPOINT_ADDRESS);
-			String name = config.getValue(endpointKey+UnityServerConfiguration.ENDPOINT_NAME);
-			
+			String description = config
+					.getValue(endpointKey + UnityServerConfiguration.ENDPOINT_DESCRIPTION);
+			String type = config.getValue(endpointKey + UnityServerConfiguration.ENDPOINT_TYPE);
+			File configFile = config.getFileValue(
+					endpointKey + UnityServerConfiguration.ENDPOINT_CONFIGURATION, false);
+			String address = config.getValue(endpointKey + UnityServerConfiguration.ENDPOINT_ADDRESS);
+			String name = config.getValue(endpointKey + UnityServerConfiguration.ENDPOINT_NAME);
+
 			if (existing.stream().filter(e -> e.getName().equals(name)).findAny().isPresent())
 			{
-				log.info("Endpoint " + name + " is present in database, will be updated from configuration");
+				log.info("Endpoint " + name
+						+ " is present in database, will be updated from configuration");
 				endpointManager.undeploy(name);
 			}
-			
-			I18nString displayedName = config.getLocalizedString(msg, 
-					endpointKey+UnityServerConfiguration.ENDPOINT_DISPLAYED_NAME);
+
+			I18nString displayedName = config.getLocalizedString(msg,
+					endpointKey + UnityServerConfiguration.ENDPOINT_DISPLAYED_NAME);
 			if (displayedName.isEmpty())
 				displayedName.setDefaultValue(name);
-			String realmName = config.getValue(endpointKey+UnityServerConfiguration.ENDPOINT_REALM);
-			
+			String realmName = config.getValue(endpointKey + UnityServerConfiguration.ENDPOINT_REALM);
+
 			List<String> endpointAuthn = config.getEndpointAuth(endpointKey);
-			String jsonConfiguration = FileUtils.readFileToString(configFile);
+			String jsonConfiguration = FileUtils.readFileToString(configFile, Charset.defaultCharset());
 
 			log.info(" - " + name + ": " + type + " " + description);
-			EndpointConfiguration endpointConfiguration = new EndpointConfiguration(
-					displayedName, description, endpointAuthn, jsonConfiguration, realmName);
+			EndpointConfiguration endpointConfiguration = new EndpointConfiguration(displayedName,
+					description, endpointAuthn, jsonConfiguration, realmName);
+			endpointConfiguration.setTag(config.getValue(
+					endpointKey + UnityServerConfiguration.ENDPOINT_CONFIGURATION));
+			
 			endpointManager.deploy(type, name, address, endpointConfiguration);
 		}
 	}
-	
+
 	private void initializeAuthenticationFlows()
 	{
 		try
 		{
 			loadAuthenticationFlowsFromConfiguration();
-		} catch(Exception e)
+		} catch (Exception e)
 		{
 			log.fatal("Can't load authentication flows which are configured", e);
 			throw new InternalException("Can't load authentication flows which are configured", e);
 		}
 	}
-	
-	
+
 	private void loadAuthenticationFlowsFromConfiguration() throws EngineException
 
 	{
 		log.info("Loading all configured authentication flows");
 		Collection<AuthenticatorInfo> authenticators = authnManagement.getAuthenticators(null);
-		Set<String> existinguthenticators = authenticators.stream().map(a -> a.getId()).collect(Collectors.toSet());		
+		Set<String> existinguthenticators = authenticators.stream().map(a -> a.getId())
+				.collect(Collectors.toSet());
 		Collection<AuthenticationFlowDefinition> authenticationFlows = authnFlowManagement
 				.getAuthenticationFlows();
 		Map<String, AuthenticationFlowDefinition> existing = new HashMap<>();
 		for (AuthenticationFlowDefinition af : authenticationFlows)
 			existing.put(af.getName(), af);
 
-		Set<String> authenticationFlowList = config.getStructuredListKeys(
-				UnityServerConfiguration.AUTHENTICATION_FLOW);
+		Set<String> authenticationFlowList = config
+				.getStructuredListKeys(UnityServerConfiguration.AUTHENTICATION_FLOW);
 		for (String authenticationFlowKey : authenticationFlowList)
 		{
-			String name = config.getValue(authenticationFlowKey
-					+ UnityServerConfiguration.AUTHENTICATION_FLOW_NAME);
-			
+			String name = config.getValue(
+					authenticationFlowKey + UnityServerConfiguration.AUTHENTICATION_FLOW_NAME);
+
 			if (existinguthenticators.contains(name))
 				throw new InternalException(
 						"Can't add authentication flow which are defined in configuration. The authentication flow name: "
-								+ name
-								+ " is the same as one of authenticator name");
+								+ name + " is the same as one of authenticator name");
 
-			Policy policy = config.getEnumValue(authenticationFlowKey
-					+ UnityServerConfiguration.AUTHENTICATION_FLOW_POLICY,
+			Policy policy = config.getEnumValue(
+					authenticationFlowKey + UnityServerConfiguration.AUTHENTICATION_FLOW_POLICY,
 					Policy.class);
 			String firstFactorSpec = config.getValue(authenticationFlowKey
 					+ UnityServerConfiguration.AUTHENTICATION_FLOW_FIRST_FACTOR_AUTHENTICATORS);
 			String[] firstFactorAuthn = firstFactorSpec.split(",");
-			Set<String> firstFactorAuthnSet = new HashSet<>(
-					Arrays.asList(firstFactorAuthn));
+			Set<String> firstFactorAuthnSet = new HashSet<>(Arrays.asList(firstFactorAuthn));
 
 			String secondFactorSpec = config.getValue(authenticationFlowKey
 					+ UnityServerConfiguration.AUTHENTICATION_FLOW_SECOND_FACTOR_AUTHENTICATORS);
-			
-			
-			
+
 			List<String> secondFactorAuthnList = new ArrayList<>();
 			if (secondFactorSpec != null && !secondFactorSpec.isEmpty())
 			{
 				String[] secondFactorAuthn = secondFactorSpec.split(",");
 				secondFactorAuthnList = Arrays.asList(secondFactorAuthn);
 			}
-		
-			AuthenticationFlowDefinition authFlowdef = new AuthenticationFlowDefinition(
-					name, policy, firstFactorAuthnSet, secondFactorAuthnList);
+
+			AuthenticationFlowDefinition authFlowdef = new AuthenticationFlowDefinition(name, policy,
+					firstFactorAuthnSet, secondFactorAuthnList);
 
 			if (!existing.containsKey(name))
 			{
@@ -768,40 +875,41 @@ public class EngineInitialization extends LifecycleBase
 		}
 
 	}
-	
+
 	private void initializeAuthenticators()
 	{
 		try
 		{
 			loadAuthenticatorsFromConfiguration();
-		} catch(Exception e)
+		} catch (Exception e)
 		{
 			log.fatal("Can't load authenticators which are configured", e);
 			throw new InternalException("Can't load authenticators which are configured", e);
 		}
 	}
-	
+
 	private void loadAuthenticatorsFromConfiguration() throws IOException, EngineException
 	{
 		log.info("Loading all configured authenticators");
 		Collection<AuthenticatorInfo> authenticators = authnManagement.getAuthenticators(null);
 		Map<String, AuthenticatorInfo> existing = new HashMap<>();
-		for (AuthenticatorInfo ai: authenticators)
+		for (AuthenticatorInfo ai : authenticators)
 			existing.put(ai.getId(), ai);
-		
-		Set<String> authenticatorsList = config.getStructuredListKeys(UnityServerConfiguration.AUTHENTICATORS);
-		for (String authenticatorKey: authenticatorsList)
-		{
-			String name = config.getValue(authenticatorKey+UnityServerConfiguration.AUTHENTICATOR_NAME);
-			String type = config.getValue(authenticatorKey+UnityServerConfiguration.AUTHENTICATOR_TYPE);
-			File configFile = config.getFileValue(authenticatorKey+
-					UnityServerConfiguration.AUTHENTICATOR_VERIFICATOR_CONFIG, false);
-			String credential = config.getValue(authenticatorKey+UnityServerConfiguration.AUTHENTICATOR_CREDENTIAL);
 
-			
-			String configuration = configFile == null ? null : FileUtils.readFileToString(configFile,
-					StandardCharsets.UTF_8);
-			
+		Set<String> authenticatorsList = config.getStructuredListKeys(UnityServerConfiguration.AUTHENTICATORS);
+		for (String authenticatorKey : authenticatorsList)
+		{
+			String name = config.getValue(authenticatorKey + UnityServerConfiguration.AUTHENTICATOR_NAME);
+			String type = config.getValue(authenticatorKey + UnityServerConfiguration.AUTHENTICATOR_TYPE);
+			File configFile = config.getFileValue(
+					authenticatorKey + UnityServerConfiguration.AUTHENTICATOR_VERIFICATOR_CONFIG,
+					false);
+			String credential = config
+					.getValue(authenticatorKey + UnityServerConfiguration.AUTHENTICATOR_CREDENTIAL);
+
+			String configuration = configFile == null ? null
+					: FileUtils.readFileToString(configFile, StandardCharsets.UTF_8);
+
 			if (!existing.containsKey(name))
 			{
 				authnManagement.createAuthenticator(name, type, configuration, credential);
@@ -819,35 +927,36 @@ public class EngineInitialization extends LifecycleBase
 		try
 		{
 			loadCredentialsFromConfiguration();
-		} catch(Exception e)
+		} catch (Exception e)
 		{
 			log.fatal("Can't load credentials which are configured", e);
 			throw new InternalException("Can't load credentials which are configured", e);
 		}
 	}
-	
+
 	private void loadCredentialsFromConfiguration() throws IOException, EngineException
 	{
 		log.info("Loading all configured credentials");
 		Collection<CredentialDefinition> definitions = credMan.getCredentialDefinitions();
 		Map<String, CredentialDefinition> existing = new HashMap<>();
-		for (CredentialDefinition cd: definitions)
+		for (CredentialDefinition cd : definitions)
 			existing.put(cd.getName().toLowerCase(), cd);
-		
-		Set<String> credentialsList = config.getStructuredListKeys(UnityServerConfiguration.CREDENTIALS);
-		for (String credentialKey: credentialsList)
-		{
-			String name = config.getValue(credentialKey+UnityServerConfiguration.CREDENTIAL_NAME);
-			String typeId = config.getValue(credentialKey+UnityServerConfiguration.CREDENTIAL_TYPE);
-			String description = config.getValue(credentialKey+UnityServerConfiguration.CREDENTIAL_DESCRIPTION);
-			File configFile = config.getFileValue(credentialKey+UnityServerConfiguration.CREDENTIAL_CONFIGURATION, false);
 
-			String jsonConfiguration = FileUtils.readFileToString(configFile);
-			CredentialDefinition credentialDefinition = new CredentialDefinition(typeId, name, 
-					new I18nString(name), 
-					new I18nString(description));
+		Set<String> credentialsList = config.getStructuredListKeys(UnityServerConfiguration.CREDENTIALS);
+		for (String credentialKey : credentialsList)
+		{
+			String name = config.getValue(credentialKey + UnityServerConfiguration.CREDENTIAL_NAME);
+			String typeId = config.getValue(credentialKey + UnityServerConfiguration.CREDENTIAL_TYPE);
+			String description = config
+					.getValue(credentialKey + UnityServerConfiguration.CREDENTIAL_DESCRIPTION);
+			File configFile = config.getFileValue(
+					credentialKey + UnityServerConfiguration.CREDENTIAL_CONFIGURATION, false);
+
+			String jsonConfiguration = FileUtils.readFileToString(configFile, Charset.defaultCharset());
+			CredentialDefinition credentialDefinition = new CredentialDefinition(typeId, name,
+					new I18nString(name), new I18nString(description));
 			credentialDefinition.setConfiguration(jsonConfiguration);
-			
+
 			if (!existing.containsKey(name.toLowerCase()))
 			{
 				credMan.addCredentialDefinition(credentialDefinition);
@@ -861,7 +970,7 @@ public class EngineInitialization extends LifecycleBase
 		try
 		{
 			loadCredentialRequirementsFromConfiguration();
-		} catch(Exception e)
+		} catch (Exception e)
 		{
 			log.fatal("Can't load configured credential requirements", e);
 			throw new InternalException("Can't load configured credential requirements", e);
@@ -873,20 +982,22 @@ public class EngineInitialization extends LifecycleBase
 		log.info("Loading all configured credential requirements");
 		Collection<CredentialRequirements> definitions = credReqMan.getCredentialRequirements();
 		Map<String, CredentialRequirements> existing = new HashMap<>();
-		for (CredentialRequirements cd: definitions)
+		for (CredentialRequirements cd : definitions)
 			existing.put(cd.getName(), cd);
-		
+
 		Set<String> credreqsList = config.getStructuredListKeys(UnityServerConfiguration.CREDENTIAL_REQS);
-		for (String credentialKey: credreqsList)
+		for (String credentialKey : credreqsList)
 		{
-			String name = config.getValue(credentialKey+UnityServerConfiguration.CREDENTIAL_REQ_NAME);
-			String description = config.getValue(credentialKey+UnityServerConfiguration.CREDENTIAL_REQ_DESCRIPTION);
-			List<String> elements = config.getListOfValues(credentialKey+UnityServerConfiguration.CREDENTIAL_REQ_CONTENTS);
+			String name = config.getValue(credentialKey + UnityServerConfiguration.CREDENTIAL_REQ_NAME);
+			String description = config
+					.getValue(credentialKey + UnityServerConfiguration.CREDENTIAL_REQ_DESCRIPTION);
+			List<String> elements = config.getListOfValues(
+					credentialKey + UnityServerConfiguration.CREDENTIAL_REQ_CONTENTS);
 			Set<String> requiredCredentials = new HashSet<>();
 			requiredCredentials.addAll(elements);
-			
+
 			CredentialRequirements cr = new CredentialRequirements(name, description, requiredCredentials);
-			
+
 			if (!existing.containsKey(name))
 			{
 				credReqMan.addCredentialRequirement(cr);
@@ -894,9 +1005,8 @@ public class EngineInitialization extends LifecycleBase
 			}
 		}
 	}
-	
-	
-	private void initializeTranslationProfiles()
+
+	private void initializeTranslationProfiles(boolean allowUpdatingExisting)
 	{
 		List<String> profileFiles = config.getListOfValues(UnityServerConfiguration.TRANSLATION_PROFILES);
 		Map<String, TranslationProfile> existingInputProfiles;
@@ -910,37 +1020,42 @@ public class EngineInitialization extends LifecycleBase
 			throw new InternalException("Can't list the existing translation profiles", e1);
 		}
 		log.info("Loading configured translation profiles");
-		for (String profileFile: profileFiles)
+		for (String profileFile : profileFiles)
 		{
 			ObjectNode json;
 			try
 			{
-				String source = FileUtils.readFileToString(new File(profileFile));
+				String source = FileUtils.readFileToString(new File(profileFile), Charset.defaultCharset());
 				json = JsonUtil.parse(source);
 			} catch (IOException e)
 			{
-				throw new ConfigurationException("Problem loading translation profile from file: " +
-						profileFile, e);
+				throw new ConfigurationException(
+						"Problem loading translation profile from file: " + profileFile, e);
 			}
 			TranslationProfile tp = new TranslationProfile(json);
 			try
 			{
-				if ((tp.getProfileType() == ProfileType.INPUT && existingInputProfiles.containsKey(tp.getName()))
-						|| tp.getProfileType() == ProfileType.OUTPUT && existingOutputProfiles.containsKey(tp.getName()))
+				if ((tp.getProfileType() == ProfileType.INPUT
+						&& existingInputProfiles.containsKey(tp.getName()))
+						|| tp.getProfileType() == ProfileType.OUTPUT
+								&& existingOutputProfiles.containsKey(tp.getName()))
 				{
-					log.info(" - updated the in-DB translation profile : " + tp.getName() + 
-							" with file definition: " + profileFile);
-					profilesManagement.updateProfile(tp);	
+					if (allowUpdatingExisting)
+					{
+						profilesManagement.updateProfile(tp);
+						log.info(" - updated the in-DB translation profile : " + tp.getName()
+							+ " with file definition: " + profileFile);
+					}
 				} else
 				{
 					profilesManagement.addProfile(tp);
-					log.info(" - loaded translation profile: " + tp.getName() + 
-							" from file: " + profileFile);
+					log.info(" - loaded translation profile: " + tp.getName() + " from file: "
+							+ profileFile);
 				}
 			} catch (Exception e)
 			{
-				throw new InternalException("Can't install the configured translation profile " 
-						+ tp.getName(), e);
+				throw new InternalException(
+						"Can't install the configured translation profile " + tp.getName(), e);
 			}
 		}
 	}
@@ -950,11 +1065,12 @@ public class EngineInitialization extends LifecycleBase
 		for (TranslationProfile profile : collection)
 		{
 			if (profile.getProfileMode() != ProfileMode.READ_ONLY)
-				throw new IllegalArgumentException("Sytem profile " + profile + " is not in READ_ONLY mode");
+				throw new IllegalArgumentException(
+						"System profile " + profile + " is not in READ_ONLY mode");
 			profileHelper.checkBaseProfileContent(profile);
 		}
 	}
-	
+
 	private void checkSystemTranslationProfiles()
 	{
 		checkProfiles(systemInputProfileProvider.getSystemProfiles().values());
@@ -965,16 +1081,16 @@ public class EngineInitialization extends LifecycleBase
 	{
 		List<String> enabledL = config.getListOfValues(UnityServerConfiguration.INITIALIZERS);
 		Map<String, ServerInitializer> initializersMap = new HashMap<>();
-		for (ServerInitializer initializer: initializers.orElseGet(ArrayList::new))
+		for (ServerInitializer initializer : initializers.orElseGet(ArrayList::new))
 			initializersMap.put(initializer.getName(), initializer);
-		
-		for (String enabled: enabledL)
+
+		for (String enabled : enabledL)
 		{
 			log.info("Running initializer: " + enabled);
 			ServerInitializer serverInitializer = initializersMap.get(enabled);
 			if (serverInitializer == null)
-				throw new ConfigurationException("There is no content intializer " + enabled + 
-						" defined in the system");
+				throw new ConfigurationException(
+						"There is no content intializer " + enabled + " defined in the system");
 			initializersMap.get(enabled).run();
 		}
 	}
@@ -1008,14 +1124,14 @@ public class EngineInitialization extends LifecycleBase
 			FileWatcher fw = new FileWatcher(logProperties, r);
 			final int DELAY = 7;
 			executors.getService().scheduleWithFixedDelay(fw, DELAY, DELAY, TimeUnit.SECONDS);
-			log.info("Started logging subsystem configuration file monitoring with " + 
-					DELAY + "s interval.");
+			log.info("Started logging subsystem configuration file monitoring with " + DELAY
+					+ "s interval.");
 		} catch (URISyntaxException e)
 		{
-			log.warn("Logging configuration file is not a valid URI: '"+logConfig+"'", e);
+			log.warn("Logging configuration file is not a valid URI: '" + logConfig + "'", e);
 		} catch (FileNotFoundException e)
 		{
-			log.warn("Logging configuration file '"+logConfig+"' not found.");
+			log.warn("Logging configuration file '" + logConfig + "' not found.");
 		}
 	}
 
@@ -1034,10 +1150,3 @@ public class EngineInitialization extends LifecycleBase
 		}
 	}
 }
-
-
-
-
-
-
-

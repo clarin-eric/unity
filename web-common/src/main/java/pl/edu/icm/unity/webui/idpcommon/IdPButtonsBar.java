@@ -4,12 +4,17 @@
  */
 package pl.edu.icm.unity.webui.idpcommon;
 
+import com.vaadin.event.ShortcutAction.KeyCode;
+import com.vaadin.ui.Alignment;
 import com.vaadin.ui.Button;
+import com.vaadin.ui.Button.ClickEvent;
 import com.vaadin.ui.CustomComponent;
 import com.vaadin.ui.HorizontalLayout;
+import com.vaadin.ui.VerticalLayout;
 
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
-import pl.edu.icm.unity.webui.authn.StandardWebAuthenticationProcessor;
+import pl.edu.icm.unity.MessageSource;
+import pl.edu.icm.unity.webui.authn.StandardWebLogoutHandler;
+import pl.edu.icm.unity.webui.common.Styles;
 
 /**
  * Bar with buttons: Accept, Decline, Login as another user. The login as another user action is 
@@ -20,11 +25,12 @@ public class IdPButtonsBar extends CustomComponent
 {
 	public enum Action {ACCEPT, DENY, LOGIN_AS_ANOTHER};
 
-	private UnityMessageSource msg;
-	private StandardWebAuthenticationProcessor authnProcessor;
+	private MessageSource msg;
+	private StandardWebLogoutHandler authnProcessor;
 	private ActionListener listener;
+	private Button confirmB;
 	
-	public IdPButtonsBar(UnityMessageSource msg, StandardWebAuthenticationProcessor authnProcessor,
+	public IdPButtonsBar(MessageSource msg, StandardWebLogoutHandler authnProcessor,
 			ActionListener listener)
 	{
 		this.msg = msg;
@@ -36,27 +42,42 @@ public class IdPButtonsBar extends CustomComponent
 	private void initUI()
 	{
 		setSizeUndefined();
-		HorizontalLayout buttons = new HorizontalLayout();
+		VerticalLayout buttonsVL = new VerticalLayout();
+		buttonsVL.setMargin(false);
 		
-		Button confirmB = new Button(msg.getMessage("IdPButtonsBar.confirm"));
+		confirmB = new Button(msg.getMessage("IdPButtonsBar.confirm"));
 		confirmB.setId("IdpButtonsBar.confirmButton");
-		confirmB.addClickListener(event -> listener.buttonClicked(Action.ACCEPT));
+		confirmB.addClickListener(this::onAccept);
+		confirmB.addStyleName(Styles.vButtonPrimary.toString());
+		confirmB.addStyleName("u-consentConfirmButton");
+		confirmB.setClickShortcut(KeyCode.ENTER);
 		
 		Button declineB = new Button(msg.getMessage("IdPButtonsBar.decline"));
 		declineB.addClickListener(event -> listener.buttonClicked(Action.DENY));
+		declineB.addStyleName("u-consentDeclineButton");
+		HorizontalLayout buttonsHL = new HorizontalLayout();
+		buttonsHL.setMargin(false);
+		buttonsHL.addComponents(declineB, confirmB);
 		
 		Button reloginB = new Button(msg.getMessage("IdPButtonsBar.logAsAnother"));
+		reloginB.addStyleName(Styles.vButtonLink.toString());
 		reloginB.addClickListener(event -> 
 		{
 			listener.buttonClicked(Action.LOGIN_AS_ANOTHER);
 			authnProcessor.logout(true);
 		});
 		
-		buttons.addComponents(confirmB, declineB, reloginB);
-		buttons.setSizeUndefined();
-		setCompositionRoot(buttons);
+		buttonsVL.addComponents(buttonsHL, reloginB);
+		buttonsVL.setComponentAlignment(buttonsHL, Alignment.BOTTOM_RIGHT);
+		buttonsVL.setComponentAlignment(reloginB, Alignment.BOTTOM_RIGHT);
+		setCompositionRoot(buttonsVL);
 	}
 
+	private void onAccept(ClickEvent event)
+	{
+		confirmB.removeClickShortcut();
+		listener.buttonClicked(Action.ACCEPT);
+	}
 
 	public static interface ActionListener
 	{

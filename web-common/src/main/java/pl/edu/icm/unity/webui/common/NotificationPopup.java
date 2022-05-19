@@ -4,16 +4,20 @@
  */
 package pl.edu.icm.unity.webui.common;
 
+import java.time.Duration;
+
 import org.apache.logging.log4j.Logger;
 
 import com.vaadin.server.Page;
 import com.vaadin.server.Resource;
+import com.vaadin.shared.Position;
 import com.vaadin.ui.Notification;
 import com.vaadin.ui.Notification.Type;
 import com.vaadin.ui.themes.ValoTheme;
 
+import eu.unicore.util.configuration.ConfigurationException;
+import pl.edu.icm.unity.MessageSource;
 import pl.edu.icm.unity.base.utils.Log;
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
 import pl.edu.icm.unity.exceptions.AuthorizationException;
 import pl.edu.icm.unity.exceptions.EngineException;
 import pl.edu.icm.unity.webui.exceptions.ControllerException;
@@ -27,6 +31,7 @@ import pl.edu.icm.unity.webui.exceptions.ControllerException;
  */
 public class NotificationPopup
 {
+	private static final Duration NOTIFICATION_AUTOCLOSE_AFTER = Duration.ofSeconds(5);
 	private static final Logger log = Log.getLogger(Log.U_SERVER_WEB, NotificationPopup.class);
 	
 	
@@ -48,6 +53,57 @@ public class NotificationPopup
 		showGeneric(caption, description, Type.ERROR_MESSAGE, Images.error.getResource(),
 				ValoTheme.NOTIFICATION_CLOSABLE);
 	}
+
+	public static void showWarningAutoClosing(String caption, String description, Runnable afterCloseHandler)
+	{
+		showAutoClosing(getWarningNotificationPlain(caption, description), Position.MIDDLE_CENTER, afterCloseHandler);
+	}
+	
+	public static void showErrorAutoClosing(String caption, String description, Runnable afterCloseHandler)
+	{
+		showAutoClosing(getErrorNotificationPlain(caption, description), Position.TOP_CENTER, afterCloseHandler);
+	}
+
+	public static void showAssistiveAutoClosing(String caption, String description)
+	{		
+		showAutoClosing(getAssistiveNotificationPlain(caption, description), Position.TOP_CENTER, () -> {});
+	}
+	
+	public static void showErrorAutoClosing(String caption, String description)
+	{
+		showAutoClosing(getErrorNotificationPlain(caption, description), Position.TOP_CENTER, () -> {});
+	}
+	
+	private static void showAutoClosing(Notification notification, Position position, Runnable afterCloseHandler)
+	{
+		notification.setDelayMsec((int)NOTIFICATION_AUTOCLOSE_AFTER.toMillis());
+		StringBuilder sb = new StringBuilder(notification.getStyleName());
+		sb.append(" ").append(Styles.veryLargeIcon.toString());
+		notification.setPosition(position);
+		notification.addCloseListener(e -> afterCloseHandler.run());
+		notification.show(Page.getCurrent());
+	}
+	
+	private static Notification getWarningNotificationPlain(String caption, String description)
+	{
+		Notification notification = new Notification(caption, description, Type.WARNING_MESSAGE);
+		notification.setIcon(Images.info.getResource());
+		return notification;
+	}
+	
+	private static Notification getAssistiveNotificationPlain(String caption, String description)
+	{
+		Notification notification = new Notification(caption, description, Type.ASSISTIVE_NOTIFICATION);
+		notification.setIcon(Images.info.getResource());
+		return notification;
+	}
+	
+	private static Notification getErrorNotificationPlain(String caption, String description)
+	{
+		Notification notification = new Notification(caption, description, Type.ERROR_MESSAGE);
+		notification.setIcon(Images.error.getResource());
+		return notification;
+	}
 	
 	public static void showError(ControllerException exception)
 	{
@@ -59,12 +115,46 @@ public class NotificationPopup
 			showNotice(exception.getCaption(), exception.getDetails());
 		}
 	}
+	
+	public static void showError(MessageSource msg, ControllerException exception)
+	{
+		String description = exception.getCause() != null ? getHumanMessage(exception.getCause()) : "";
 
-	public static void showFormError(UnityMessageSource msg)
+		if (exception.getDetails() != null && !exception.getDetails().isEmpty())
+		{
+
+			description = description != null && !description.trim().isEmpty()
+					? exception.getDetails() + ", " + description
+					: exception.getDetails();
+		}
+
+		if (description.trim().isEmpty())
+		{
+			description = msg.getMessage("Generic.formErrorHint");
+		}
+
+		log.warn("Error popup showed an error to the user: " + exception.getCaption());
+		log.info("What's more there was an exception attached which caused an error:", exception);
+
+		if (exception.getType() == pl.edu.icm.unity.webui.exceptions.ControllerException.Type.ERROR)
+		{
+			showError(exception.getCaption(), description);
+		} else
+		{
+			showNotice(exception.getCaption(), description);
+		}
+	}
+
+	public static void showFormError(MessageSource msg)
 	{
 		showError(msg.getMessage("Generic.formError"), msg.getMessage("Generic.formErrorHint"));
 	}
 
+	public static void showFormError(MessageSource msg, String detail)
+	{
+		showError(msg.getMessage("Generic.formError"), detail);
+	}
+	
 	public static Notification getNoticeNotification(String caption, String description)
 	{
 		return createGeneric(caption, description, Type.WARNING_MESSAGE, Images.warn.getResource(),
@@ -77,17 +167,14 @@ public class NotificationPopup
 				ValoTheme.NOTIFICATION_CLOSABLE);
 	}
 	
-	public static void showError(UnityMessageSource msg, String message, Exception e)
+	public static void showError(MessageSource msg, String message, Exception e)
 	{
 		String description = getHumanMessage(e);
 		if (description.trim().isEmpty())
 			description = msg.getMessage("Generic.formErrorHint");
 
-		if (log.isDebugEnabled())
-		{
-			log.debug("Error popup showed an error to the user: " + message);
-			log.debug("What's more there was an exception attached which caused an error:", e);
-		}
+		log.warn("Error popup showed an error to the user: " + message);
+		log.info("What's more there was an exception attached which caused an error:", e);
 		showError(message, description);
 	}
 
@@ -114,7 +201,7 @@ public class NotificationPopup
 				break;
 			if (e.getMessage().equals(lastMessage))
 				continue;
-			if (!(e instanceof EngineException))
+			if (!(e instanceof EngineException || e instanceof ConfigurationException))
 				break;
 			lastMessage = e.getMessage();
 			sb.append(separator).append(lastMessage);

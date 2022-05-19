@@ -67,7 +67,7 @@ public class AuthenticatorManagementTest extends DBIntegrationTestBase
 		createRealmEndpointAndAuthenticator();
 		
 		Identity id = idsMan.addEntity(new IdentityParam(X500Identity.ID, "CN=foo"), 
-				"crMock", EntityState.valid, false);
+				"crMock", EntityState.valid);
 
 		EntityParam entityP = new EntityParam(id);
 		eCredMan.setEntityCredential(entityP, "credential1", "wrongpassword");
@@ -86,7 +86,7 @@ public class AuthenticatorManagementTest extends DBIntegrationTestBase
 		createRealmEndpointAndAuthenticator();
 
 		Identity id = idsMan.addEntity(new IdentityParam(X500Identity.ID, "CN=foo"), 
-				"crMock", EntityState.valid, false);
+				"crMock", EntityState.valid);
 		EntityParam entityP = new EntityParam(id);
 		MockEndpoint endpoint = (MockEndpoint) internalEndpointMan.getDeployedEndpoints().iterator().next();
 		eCredMan.setEntityCredential(entityP, "credential1", "bar");
@@ -237,14 +237,14 @@ public class AuthenticatorManagementTest extends DBIntegrationTestBase
 		EndpointConfiguration cfg = new EndpointConfiguration(new I18nString("endpoint1"),
 				"desc", new ArrayList<String>(), "", realm.getName());
 		endpointMan.deploy(type.getName(), "endpoint1", "/foo", cfg);
-		List<ResolvedEndpoint> endpoints = endpointMan.getEndpoints();
+		List<ResolvedEndpoint> endpoints = endpointMan.getDeployedEndpoints();
 		assertEquals(1, endpoints.size());
 
 		endpointMan.updateEndpoint(endpoints.get(0).getEndpoint().getName(), 
 				new EndpointConfiguration(new I18nString("ada"), 
 				"ada", Collections.singletonList("flow1"), "", realm.getName()));
 
-		List<String> endpointFlows = endpointMan.getEndpoints().get(0).
+		List<String> endpointFlows = endpointMan.getDeployedEndpoints().get(0).
 				getEndpoint().getConfiguration().getAuthenticationOptions();
 		assertThat(endpointFlows.size(), is(1));
 		

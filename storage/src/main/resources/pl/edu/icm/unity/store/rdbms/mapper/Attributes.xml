@@ -24,6 +24,13 @@
 			VALUES (#{id}, #{typeId}, #{entityId}, #{groupId}, #{values})  
 	</insert>
 	
+	<insert id="createList" parameterType="java.util.List" useGeneratedKeys="true" keyProperty="id">
+		INSERT INTO ATTRIBUTES (TYPE_ID, ENTITY_ID, GROUP_ID, CONTENTS) VALUES 
+		<foreach open="(" separator="),(" close=")" collection="list" index="index" item="element">
+			#{element.typeId}, #{element.entityId}, #{element.groupId}, #{element.values}
+		</foreach>
+	</insert>
+	
 	<update id="updateByKey" parameterType="AttributeB">
 		UPDATE ATTRIBUTES SET CONTENTS = #{values} 
 			WHERE ID = #{id}
@@ -39,13 +46,13 @@
 
 	<select id="getAll" resultMap="attributeResult">
 		select A.*, AT.NAME, AT.VALUE_SYNTAX_ID, G.NAME AS GROUP_PATH 
-			from ATTRIBUTES A, ATTRIBUTE_TYPES AT, GROUPS G
+			from ATTRIBUTES A, ATTRIBUTE_TYPES AT, <include refid="io.imunity.sql.groups"/> G
 			WHERE A.TYPE_ID = AT.ID AND G.ID = A.GROUP_ID  
 	</select>
 
 	<select id="getByKey" parameterType="long" resultMap="attributeResult">
 		select A.*, AT.NAME, AT.VALUE_SYNTAX_ID, G.NAME AS GROUP_PATH 
-			from ATTRIBUTES A, ATTRIBUTE_TYPES AT, GROUPS G
+			from ATTRIBUTES A, ATTRIBUTE_TYPES AT, <include refid="io.imunity.sql.groups"/> G
 			WHERE A.ID = #{id} AND A.TYPE_ID = AT.ID AND G.ID = A.GROUP_ID
 	</select>
 
@@ -57,7 +64,7 @@
 
 	<select id="getAttributes" parameterType="AttributeB" resultMap="attributeResult">
 		select A.*, AT.NAME, AT.VALUE_SYNTAX_ID, G.NAME AS GROUP_PATH 
-		from ATTRIBUTES A, ATTRIBUTE_TYPES AT, GROUPS G
+		from ATTRIBUTES A, ATTRIBUTE_TYPES AT, <include refid="io.imunity.sql.groups"/> G
 		<where>
 			<if test="entityId != null">
 				A.ENTITY_ID = #{entityId}
@@ -74,13 +81,42 @@
 	
 	<select id="getGroupMembersAttributes" parameterType="string" resultMap="attributeResult">
 		select A.*, AT.NAME, AT.VALUE_SYNTAX_ID, G.NAME AS GROUP_PATH 
-		from ATTRIBUTES A, ATTRIBUTE_TYPES AT, GROUPS G
+		from ATTRIBUTES A, ATTRIBUTE_TYPES AT, <include refid="io.imunity.sql.groups"/> G
 		where 
 			A.ENTITY_ID IN (
-					SELECT S_E.ID FROM ENTITIES S_E, GROUP_ENTITIES S_GE, GROUPS S_G 
+					SELECT S_E.ID FROM ENTITIES S_E, GROUP_ENTITIES S_GE, <include refid="io.imunity.sql.groups"/> S_G 
 					WHERE S_G.NAME = #{value} AND S_GE.GROUP_ID = S_G.ID AND S_GE.ENTITY_ID = S_E.ID
 			)
 			AND A.TYPE_ID = AT.ID 
 			AND G.ID = A.GROUP_ID
+	</select>
+
+	<select id="getGroupsMembersAttributes" parameterType="list" resultMap="attributeResult">
+		select A.*, AT.NAME, AT.VALUE_SYNTAX_ID, G.NAME AS GROUP_PATH
+		from ATTRIBUTES A, ATTRIBUTE_TYPES AT, <include refid="io.imunity.sql.groups"/> G
+		where
+		G.NAME IN <foreach item='item' index='index' collection='list' open='(' separator=',' close=')'> #{item} </foreach>
+		AND A.TYPE_ID = AT.ID
+		AND G.ID = A.GROUP_ID
+	</select>
+
+	<select id="getSelectedGroupsMembersAttributes" resultMap="attributeResult">
+		select A.*, AT.NAME, AT.VALUE_SYNTAX_ID, G.NAME AS GROUP_PATH
+		from ATTRIBUTES A, ATTRIBUTE_TYPES AT, <include refid="io.imunity.sql.groups"/> G
+		where
+		AT.NAME IN <foreach item='item' index='index' collection='param2' open='(' separator=',' close=')'> #{item} </foreach>
+		AND G.NAME IN <foreach item='item' index='index' collection='param1' open='(' separator=',' close=')'> #{item} </foreach>
+		AND A.TYPE_ID = AT.ID
+		AND G.ID = A.GROUP_ID
+	</select>
+
+	<select id="getCount" resultType="long">
+		SELECT COUNT(*) FROM ATTRIBUTES
+	</select>
+	
+	<select id="getCountWithoutType" parameterType="list" resultType="long">
+		SELECT COUNT(*) FROM ATTRIBUTES A, ATTRIBUTE_TYPES AT WHERE
+		A.TYPE_ID = AT.ID AND AT.NAME NOT IN 
+		<foreach item="type" index="index" collection="list" open="(" separator="," close=")"> #{type} </foreach>
 	</select>
 </mapper>

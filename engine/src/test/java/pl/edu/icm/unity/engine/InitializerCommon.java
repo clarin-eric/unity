@@ -12,11 +12,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
+import pl.edu.icm.unity.MessageSource;
 import pl.edu.icm.unity.engine.api.AttributeClassManagement;
 import pl.edu.icm.unity.engine.api.AttributeTypeManagement;
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
 import pl.edu.icm.unity.exceptions.EngineException;
-import pl.edu.icm.unity.stdext.attr.JpegImageAttributeSyntax;
+import pl.edu.icm.unity.stdext.attr.ImageAttributeSyntax;
 import pl.edu.icm.unity.stdext.attr.StringAttributeSyntax;
 import pl.edu.icm.unity.stdext.attr.VerifiableEmailAttributeSyntax;
 import pl.edu.icm.unity.stdext.utils.ContactEmailMetadataProvider;
@@ -47,7 +47,7 @@ public class InitializerCommon
 	@Qualifier("insecure") 
 	private AttributeClassManagement acMan;
 	@Autowired
-	private UnityMessageSource msg;
+	private MessageSource msg;
 
 	public void initializeMainAttributeClass() throws EngineException
 	{
@@ -74,11 +74,11 @@ public class InitializerCommon
 	{
 		Map<String, AttributeType> existingATs = aTypeMan.getAttributeTypesAsMap();
 		
-		AttributeType userPicture = new AttributeType(JPEG_ATTR, JpegImageAttributeSyntax.ID, msg);
-		JpegImageAttributeSyntax jpegSyntax = new JpegImageAttributeSyntax();
-		jpegSyntax.setMaxSize(2000000);
-		jpegSyntax.setMaxWidth(120);
-		jpegSyntax.setMaxHeight(120);
+		AttributeType userPicture = new AttributeType(JPEG_ATTR, ImageAttributeSyntax.ID, msg);
+		ImageAttributeSyntax jpegSyntax = new ImageAttributeSyntax();
+		jpegSyntax.getConfig().setMaxSize(2000000);
+		jpegSyntax.getConfig().setMaxWidth(120);
+		jpegSyntax.getConfig().setMaxHeight(120);
 		userPicture.setMinElements(1);
 		userPicture.setValueSyntaxConfiguration(jpegSyntax.getSerializedConfiguration());
 		

@@ -21,20 +21,18 @@ import com.vaadin.ui.HorizontalLayout;
 import com.vaadin.ui.Label;
 import com.vaadin.ui.VerticalLayout;
 
+import pl.edu.icm.unity.MessageSource;
 import pl.edu.icm.unity.base.utils.Log;
-import pl.edu.icm.unity.engine.api.AuthenticationFlowManagement;
 import pl.edu.icm.unity.engine.api.CredentialManagement;
 import pl.edu.icm.unity.engine.api.CredentialRequirementManagement;
 import pl.edu.icm.unity.engine.api.EntityCredentialManagement;
 import pl.edu.icm.unity.engine.api.EntityManagement;
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
 import pl.edu.icm.unity.engine.api.token.TokensManagement;
 import pl.edu.icm.unity.exceptions.EngineException;
 import pl.edu.icm.unity.exceptions.InternalException;
 import pl.edu.icm.unity.types.authn.CredentialDefinition;
 import pl.edu.icm.unity.types.authn.CredentialInfo;
 import pl.edu.icm.unity.types.authn.CredentialRequirements;
-import pl.edu.icm.unity.types.authn.LocalCredentialState;
 import pl.edu.icm.unity.types.basic.Entity;
 import pl.edu.icm.unity.types.basic.EntityParam;
 import pl.edu.icm.unity.webui.authn.additional.AdditionalAuthnHandler;
@@ -43,8 +41,7 @@ import pl.edu.icm.unity.webui.common.Styles;
 import pl.edu.icm.unity.webui.common.safehtml.HtmlTag;
 
 /**
- * Allows to change all entity credentials.
- * @author K. Benedyczak
+ * Presents all allowed entity credentials with management options (e.g. to setup or change credential) 
  */
 public class CredentialsPanel extends VerticalLayout
 {
@@ -54,13 +51,13 @@ public class CredentialsPanel extends VerticalLayout
 	private EntityCredentialManagement ecredMan;
 	private EntityManagement entityMan;
 	private CredentialEditorRegistry credEditorReg;
-	private AuthenticationFlowManagement flowMan;	
 	private TokensManagement tokenMan;
-	private UnityMessageSource msg;
+	private MessageSource msg;
 	private Entity entity;
 	private final AdditionalAuthnHandler additionalAuthnHandler;
 	private final long entityId;
-	private final boolean simpleMode;
+	private final boolean enableAdminActions;
+	private final boolean disable2ndFactorOptIn;
 	
 	private Map<String, CredentialDefinition> credentials;
 	private List<SingleCredentialPanel> panels;
@@ -68,20 +65,13 @@ public class CredentialsPanel extends VerticalLayout
 
 	
 	/**
-	 * 
-	 * @param msg
-	 * @param entityId
-	 * @param authnMan
-	 * @param ecredMan
-	 * @param credEditorReg
-	 * @param simpleMode if true then admin-only action buttons (credential reset/outdate) are not shown.
-	 * @throws Exception
+	 * @param disableAdminActions if true then admin-only action buttons (credential reset/outdate) are not shown.
 	 */
-	public CredentialsPanel(AdditionalAuthnHandler additionalAuthnHandler, UnityMessageSource msg, long entityId, CredentialManagement credMan, 
+	public CredentialsPanel(AdditionalAuthnHandler additionalAuthnHandler, MessageSource msg, long entityId, CredentialManagement credMan, 
 			EntityCredentialManagement ecredMan, EntityManagement entityMan,
 			CredentialRequirementManagement credReqMan,
-			CredentialEditorRegistry credEditorReg, AuthenticationFlowManagement flowMan,TokensManagement tokenMan,
-			boolean simpleMode) 
+			CredentialEditorRegistry credEditorReg, TokensManagement tokenMan,
+			boolean disableAdminActions, boolean disable2ndFactorOptIn) 
 					throws Exception
 	{
 		this.additionalAuthnHandler = additionalAuthnHandler;
@@ -92,8 +82,8 @@ public class CredentialsPanel extends VerticalLayout
 		this.entityMan = entityMan;
 		this.credReqMan = credReqMan;
 		this.credEditorReg = credEditorReg;
-		this.simpleMode = simpleMode;
-		this.flowMan = flowMan;
+		this.disable2ndFactorOptIn = disable2ndFactorOptIn;
+		this.enableAdminActions = !disableAdminActions;
 		this.tokenMan = tokenMan;
 		init();
 	}
@@ -101,36 +91,21 @@ public class CredentialsPanel extends VerticalLayout
 	
 	private void init() throws Exception
 	{
-		userOptInCheckBox = new CheckBox(msg.getMessage("CredentialChangeDialog.userMFAOptin"));
-		userOptInCheckBox.setDescription(msg.getMessage("CredentialChangeDialog.userMFAOptinDesc"));
-		FormLayout wrapper = new FormLayout();
-		wrapper.setSpacing(false);
-		wrapper.addComponent(userOptInCheckBox);
-		addComponent(wrapper);
-		addComponent(HtmlTag.horizontalLine());
-		
-		
-		userOptInCheckBox.addValueChangeListener(e -> {
-			setUserMFAOptin(e.getValue());
-		});
-		
-		userOptInCheckBox.setValue(getUserOptInAttribute());
+		if (!disable2ndFactorOptIn)
+			add2ndFactorOptInCompnent();
 		
 		loadCredentials();
 		if (credentials.size() == 0)
 		{
-			addComponent(new Label(
-					msg.getMessage("CredentialChangeDialog.noCredentials")));
+			addComponent(new Label(msg.getMessage("CredentialChangeDialog.noCredentials")));
 			return;
 		}
 		panels = new ArrayList<>();	
-		Callback callback = () -> updateUserOptInCheckbox();
 		
 		for (CredentialDefinition credDef : credentials.values())
 		{
 			SingleCredentialPanel panel = new SingleCredentialPanel(additionalAuthnHandler, msg, entityId,
-					ecredMan, credMan, entityMan, credEditorReg, credDef, simpleMode,
-					true, callback);
+					ecredMan, credMan, entityMan, credEditorReg, credDef, enableAdminActions);
 			if (!panel.isEmptyEditor())
 			{
 				panels.add(panel);
@@ -146,7 +121,6 @@ public class CredentialsPanel extends VerticalLayout
 			addComponent(panel);
 			last--;
 		}
-		updateUserOptInCheckbox();
 		
 		addComponent(HtmlTag.horizontalLine());
 		addComponent(getTrustedDevicesComponent());
@@ -154,6 +128,18 @@ public class CredentialsPanel extends VerticalLayout
 		setSizeFull();
 	}
 
+	private void add2ndFactorOptInCompnent()
+	{
+		userOptInCheckBox = new CheckBox(msg.getMessage("CredentialChangeDialog.userMFAOptin"));
+		userOptInCheckBox.setDescription(msg.getMessage("CredentialChangeDialog.userMFAOptinDesc"));
+		FormLayout wrapper = new FormLayout();
+		wrapper.setSpacing(false);
+		wrapper.addComponent(userOptInCheckBox);
+		addComponent(wrapper);
+		addComponent(HtmlTag.horizontalLine());
+		userOptInCheckBox.addValueChangeListener(e -> setUserMFAOptin(e.getValue()));
+		userOptInCheckBox.setValue(getUserOptInAttribute());
+	}
 	
 	private Component getTrustedDevicesComponent()
 	{	
@@ -194,38 +180,14 @@ public class CredentialsPanel extends VerticalLayout
 		return trustedDevicesWrapper;
 	}
 	
-	private void updateUserOptInCheckbox()
-	{
-		int setCredentialSize = 0;
-
-		for (SingleCredentialPanel panel : panels)
-		{
-			if (!panel.getCredentialState().equals(LocalCredentialState.notSet))
-			{	
-				setCredentialSize++;
-			
-			}
-		}
-
-		if (setCredentialSize < 2)
-		{
-			userOptInCheckBox.setValue(false);
-			userOptInCheckBox.setEnabled(false);
-		
-		} else
-		{
-			userOptInCheckBox.setEnabled(true);
-		}
-	}
-
 	private void setUserMFAOptin(Boolean value)
 	{
 		try
 		{
-			flowMan.setUserMFAOptIn(entityId, value);
+			ecredMan.setUserMFAOptIn(new EntityParam(entityId), value);
 		} catch (EngineException e)
 		{
-			log.debug("Can not set user MFA optin attribute", e);
+			log.warn("Can not set user MFA optin attribute", e);
 			throw new InternalException(msg.getMessage(
 					"CredentialChangeDialog.cantSetUserMFAOptin"), e);
 		}
@@ -235,10 +197,10 @@ public class CredentialsPanel extends VerticalLayout
 	{
 		try
 		{
-			return flowMan.getUserMFAOptIn(entityId);
+			return ecredMan.getUserMFAOptIn(new EntityParam(entityId));
 		} catch (EngineException e)
 		{
-			log.debug("Can not get user MFA optin attribute", e);
+			log.warn("Can not get user MFA optin attribute", e);
 			throw new InternalException(msg.getMessage(
 					"CredentialChangeDialog.cantGetUserMFAOptin"), e);
 		}

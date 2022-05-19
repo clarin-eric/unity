@@ -48,6 +48,7 @@ public class Toolbar<T> extends CustomComponent
 		main.setSpacing(true);
 		main.setMargin(false);
 		main.addStyleName(Styles.tinySpacing.toString());
+		main.setSizeFull();
 		setCompositionRoot(main);
 		setSizeUndefined();
 	}
@@ -126,7 +127,20 @@ public class Toolbar<T> extends CustomComponent
 	public void addHamburger(HamburgerMenu<?> menuBar)
 	{
 		main.addComponent(menuBar);
+		main.setComponentAlignment(menuBar, Alignment.BOTTOM_LEFT);
 		menuBar.addStyleName(Styles.toolbarButton.toString());
+	}
+	
+	public void addSearch(CustomComponent search, Alignment searchAligment)
+	{
+		main.addComponent(search);
+		main.setComponentAlignment(search, searchAligment);
+	}
+
+	public void addActionButton(Button button, Alignment aligment)
+	{
+		main.addComponent(button);
+		main.setComponentAlignment(button, aligment);
 	}
 	
 	public void addButtons(Button... buttons)

@@ -11,6 +11,7 @@ import org.springframework.stereotype.Component;
 
 import pl.edu.icm.unity.base.msgtemplates.reg.SubmitRegistrationTemplateDef;
 import pl.edu.icm.unity.store.ReferenceRemovalHandler;
+import pl.edu.icm.unity.store.ReferenceUpdateHandler.PlannedUpdateEvent;
 import pl.edu.icm.unity.store.api.generic.RegistrationFormDB;
 import pl.edu.icm.unity.store.impl.attributetype.AttributeTypeDAOInternal;
 import pl.edu.icm.unity.store.impl.groups.GroupDAOInternal;
@@ -67,6 +68,11 @@ public class RegistrationFormDBImpl extends GenericObjectsDAOImpl<RegistrationFo
 		addRemovalHandler(changeListener);
 	}
 	
+	@Override
+	public void deleteWithoutDependencyChecking(String name) {
+		super.delete(name, true);
+	}
+	
 	private void restrictCredReqRemoval(long removedId, String removedName)
 	{
 		List<RegistrationForm> forms = getAll();
@@ -78,17 +84,16 @@ public class RegistrationFormDBImpl extends GenericObjectsDAOImpl<RegistrationFo
 		}
 	}
 	
-	private void propagateCredReqRename(long modifiedId, String modifiedName,
-			CredentialRequirements newValue)
+	private void propagateCredReqRename(PlannedUpdateEvent<CredentialRequirements> update)
 	{
-		if (modifiedName.equals(newValue.getName()))
+		if (update.modifiedName.equals(update.newValue.getName()))
 			return;
 		List<RegistrationForm> forms = getAll();
 		for (RegistrationForm form: forms)
 		{
-			if (modifiedName.equals(form.getDefaultCredentialRequirement()))
+			if (update.modifiedName.equals(form.getDefaultCredentialRequirement()))
 			{
-				form.setDefaultCredentialRequirement(newValue.getName());
+				form.setDefaultCredentialRequirement(update.newValue.getName());
 				update(form);
 			}
 		}
@@ -114,16 +119,15 @@ public class RegistrationFormDBImpl extends GenericObjectsDAOImpl<RegistrationFo
 		}
 
 		@Override
-		public void preUpdateCheck(long modifiedId, String modifiedName,
-				MessageTemplate newValue)
+		public void preUpdateCheck(PlannedUpdateEvent<MessageTemplate> update)
 		{
 			List<RegistrationForm> forms = getAll();
 			for (RegistrationForm form: forms)
 			{
 				RegistrationFormNotifications notCfg = form.getNotificationsConfiguration();
-				boolean needUpdate = checkUpdated(notCfg, modifiedName, newValue, form.getName());
-				if (modifiedName.equals(notCfg.getSubmittedTemplate()) && 
-						!newValue.getConsumer().equals(SubmitRegistrationTemplateDef.NAME))
+				boolean needUpdate = checkUpdated(notCfg, update.modifiedName, update.newValue, form.getName());
+				if (update.modifiedName.equals(notCfg.getSubmittedTemplate()) && 
+						!update.newValue.getConsumer().equals(SubmitRegistrationTemplateDef.NAME))
 				{
 					throw new IllegalArgumentException("The message template is used by "
 							+ "a registration form " 
@@ -131,9 +135,9 @@ public class RegistrationFormDBImpl extends GenericObjectsDAOImpl<RegistrationFo
 							+ "would render the template incompatible with it");
 				}
 		
-				if (modifiedName.equals(notCfg.getSubmittedTemplate()))
+				if (update.modifiedName.equals(notCfg.getSubmittedTemplate()))
 				{
-					notCfg.setSubmittedTemplate(newValue.getName());
+					notCfg.setSubmittedTemplate(update.newValue.getName());
 					needUpdate = true;
 				}
 				if (needUpdate)
@@ -171,7 +175,7 @@ public class RegistrationFormDBImpl extends GenericObjectsDAOImpl<RegistrationFo
 					} else
 					{
 						GroupDelegationConfiguration newConfig = new GroupDelegationConfiguration(
-								config.enabled, config.logoUrl, "",
+								config.enabled, config.enableSubprojects, config.logoUrl, "",
 								config.signupEnquiryForm,
 								config.membershipUpdateEnquiryForm, config.attributes);
 						group.setDelegationConfiguration(newConfig);

@@ -4,25 +4,10 @@
  */
 package pl.edu.icm.unity.engine.attribute;
 
-import static com.googlecode.catchexception.CatchException.catchException;
-import static com.googlecode.catchexception.CatchException.caughtException;
-import static org.hamcrest.CoreMatchers.isA;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertThat;
-import static org.junit.Assert.fail;
-
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Date;
-
 import org.junit.Before;
 import org.junit.Test;
-
 import pl.edu.icm.unity.engine.DBIntegrationTestBase;
-import pl.edu.icm.unity.engine.authz.AuthorizationManagerImpl;
+import pl.edu.icm.unity.engine.authz.InternalAuthorizationManagerImpl;
 import pl.edu.icm.unity.engine.authz.RoleAttributeTypeProvider;
 import pl.edu.icm.unity.engine.credential.CredentialAttributeTypeProvider;
 import pl.edu.icm.unity.exceptions.AuthorizationException;
@@ -35,15 +20,17 @@ import pl.edu.icm.unity.stdext.attr.StringAttributeSyntax;
 import pl.edu.icm.unity.stdext.credential.pass.PasswordToken;
 import pl.edu.icm.unity.stdext.identity.UsernameIdentity;
 import pl.edu.icm.unity.stdext.identity.X500Identity;
-import pl.edu.icm.unity.types.basic.Attribute;
-import pl.edu.icm.unity.types.basic.AttributeExt;
-import pl.edu.icm.unity.types.basic.AttributeType;
-import pl.edu.icm.unity.types.basic.EntityParam;
-import pl.edu.icm.unity.types.basic.EntityState;
-import pl.edu.icm.unity.types.basic.Group;
-import pl.edu.icm.unity.types.basic.Identity;
-import pl.edu.icm.unity.types.basic.IdentityParam;
-import pl.edu.icm.unity.types.basic.IdentityTaV;
+import pl.edu.icm.unity.types.basic.*;
+
+import java.util.Collection;
+import java.util.Date;
+
+import static com.googlecode.catchexception.CatchException.catchException;
+import static com.googlecode.catchexception.CatchException.caughtException;
+import static java.util.Collections.emptyList;
+import static java.util.Collections.singletonList;
+import static org.hamcrest.CoreMatchers.isA;
+import static org.junit.Assert.*;
 
 public class AttributesManagementImplTest extends DBIntegrationTestBase
 {
@@ -54,7 +41,7 @@ public class AttributesManagementImplTest extends DBIntegrationTestBase
 	{
 		setupMockAuthn();
 		Identity id = idsMan.addEntity(new IdentityParam(X500Identity.ID, "cn=golbi"), "crMock", 
-				EntityState.valid, false);
+				EntityState.valid);
 		entity = new EntityParam(id.getEntityId());
 		groupsMan.addGroup(new Group("/test"));
 		aTypeMan.addAttributeType(new AttributeType("tel", StringAttributeSyntax.ID));
@@ -162,14 +149,14 @@ public class AttributesManagementImplTest extends DBIntegrationTestBase
 	public void shouldNotSetSystemManagerRoleHoldingContentsManager() throws Exception
 	{
 		Attribute managerRoleAt = EnumAttribute.of(RoleAttributeTypeProvider.AUTHORIZATION_ROLE,
-				"/", AuthorizationManagerImpl.CONTENTS_MANAGER_ROLE);
+				"/", InternalAuthorizationManagerImpl.CONTENTS_MANAGER_ROLE);
 		EntityParam adminEntity = new EntityParam(new IdentityTaV(UsernameIdentity.ID, "admin"));
 		insecureAttrsMan.setAttribute(adminEntity, managerRoleAt);
 		
 		setupUserContext("admin", null);
 		
 		Attribute systemManagerRoleAt = EnumAttribute.of(RoleAttributeTypeProvider.AUTHORIZATION_ROLE,
-				"/", AuthorizationManagerImpl.SYSTEM_MANAGER_ROLE);
+				"/", InternalAuthorizationManagerImpl.SYSTEM_MANAGER_ROLE);
 		
 		
 		catchException(attrsMan).setAttribute(adminEntity, systemManagerRoleAt);
@@ -181,14 +168,14 @@ public class AttributesManagementImplTest extends DBIntegrationTestBase
 	public void shouldSetInspectorRoleHoldingContentsManager() throws Exception
 	{
 		Attribute managerRoleAt = EnumAttribute.of(RoleAttributeTypeProvider.AUTHORIZATION_ROLE,
-				"/", AuthorizationManagerImpl.CONTENTS_MANAGER_ROLE);
+				"/", InternalAuthorizationManagerImpl.CONTENTS_MANAGER_ROLE);
 		EntityParam adminEntity = new EntityParam(new IdentityTaV(UsernameIdentity.ID, "admin"));
 		insecureAttrsMan.setAttribute(adminEntity, managerRoleAt);
 		
 		setupUserContext("admin", null);
 		
 		Attribute inspectorRoleAt = EnumAttribute.of(RoleAttributeTypeProvider.AUTHORIZATION_ROLE,
-				"/", AuthorizationManagerImpl.PRIVILEGED_INSPECTOR_ROLE);
+				"/", InternalAuthorizationManagerImpl.PRIVILEGED_INSPECTOR_ROLE);
 		
 		
 		attrsMan.setAttribute(adminEntity, inspectorRoleAt);
@@ -198,14 +185,14 @@ public class AttributesManagementImplTest extends DBIntegrationTestBase
 	public void shouldSetUserRoleHoldingSystemManagerROle() throws Exception
 	{
 		Attribute managerRoleAt = EnumAttribute.of(RoleAttributeTypeProvider.AUTHORIZATION_ROLE,
-				"/", AuthorizationManagerImpl.SYSTEM_MANAGER_ROLE);
+				"/", InternalAuthorizationManagerImpl.SYSTEM_MANAGER_ROLE);
 		EntityParam adminEntity = new EntityParam(new IdentityTaV(UsernameIdentity.ID, "admin"));
 		insecureAttrsMan.setAttribute(adminEntity, managerRoleAt);
 		
 		setupUserContext("admin", null);
 		
 		Attribute inspectorRoleAt = EnumAttribute.of(RoleAttributeTypeProvider.AUTHORIZATION_ROLE,
-				"/", AuthorizationManagerImpl.USER_ROLE);
+				"/", InternalAuthorizationManagerImpl.USER_ROLE);
 		
 		
 		attrsMan.setAttribute(adminEntity, inspectorRoleAt);
@@ -267,7 +254,7 @@ public class AttributesManagementImplTest extends DBIntegrationTestBase
 		Date created = retrievedA.getCreationTs();
 		Date updated = retrievedA.getUpdateTs(); 
 		
-		at1.setValues(Collections.singletonList("333"));
+		at1.setValues(singletonList("333"));
 		Thread.sleep(2);
 		attrsMan.setAttribute(entity, at1);
 		
@@ -297,7 +284,7 @@ public class AttributesManagementImplTest extends DBIntegrationTestBase
 		Attribute at2 = StringAttribute.of("tel", "/", "1234");
 		attrsMan.createAttribute(entity, at2);
 		
-		at2.setValues(Collections.singletonList("333"));
+		at2.setValues(singletonList("333"));
 		attrsMan.setAttribute(entity, at2);
 		
 		Collection<AttributeExt> allAts = attrsMan.getAttributes(entity, "/", "tel");
@@ -308,9 +295,68 @@ public class AttributesManagementImplTest extends DBIntegrationTestBase
 		assertEquals(1, allAts.size());
 		assertEquals("333", getAttributeByName(allAts, "tel").getValues().get(0));
 		
-		allAts = attrsMan.getAllAttributes(entity, true, null, null, false);
+		allAts = attrsMan.getAllAttributes(entity, true, (String)null, null, false);
 		assertEquals(DEF_ATTRS + 1, allAts.size());
 		assertEquals("333", getAttributeByName(allAts, "tel").getValues().get(0));
+	}
+
+	@Test
+	public void shouldReturnAllAttributes() throws Exception
+	{
+		Attribute at2 = StringAttribute.of("tel", "/", "1234");
+		attrsMan.createAttribute(entity, at2);
+
+		at2.setValues(singletonList("333"));
+		attrsMan.setAttribute(entity, at2);
+
+		Collection<AttributeExt> allAts =
+			attrsMan.getAllAttributes(entity, false, singletonList(new GroupPattern("/**")), "tel", false);
+		assertEquals(1, allAts.size());
+		assertEquals("333", getAttributeByName(allAts, "tel").getValues().get(0));
+	}
+
+	@Test
+	public void shouldNotReturnAttributesWhenPatternDoesNotMatch() throws Exception
+	{
+		Attribute at2 = StringAttribute.of("tel", "/", "1234");
+		attrsMan.createAttribute(entity, at2);
+
+		at2.setValues(singletonList("333"));
+		attrsMan.setAttribute(entity, at2);
+
+		Collection<AttributeExt> allAts =
+			attrsMan.getAllAttributes(entity, false, singletonList(new GroupPattern("/subgroup/**")), "tel", false);
+		assertEquals(0, allAts.size());
+	}
+
+	@Test
+	public void shouldReturnAllDirectAttributes() throws Exception
+	{
+		Attribute at2 = StringAttribute.of("tel", "/", "1234");
+		attrsMan.createAttribute(entity, at2);
+
+		at2.setValues(singletonList("333"));
+		attrsMan.setAttribute(entity, at2);
+
+		Collection<AttributeExt> allAts =
+				attrsMan.getAllDirectAttributes(entity);
+		assertEquals(2, allAts.size());
+		assertEquals("333", getAttributeByName(allAts, "tel").getValues().get(0));
+		assertEquals("crMock", getAttributeByName(allAts, "sys:CredentialRequirements").getValues().get(0));
+	}
+
+	@Test
+	public void shouldNotReturnAttributesWhenPatternsListIsEmpty() throws Exception
+	{
+		Attribute at2 = StringAttribute.of("tel", "/", "1234");
+		attrsMan.createAttribute(entity, at2);
+
+		at2.setValues(singletonList("333"));
+		attrsMan.setAttribute(entity, at2);
+
+		Collection<AttributeExt> allAts =
+			attrsMan.getAllAttributes(entity, true, emptyList(), null, false);
+		assertEquals(0, allAts.size());
 	}
 
 	@Test

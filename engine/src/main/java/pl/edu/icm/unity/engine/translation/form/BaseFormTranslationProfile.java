@@ -16,6 +16,7 @@ import pl.edu.icm.unity.engine.api.translation.TranslationActionInstance;
 import pl.edu.icm.unity.engine.api.translation.TranslationCondition;
 import pl.edu.icm.unity.engine.api.translation.form.GroupParam;
 import pl.edu.icm.unity.engine.api.translation.form.RegistrationActionsRegistry;
+import pl.edu.icm.unity.engine.api.translation.form.RegistrationContext;
 import pl.edu.icm.unity.engine.api.translation.form.RegistrationTranslationAction;
 import pl.edu.icm.unity.engine.api.translation.form.TranslatedRegistrationRequest;
 import pl.edu.icm.unity.engine.api.translation.form.TranslatedRegistrationRequest.AutomaticRequestAction;
@@ -56,14 +57,16 @@ public abstract class BaseFormTranslationProfile extends TranslationProfileInsta
 			UserRequestState<? extends BaseRegistrationInput> request) 
 			throws EngineException
 	{
-		log.debug("Executing form profile to postprocess the submitted data");
+		log.info("Executing form profile to postprocess the submitted data");
 		NDC.push("[TrProfile " + profile.getName() + "]");
 		Map<String, Object> mvelCtx = new RegistrationMVELContext(form, request.getRequest(), 
 				RequestSubmitStatus.submitted, 
 				request.getRegistrationContext().triggeringMode, 
 				request.getRegistrationContext().isOnIdpEndpoint,
 				request.getRequestId(), atHelper);
-		return executeFilteredActions(request.getRequest(), mvelCtx, null);
+		RegistrationContext context = new RegistrationContext(request.getRequest());
+		
+		return executeFilteredActions(request.getRequest(), mvelCtx, context,  null);
 	}
 	
 	@Transactional
@@ -76,21 +79,23 @@ public abstract class BaseFormTranslationProfile extends TranslationProfileInsta
 				request.getRegistrationContext().triggeringMode, 
 				request.getRegistrationContext().isOnIdpEndpoint,
 				request.getRequestId(), atHelper);
+		RegistrationContext context = new RegistrationContext(request.getRequest());
+
 		TranslatedRegistrationRequest result;
 		try
 		{
-			result = executeFilteredActions(request.getRequest(), mvelCtx, AutoProcessActionFactory.NAME);
+			result = executeFilteredActions(request.getRequest(), mvelCtx, context, AutoProcessActionFactory.NAME);
 		} catch (EngineException e)
 		{
 			log.error("Couldn't establish automatic request processing action from profile", e);
 			return null;
 		}
-		log.debug("Established automatic processing action: " + result.getAutoAction());
+		log.info("Established automatic processing action: " + result.getAutoAction());
 		return result.getAutoAction();
 	}
 
 	protected TranslatedRegistrationRequest executeFilteredActions(
-			BaseRegistrationInput request, Map<String, Object> mvelCtx, 
+			BaseRegistrationInput request, Map<String, Object> mvelCtx, RegistrationContext context,
 			String actionNameFilter) throws EngineException
 	{
 		if (log.isDebugEnabled())
@@ -104,10 +109,10 @@ public abstract class BaseFormTranslationProfile extends TranslationProfileInsta
 				String actionName = rule.getAction().getName();
 				if (actionNameFilter != null && !actionNameFilter.equals(actionName))
 					continue;
-				NDC.push("[r: " + (i++) + "]");
+				NDC.push("[r: " + (i++) + " " + actionName + "]");
 				try
 				{
-					rule.invoke(translationState, mvelCtx, profile.getName());
+					rule.invoke(translationState, mvelCtx, context, profile.getName());
 				} catch (ExecutionBreakException e)
 				{
 					break;

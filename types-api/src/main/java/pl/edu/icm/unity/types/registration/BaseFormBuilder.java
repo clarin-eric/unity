@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import pl.edu.icm.unity.types.I18nString;
+import pl.edu.icm.unity.types.policyAgreement.PolicyAgreementConfiguration;
 import pl.edu.icm.unity.types.registration.layout.FormLayoutSettings;
 import pl.edu.icm.unity.types.translation.TranslationProfile;
 
@@ -26,6 +27,11 @@ public class BaseFormBuilder<T extends BaseFormBuilder<?>>
 	protected BaseForm getInstance()
 	{
 		return instance;
+	}
+	
+	public String getName()
+	{
+		return instance.getName();
 	}
 
 	@SuppressWarnings("unchecked")
@@ -241,6 +247,47 @@ public class BaseFormBuilder<T extends BaseFormBuilder<?>>
 		return (T)this;
 	}
 	
+	@SuppressWarnings("unchecked")
+	public T withDefaultFormLayoutSettings(String logo)
+	{
+		instance.setLayoutSettings(getDefaultRegFormLayoutSettings(logo));
+		return (T)this;
+	}
+	
+	@SuppressWarnings("unchecked")
+	public T withPolicyAgreements(List<PolicyAgreementConfiguration> policyAgreements)
+	{
+		instance.setPolicyAgreements(policyAgreements);
+		return (T)this;
+	}
+	
+	@SuppressWarnings("unchecked")
+	public T withAddedPolicyAgreement(PolicyAgreementConfiguration aValue)
+	{
+		if (instance.getPolicyAgreements() == null)
+		{
+			instance.setPolicyAgreements(new ArrayList<>());
+		}
+		instance.getPolicyAgreements().add(aValue);
+		return (T) this;
+	}
+	
+	@SuppressWarnings("unchecked")
+	public T withCheckIdentityOnSubmit(boolean checkIdentityOnSubmit)
+	{
+		instance.setCheckIdentityOnSubmit(checkIdentityOnSubmit);
+		return (T)this;
+	}
+	
+	private FormLayoutSettings getDefaultRegFormLayoutSettings(String logo)
+	{
+		FormLayoutSettings lsettings = new FormLayoutSettings();
+		lsettings.setLogoURL(logo);
+		lsettings.setColumnWidth(21);
+		lsettings.setColumnWidthUnit("em");
+		return lsettings;
+	}
+	
 	public class GroupRegistrationParamBuilder
 	{
 		private GroupRegistrationParam instance;
@@ -339,34 +386,36 @@ public class BaseFormBuilder<T extends BaseFormBuilder<?>>
 		public AttributeRegistrationParamBuilder withOptional(boolean aValue)
 		{
 			instance.setOptional(aValue);
-
 			return this;
 		}
 
 		public AttributeRegistrationParamBuilder withLabel(String aValue)
 		{
 			instance.setLabel(aValue);
-
 			return this;
 		}
 
 		public AttributeRegistrationParamBuilder withDescription(String aValue)
 		{
 			instance.setDescription(aValue);
-
 			return this;
 		}
 
 		public AttributeRegistrationParamBuilder withRetrievalSettings(ParameterRetrievalSettings aValue)
 		{
 			instance.setRetrievalSettings(aValue);
-
 			return this;
 		}
 
 		public AttributeRegistrationParamBuilder withConfirmationMode(ConfirmationMode confirmationMode)
 		{
 			instance.setConfirmationMode(confirmationMode);
+			return this;
+		}
+		
+		public AttributeRegistrationParamBuilder withURLQueryPrefill(URLQueryPrefillConfig urlPrefillSettings)
+		{
+			instance.setUrlQueryPrefill(urlPrefillSettings);
 			return this;
 		}
 		
@@ -432,7 +481,13 @@ public class BaseFormBuilder<T extends BaseFormBuilder<?>>
 			instance.setConfirmationMode(confirmationMode);
 			return this;
 		}
-
+		
+		public IdentityRegistrationParamBuilder withURLQueryPrefill(URLQueryPrefillConfig urlPrefillSettings)
+		{
+			instance.setUrlQueryPrefill(urlPrefillSettings);
+			return this;
+		}
+		
 		public T endIdentityParam()
 		{
 			return parent;

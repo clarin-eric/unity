@@ -34,9 +34,11 @@ import pl.edu.icm.unity.engine.api.authn.CredentialRetrieval;
 import pl.edu.icm.unity.engine.api.authn.InvocationContext;
 import pl.edu.icm.unity.engine.api.authn.LoginSession.AuthNInfo;
 import pl.edu.icm.unity.engine.authn.AuthenticatorsRegistry;
-import pl.edu.icm.unity.engine.authz.AuthorizationManagerImpl;
+import pl.edu.icm.unity.engine.authz.InternalAuthorizationManagerImpl;
 import pl.edu.icm.unity.engine.mock.MockPasswordVerificatorFactory;
+import pl.edu.icm.unity.engine.server.EngineInitialization;
 import pl.edu.icm.unity.exceptions.CredentialRecentlyUsedException;
+import pl.edu.icm.unity.exceptions.EngineException;
 import pl.edu.icm.unity.exceptions.IllegalCredentialException;
 import pl.edu.icm.unity.stdext.credential.pass.PasswordCredential;
 import pl.edu.icm.unity.stdext.credential.pass.PasswordToken;
@@ -49,6 +51,7 @@ import pl.edu.icm.unity.store.api.tx.TransactionalRunner;
 import pl.edu.icm.unity.store.types.AuthenticatorConfiguration;
 import pl.edu.icm.unity.types.I18nString;
 import pl.edu.icm.unity.types.authn.AuthenticationFlowDefinition.Policy;
+import pl.edu.icm.unity.types.authn.AuthenticationOptionKey;
 import pl.edu.icm.unity.types.authn.AuthenticatorInstanceMetadata;
 import pl.edu.icm.unity.types.authn.AuthenticatorTypeDescription;
 import pl.edu.icm.unity.types.authn.CredentialDefinition;
@@ -61,6 +64,16 @@ import pl.edu.icm.unity.types.basic.EntityState;
 import pl.edu.icm.unity.types.basic.Identity;
 import pl.edu.icm.unity.types.basic.IdentityParam;
 import pl.edu.icm.unity.types.basic.IdentityTaV;
+import pl.edu.icm.unity.types.registration.CredentialRegistrationParam;
+import pl.edu.icm.unity.types.registration.ParameterRetrievalSettings;
+import pl.edu.icm.unity.types.registration.RegistrationContext;
+import pl.edu.icm.unity.types.registration.RegistrationContext.TriggeringMode;
+import pl.edu.icm.unity.types.registration.RegistrationForm;
+import pl.edu.icm.unity.types.registration.RegistrationFormBuilder;
+import pl.edu.icm.unity.types.registration.RegistrationRequest;
+import pl.edu.icm.unity.types.registration.RegistrationRequestBuilder;
+import pl.edu.icm.unity.types.translation.ProfileType;
+import pl.edu.icm.unity.types.translation.TranslationProfile;
 
 //TODO bit messy: cred req and cred man, tests needs refactoring
 public class CredentialManagementTest extends DBIntegrationTestBase
@@ -194,7 +207,7 @@ public class CredentialManagementTest extends DBIntegrationTestBase
 		credReqMan.addCredentialRequirement(cr);
 		
 		Identity id = idsMan.addEntity(new IdentityParam(X500Identity.ID, "CN=test"), 
-				"crMock", EntityState.valid, false);
+				"crMock", EntityState.valid);
 		EntityParam entityP = new EntityParam(id);
 		Entity entity = idsMan.getEntity(entityP);
 		assertEquals(LocalCredentialState.notSet, entity.getCredentialInfo().
@@ -254,7 +267,7 @@ public class CredentialManagementTest extends DBIntegrationTestBase
 				Collections.singleton(credDef.getName()));
 		credReqMan.addCredentialRequirement(cr);
 		Identity id = idsMan.addEntity(new IdentityParam(X500Identity.ID, "CN=test"), 
-				"crMock", EntityState.valid, false);
+				"crMock", EntityState.valid);
 		EntityParam entityP = new EntityParam(id);
 		
 		eCredMan.setEntityCredential(entityP, "credential1", "password");
@@ -266,7 +279,7 @@ public class CredentialManagementTest extends DBIntegrationTestBase
 	{
 		setupAdmin();
 		setupPasswordAuthn();
-		createUsernameUserWithRole(AuthorizationManagerImpl.USER_ROLE);
+		createUsernameUserWithRole(InternalAuthorizationManagerImpl.USER_ROLE);
 		EntityParam user = new EntityParam(new IdentityTaV(UsernameIdentity.ID, DEF_USER)); 
 
 		eCredMan.setEntityCredential(user, "credential1", new PasswordToken("qw!Erty").toJson());
@@ -277,7 +290,7 @@ public class CredentialManagementTest extends DBIntegrationTestBase
 	{
 		setupPasswordAuthn();
 		setupPasswordAndCertAuthn();
-		createCertUserNoPassword(AuthorizationManagerImpl.USER_ROLE); //Has no password set, but password is allowed
+		createCertUserNoPassword(InternalAuthorizationManagerImpl.USER_ROLE); //Has no password set, but password is allowed
 		AuthenticatorInstance authenticator = getAuthenticator("authn", "credential1"); 
 		AuthenticationFlow flow = new AuthenticationFlow("flow", Policy.NEVER, Sets.newHashSet(authenticator), 
 				Collections.emptyList(), 1);
@@ -286,7 +299,8 @@ public class CredentialManagementTest extends DBIntegrationTestBase
 		EntityParam user = new EntityParam(new IdentityTaV(UsernameIdentity.ID, "user2")); 
 		eCredMan.setEntityCredential(user, "credential1", new PasswordToken("qw!Erty").toJson());
 		
-		InvocationContext.getCurrent().getLoginSession().setAdditionalAuthn(new AuthNInfo("authn", new Date()));
+		InvocationContext.getCurrent().getLoginSession().setAdditionalAuthn(new AuthNInfo(
+				AuthenticationOptionKey.authenticatorOnlyKey("authn"), new Date()));
 		
 		eCredMan.setEntityCredential(user, "credential1", new PasswordToken("qw!Erty2").toJson());
 	}
@@ -308,7 +322,7 @@ public class CredentialManagementTest extends DBIntegrationTestBase
 	{
 		setupPasswordAuthn();
 		setupPasswordAndCertAuthn();
-		createCertUserNoPassword(AuthorizationManagerImpl.USER_ROLE); //Has no password set, but password is allowed
+		createCertUserNoPassword(InternalAuthorizationManagerImpl.USER_ROLE); //Has no password set, but password is allowed
 		setupUserContext("user2", null);
 		EntityParam user = new EntityParam(new IdentityTaV(UsernameIdentity.ID, "user2")); 
 
@@ -326,7 +340,7 @@ public class CredentialManagementTest extends DBIntegrationTestBase
 		createPassCredentialAndCR("credential1", passConfig);
 		
 		EntityParam user = new EntityParam(idsMan.addEntity(new IdentityParam(UsernameIdentity.ID, "user"), 
-				CRED_REQ_PASS, EntityState.valid, false));
+				CRED_REQ_PASS, EntityState.valid));
 		
 		eCredMan.setEntityCredential(user, "credential1", new PasswordToken("qw!Erty1").toJson());
 		
@@ -346,7 +360,7 @@ public class CredentialManagementTest extends DBIntegrationTestBase
 		createPassCredentialAndCR("credential1", passConfig);
 		
 		EntityParam user = new EntityParam(idsMan.addEntity(new IdentityParam(UsernameIdentity.ID, "user"), 
-				CRED_REQ_PASS, EntityState.valid, false));
+				CRED_REQ_PASS, EntityState.valid));
 		
 		eCredMan.setEntityCredential(user, "credential1", new PasswordToken("qw!Erty1").toJson());
 		eCredMan.setEntityCredential(user, "credential1", new PasswordToken("qw!Erty2").toJson());
@@ -367,7 +381,7 @@ public class CredentialManagementTest extends DBIntegrationTestBase
 		createPassCredentialAndCR("credential1", passConfig);
 		
 		EntityParam user = new EntityParam(idsMan.addEntity(new IdentityParam(UsernameIdentity.ID, "user"), 
-				CRED_REQ_PASS, EntityState.valid, false));
+				CRED_REQ_PASS, EntityState.valid));
 		
 		eCredMan.setEntityCredential(user, "credential1", new PasswordToken("qw!Erty1").toJson());
 		eCredMan.setEntityCredential(user, "credential1", new PasswordToken("qw!Erty2").toJson());
@@ -388,7 +402,7 @@ public class CredentialManagementTest extends DBIntegrationTestBase
 		createPassCredentialAndCR("credential1", passConfig);
 		
 		EntityParam user = new EntityParam(idsMan.addEntity(new IdentityParam(UsernameIdentity.ID, "user"), 
-				CRED_REQ_PASS, EntityState.valid, false));
+				CRED_REQ_PASS, EntityState.valid));
 		
 		eCredMan.setEntityCredential(user, "credential1", new PasswordToken("qw!Erty1").toJson());
 		eCredMan.setEntityCredential(user, "credential1", new PasswordToken("qw!Erty2").toJson());
@@ -411,7 +425,7 @@ public class CredentialManagementTest extends DBIntegrationTestBase
 		createPassCredentialAndCR("credential1", passConfig);
 		
 		EntityParam user = new EntityParam(idsMan.addEntity(new IdentityParam(UsernameIdentity.ID, "user"), 
-				CRED_REQ_PASS, EntityState.valid, false));
+				CRED_REQ_PASS, EntityState.valid));
 		
 		eCredMan.setEntityCredential(user, "credential1", new PasswordToken("qw!Erty1").toJson());
 		eCredMan.setEntityCredential(user, "credential1", new PasswordToken("qw!Erty2").toJson());
@@ -434,7 +448,7 @@ public class CredentialManagementTest extends DBIntegrationTestBase
 		createPassCredentialAndCR("credential1", passConfig);
 		
 		EntityParam user = new EntityParam(idsMan.addEntity(new IdentityParam(UsernameIdentity.ID, "user"), 
-				CRED_REQ_PASS, EntityState.valid, false));
+				CRED_REQ_PASS, EntityState.valid));
 		
 		eCredMan.setEntityCredential(user, "credential1", new PasswordToken("qw!Erty1").toJson());
 		eCredMan.setEntityCredential(user, "credential1", new PasswordToken("qw!Erty2").toJson());
@@ -461,7 +475,7 @@ public class CredentialManagementTest extends DBIntegrationTestBase
 		createPassCredentialAndCR("credential1", passConfig);
 		
 		EntityParam user = new EntityParam(idsMan.addEntity(new IdentityParam(UsernameIdentity.ID, "user"), 
-				CRED_REQ_PASS, EntityState.valid, false));
+				CRED_REQ_PASS, EntityState.valid));
 		
 		eCredMan.setEntityCredential(user, "credential1", new PasswordToken("qw!Erty1").toJson());
 		eCredMan.setEntityCredential(user, "credential1", new PasswordToken("qw!Erty2").toJson());
@@ -491,7 +505,7 @@ public class CredentialManagementTest extends DBIntegrationTestBase
 		createPassCredentialAndCR("credential1", passConfig);
 		
 		EntityParam user = new EntityParam(idsMan.addEntity(new IdentityParam(UsernameIdentity.ID, "user"), 
-				CRED_REQ_PASS, EntityState.valid, false));
+				CRED_REQ_PASS, EntityState.valid));
 		
 		eCredMan.setEntityCredential(user, "credential1", new PasswordToken("qw!Erty1").toJson());
 		
@@ -528,6 +542,81 @@ public class CredentialManagementTest extends DBIntegrationTestBase
 		assertThat(authenticatorUpdated.getRevision(), is(authenticatorInitial.getRevision()+1));
 	}
 
+	@Test
+	public void increaseOfCredentialStrengthUsedInPendingRegistrationRequestIsBlocked() throws Exception
+	{
+		addDefaultCredentialDef();
+		
+		initAndCreateForm();
+		RegistrationRequest request = getRequest();
+		registrationsMan.submitRegistrationRequest(request, 
+				new RegistrationContext(false, TriggeringMode.manualStandalone));
+		CredentialDefinition credDefUpdated = new CredentialDefinition(
+				MockPasswordVerificatorFactory.ID, "credential1", 
+				new I18nString("cred disp name"),
+				new I18nString("cred req desc"));
+		credDefUpdated.setConfiguration("9");
+		
+		
+		Throwable error = catchThrowable(() -> credMan.updateCredentialDefinition(credDefUpdated, LocalCredentialState.correct));
+		
+		assertThat(error).isNotNull()
+				.isInstanceOf(IllegalArgumentException.class)
+				.hasMessageContaining("pending registration request");
+	}
+
+	
+	@Test
+	public void shouldAllowToDecreaseCredentialStrenghtUsedInPendingRegistrationRequest() throws Exception
+	{
+		addDefaultCredentialDef();
+		
+		initAndCreateForm();
+		RegistrationRequest request = getRequest();
+		registrationsMan.submitRegistrationRequest(request, 
+				new RegistrationContext(false, TriggeringMode.manualStandalone));
+		CredentialDefinition credDefUpdated = new CredentialDefinition(
+				MockPasswordVerificatorFactory.ID, "credential1", 
+				new I18nString("cred disp name"),
+				new I18nString("cred req desc"));
+		credDefUpdated.setConfiguration("7");
+		
+		Throwable error = catchThrowable(() -> credMan.updateCredentialDefinition(credDefUpdated, LocalCredentialState.correct));
+		
+		assertThat(error).isNull();
+	}
+
+	
+	private void initAndCreateForm() throws EngineException
+	{
+		TranslationProfile tp = new TranslationProfile("form", "", ProfileType.REGISTRATION, 
+				Collections.emptyList());
+
+		RegistrationForm registrationForm = new RegistrationFormBuilder()
+				.withName("f1")
+				.withDefaultCredentialRequirement(
+						EngineInitialization.DEFAULT_CREDENTIAL_REQUIREMENT)
+				.withTranslationProfile(tp)
+				.withAddedCredentialParam(
+						new CredentialRegistrationParam(EngineInitialization.DEFAULT_CREDENTIAL, null, null))
+				.withAddedIdentityParam()
+				.withIdentityType(UsernameIdentity.ID)
+				.withRetrievalSettings(ParameterRetrievalSettings.automaticHidden)
+				.endIdentityParam().build();
+		registrationsMan.addForm(registrationForm);
+	}
+	
+	private RegistrationRequest getRequest()
+	{
+		return new RegistrationRequestBuilder()
+				.withFormId("f1")
+				.withAddedCredential()
+					.withCredentialId("credential1")
+					.withSecrets(new PasswordToken("abc").toJson())
+				.endCredential()
+				.withAddedIdentity(new IdentityParam(UsernameIdentity.ID, "test-user"))
+				.build();
+	}
 	
 	private void createPassCredentialAndCR(String credential, PasswordCredential passConfig) throws Exception
 	{

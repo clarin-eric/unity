@@ -9,10 +9,12 @@ import static org.hamcrest.CoreMatchers.notNullValue;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertThat;
+import static pl.edu.icm.unity.oauth.client.HttpRequestConfigurer.secureRequest;
 
 import java.net.URI;
 
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.Test;
 
 import com.nimbusds.jwt.JWTClaimsSet;
@@ -41,8 +43,8 @@ import com.nimbusds.openid.connect.sdk.claims.UserInfo;
 import eu.unicore.util.httpclient.ServerHostnameCheckingMode;
 import net.minidev.json.JSONArray;
 import net.minidev.json.JSONObject;
+import pl.edu.icm.unity.oauth.as.OAuthASProperties.RefreshTokenIssuePolicy;
 import pl.edu.icm.unity.oauth.as.OAuthSystemAttributesProvider.GrantFlow;
-import pl.edu.icm.unity.oauth.client.CustomHTTPSRequest;
 
 /**
  * An integration test of the Token endpoint. The context is initialized
@@ -54,6 +56,12 @@ import pl.edu.icm.unity.oauth.client.CustomHTTPSRequest;
  */
 public class TokenEndpointTest extends TokenTestBase
 {
+	@Before
+	public void init()
+	{
+		super.setupPlain(RefreshTokenIssuePolicy.ALWAYS);
+	}
+	
 	@Test
 	public void shouldReturnCompleteBearerTokenAfterCodeFlow() throws Exception
 	{
@@ -61,7 +69,7 @@ public class TokenEndpointTest extends TokenTestBase
 				new ResponseType(ResponseType.Value.CODE),
 				GrantFlow.authorizationCode, clientId1.getEntityId());
 		AuthorizationSuccessResponse resp1 = OAuthTestUtils
-				.initOAuthFlowAccessCode(tokensMan, ctx);
+				.initOAuthFlowAccessCode(OAuthTestUtils.getOAuthProcessor(tokensMan), ctx);
 		ClientAuthentication ca = new ClientSecretBasic(new ClientID("client1"),
 				new Secret("clientPass"));
 		TokenRequest request = new TokenRequest(
@@ -69,7 +77,7 @@ public class TokenEndpointTest extends TokenTestBase
 				new AuthorizationCodeGrant(resp1.getAuthorizationCode(),
 						new URI("https://return.host.com/foo")));
 		HTTPRequest bare = request.toHTTPRequest();
-		HTTPRequest wrapped = new CustomHTTPSRequest(bare, pkiMan.getValidator("MAIN"),
+		HTTPRequest wrapped = secureRequest(bare, pkiMan.getValidator("MAIN"),
 				ServerHostnameCheckingMode.NONE);
 
 		HTTPResponse resp2 = wrapped.send();
@@ -90,7 +98,7 @@ public class TokenEndpointTest extends TokenTestBase
 				new ResponseType(ResponseType.Value.CODE),
 				GrantFlow.authorizationCode, clientId1.getEntityId());
 		AuthorizationSuccessResponse resp1 = OAuthTestUtils
-				.initOAuthFlowAccessCode(tokensMan, ctx);
+				.initOAuthFlowAccessCode(OAuthTestUtils.getOAuthProcessor(tokensMan), ctx);
 		ClientAuthentication ca = new ClientSecretBasic(new ClientID("client1"),
 				new Secret("clientPass"));
 		TokenRequest request = new TokenRequest(
@@ -98,7 +106,7 @@ public class TokenEndpointTest extends TokenTestBase
 				new AuthorizationCodeGrant(resp1.getAuthorizationCode(),
 						new URI("https://return.host.com/foo")));
 		HTTPRequest bare = request.toHTTPRequest();
-		HTTPRequest wrapped = new CustomHTTPSRequest(bare, pkiMan.getValidator("MAIN"),
+		HTTPRequest wrapped = secureRequest(bare, pkiMan.getValidator("MAIN"),
 				ServerHostnameCheckingMode.NONE);
 
 		HTTPResponse resp2 = wrapped.send();
@@ -109,7 +117,7 @@ public class TokenEndpointTest extends TokenTestBase
 				new URI("https://localhost:52443/oauth/userinfo"),
 				(BearerAccessToken) parsedResp.getTokens().getAccessToken());
 		HTTPRequest bare2 = uiRequest.toHTTPRequest();
-		HTTPRequest wrapped2 = new CustomHTTPSRequest(bare2, pkiMan.getValidator("MAIN"),
+		HTTPRequest wrapped2 = secureRequest(bare2, pkiMan.getValidator("MAIN"),
 				ServerHostnameCheckingMode.NONE);
 		HTTPResponse uiHttpResponse = wrapped2.send();
 		UserInfoResponse uiResponse = UserInfoResponse.parse(uiHttpResponse);
@@ -125,11 +133,11 @@ public class TokenEndpointTest extends TokenTestBase
 	@Test
 	public void nonceIsReturnedInClaimSetForOIDCRequest() throws Exception
 	{
-		OAuthAuthzContext ctx = OAuthTestUtils.createOIDCContext(OAuthTestUtils.getConfig(),
+		OAuthAuthzContext ctx = OAuthTestUtils.createOIDCContext(OAuthTestUtils.getOIDCConfig(),
 				new ResponseType(ResponseType.Value.CODE),
 				GrantFlow.authorizationCode, clientId1.getEntityId(), "nonce-VAL");
 		AuthorizationSuccessResponse resp1 = OAuthTestUtils
-				.initOAuthFlowAccessCode(tokensMan, ctx);
+				.initOAuthFlowAccessCode(OAuthTestUtils.getOAuthProcessor(tokensMan), ctx);
 		ClientAuthentication ca = new ClientSecretBasic(new ClientID("client1"),
 				new Secret("clientPass"));
 		TokenRequest request = new TokenRequest(
@@ -137,7 +145,7 @@ public class TokenEndpointTest extends TokenTestBase
 				new AuthorizationCodeGrant(resp1.getAuthorizationCode(),
 						new URI("https://return.host.com/foo")));
 		HTTPRequest bare = request.toHTTPRequest();
-		HTTPRequest wrapped = new CustomHTTPSRequest(bare, pkiMan.getValidator("MAIN"),
+		HTTPRequest wrapped = secureRequest(bare, pkiMan.getValidator("MAIN"),
 				ServerHostnameCheckingMode.NONE);
 
 		HTTPResponse resp2 = wrapped.send();
@@ -156,7 +164,7 @@ public class TokenEndpointTest extends TokenTestBase
 				new URI("https://localhost:52443/oauth/token"), ca,
 				new ClientCredentialsGrant(), new Scope("foo"));
 		HTTPRequest bare = request.toHTTPRequest();
-		HTTPRequest wrapped = new CustomHTTPSRequest(bare, pkiMan.getValidator("MAIN"),
+		HTTPRequest wrapped = secureRequest(bare, pkiMan.getValidator("MAIN"),
 				ServerHostnameCheckingMode.NONE);
 
 		HTTPResponse resp2 = wrapped.send();
@@ -179,7 +187,7 @@ public class TokenEndpointTest extends TokenTestBase
 				new URI("https://localhost:52443/oauth/token"), ca,
 				new ClientCredentialsGrant(), new Scope("foo"));
 		HTTPRequest bare = request.toHTTPRequest();
-		HTTPRequest wrapped = new CustomHTTPSRequest(bare, pkiMan.getValidator("MAIN"),
+		HTTPRequest wrapped = secureRequest(bare, pkiMan.getValidator("MAIN"),
 				ServerHostnameCheckingMode.NONE);
 
 		HTTPResponse resp2 = wrapped.send();
@@ -203,7 +211,7 @@ public class TokenEndpointTest extends TokenTestBase
 				new URI("https://localhost:52443/oauth/token"), ca,
 				new ClientCredentialsGrant(), new Scope("foo", "missing"));
 		HTTPRequest bare = request.toHTTPRequest();
-		HTTPRequest wrapped = new CustomHTTPSRequest(bare, pkiMan.getValidator("MAIN"),
+		HTTPRequest wrapped = secureRequest(bare, pkiMan.getValidator("MAIN"),
 				ServerHostnameCheckingMode.NONE);
 
 		HTTPResponse resp2 = wrapped.send();

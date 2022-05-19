@@ -4,17 +4,19 @@
  */
 package pl.edu.icm.unity.stdext.credential.sms;
 
+import java.time.Duration;
+
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import pl.edu.icm.unity.Constants;
 import pl.edu.icm.unity.JsonUtil;
+import pl.edu.icm.unity.engine.api.authn.AuthenticationSubject;
 import pl.edu.icm.unity.engine.api.authn.CredentialReset;
 import pl.edu.icm.unity.engine.api.authn.local.CredentialHelper;
 import pl.edu.icm.unity.engine.api.authn.local.LocalCredentialVerificator;
 import pl.edu.icm.unity.engine.api.identity.IdentityResolver;
 import pl.edu.icm.unity.engine.api.notification.NotificationProducer;
 import pl.edu.icm.unity.stdext.credential.CredentialResetBase;
-import pl.edu.icm.unity.types.basic.IdentityTaV;
 /**
  * SMS reset implementation of {@link CredentialReset}. This implementation is stateful, i.e. from creation it
  * must be used exclusively by a single reset procedure.
@@ -30,11 +32,26 @@ public class SMSCredentialResetImpl extends CredentialResetBase
 			CredentialHelper credentialHelper,
 			String credentialId, 
 			ObjectNode completeCredentialConfiguration,
-			SMSCredentialRecoverySettings settings)
+			SMSCredentialRecoverySettings settings,
+			Duration maxCodeValidity)
 	{
-		super(notificationProducer, identityResolver, localVerificator, credentialHelper, credentialId, completeCredentialConfiguration);
+		super(notificationProducer, identityResolver, localVerificator, credentialHelper, credentialId, 
+				completeCredentialConfiguration, maxCodeValidity);
 		this.settings = settings;
 	}
+
+	public SMSCredentialResetImpl(NotificationProducer notificationProducer,
+			IdentityResolver identityResolver,
+			LocalCredentialVerificator localVerificator,
+			CredentialHelper credentialHelper,
+			String credentialId, 
+			ObjectNode completeCredentialConfiguration,
+			SMSCredentialRecoverySettings settings)
+	{
+		this(notificationProducer, identityResolver, localVerificator, credentialHelper, credentialId, 
+				completeCredentialConfiguration, settings, CredentialResetBase.DEFAULT_MAX_CODE_VALIDITY);
+	}
+
 	
 	@Override
 	protected String getCredentialSettings()
@@ -51,9 +68,8 @@ public class SMSCredentialResetImpl extends CredentialResetBase
 	}
 
 	@Override
-	public void setSubject(IdentityTaV subject)
+	public void setSubject(AuthenticationSubject subject)
 	{
 		super.setSubject(subject, SMSVerificator.IDENTITY_TYPES);
-		
 	}
 }

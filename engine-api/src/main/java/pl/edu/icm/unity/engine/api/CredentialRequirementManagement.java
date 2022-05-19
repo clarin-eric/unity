@@ -16,6 +16,8 @@ import pl.edu.icm.unity.types.authn.CredentialRequirements;
  */
 public interface CredentialRequirementManagement
 {
+	public static final String DEFAULT_CREDENTIAL_REQUIREMENT = "sys:all";
+	
 	/**
 	 * Defines a new credential requirements instance
 	 * @param name
@@ -54,4 +56,10 @@ public interface CredentialRequirementManagement
 	 * @throws EngineException
 	 */
 	Collection<CredentialRequirements> getCredentialRequirements() throws EngineException;
+	
+	/**
+	 * @return existing credential requirement
+	 * @throws EngineException
+	 */
+	CredentialRequirements getCredentialRequirements(String name) throws EngineException;
 }

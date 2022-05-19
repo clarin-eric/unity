@@ -11,12 +11,12 @@ import java.util.List;
 
 import com.google.common.base.Objects;
 
-import io.imunity.upman.common.FilterableEntry;
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
+import pl.edu.icm.unity.MessageSource;
 import pl.edu.icm.unity.engine.api.project.ProjectRequestParam.RequestOperation;
-import pl.edu.icm.unity.engine.api.project.ProjectRequestParam.RequestType;
+import pl.edu.icm.unity.engine.api.registration.RequestType;
 import pl.edu.icm.unity.engine.api.utils.TimeUtil;
 import pl.edu.icm.unity.types.basic.VerifiableElementBase;
+import pl.edu.icm.unity.webui.common.grid.FilterableEntry;
 
 /***
  * Data object behind a row in {@link UpdateRequestsGrid}. Stores request
@@ -75,7 +75,7 @@ class UpdateRequestEntry implements FilterableEntry
 	}
 
 	@Override
-	public boolean anyFieldContains(String searched, UnityMessageSource msg)
+	public boolean anyFieldContains(String searched, MessageSource msg)
 	{
 
 		String textLower = searched.toLowerCase();
@@ -90,7 +90,7 @@ class UpdateRequestEntry implements FilterableEntry
 		if (email != null && email.getValue().toLowerCase().contains(textLower))
 			return true;
 
-		if (requestedTime != null && TimeUtil.formatMediumInstant(requestedTime).toString().toLowerCase()
+		if (requestedTime != null && TimeUtil.formatStandardInstant(requestedTime).toString().toLowerCase()
 				.contains(textLower))
 			return true;
 

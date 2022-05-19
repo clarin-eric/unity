@@ -9,8 +9,8 @@ import java.util.Set;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import pl.edu.icm.unity.MessageSource;
 import pl.edu.icm.unity.engine.AbstractAttributeTypeProvider;
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
 import pl.edu.icm.unity.stdext.attr.EnumAttributeSyntax;
 import pl.edu.icm.unity.types.basic.AttributeType;
 
@@ -22,10 +22,10 @@ import pl.edu.icm.unity.types.basic.AttributeType;
 public class RoleAttributeTypeProvider extends AbstractAttributeTypeProvider
 {
 	public static final String AUTHORIZATION_ROLE = "sys:AuthorizationRole";
-	private AuthorizationManager authz;
+	private InternalAuthorizationManager authz;
 	
 	@Autowired
-	public RoleAttributeTypeProvider(UnityMessageSource msg, AuthorizationManager authz)
+	public RoleAttributeTypeProvider(MessageSource msg, InternalAuthorizationManager authz)
 	{
 		super(msg);
 		this.authz = authz;

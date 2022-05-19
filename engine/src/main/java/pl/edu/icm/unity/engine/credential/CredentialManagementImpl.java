@@ -7,6 +7,7 @@ package pl.edu.icm.unity.engine.credential;
 import static pl.edu.icm.unity.engine.credential.CredentialAttributeTypeProvider.CREDENTIAL_PREFIX;
 
 import java.util.Collection;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -24,7 +25,7 @@ import pl.edu.icm.unity.engine.api.CredentialManagement;
 import pl.edu.icm.unity.engine.api.authn.AuthenticatorSupportService;
 import pl.edu.icm.unity.engine.api.authn.local.LocalCredentialsRegistry;
 import pl.edu.icm.unity.engine.attribute.AttributeTypeHelper;
-import pl.edu.icm.unity.engine.authz.AuthorizationManager;
+import pl.edu.icm.unity.engine.authz.InternalAuthorizationManager;
 import pl.edu.icm.unity.engine.authz.AuthzCapability;
 import pl.edu.icm.unity.engine.events.InvocationEventProducer;
 import pl.edu.icm.unity.engine.identity.IdentityHelper;
@@ -34,6 +35,7 @@ import pl.edu.icm.unity.store.api.AttributeDAO;
 import pl.edu.icm.unity.store.api.AttributeTypeDAO;
 import pl.edu.icm.unity.store.api.generic.CredentialDB;
 import pl.edu.icm.unity.store.api.tx.Transactional;
+import pl.edu.icm.unity.store.types.UpdateFlag;
 import pl.edu.icm.unity.types.authn.CredentialDefinition;
 import pl.edu.icm.unity.types.authn.CredentialPublicInformation;
 import pl.edu.icm.unity.types.authn.CredentialRequirements;
@@ -52,7 +54,7 @@ import pl.edu.icm.unity.types.basic.AttributeType;
 @Transactional
 public class CredentialManagementImpl implements CredentialManagement
 {
-	private static final Logger log = Log.getLogger(Log.U_SERVER, CredentialManagementImpl.class);
+	private static final Logger log = Log.getLogger(Log.U_SERVER_CORE, CredentialManagementImpl.class);
 	private LocalCredentialsRegistry localCredReg;
 	private CredentialDB credentialDB;
 	private CredentialReqRepository credentialRequirementRepository;
@@ -60,7 +62,7 @@ public class CredentialManagementImpl implements CredentialManagement
 	private IdentityHelper identityHelper;
 	private AttributeTypeDAO attributeTypeDAO;
 	private AttributeDAO attributeDAO;
-	private AuthorizationManager authz;
+	private InternalAuthorizationManager authz;
 	private SystemCredentialProvider sysProvider;
 	private AttributeTypeHelper attrTypeHelper;
 	private EntityCredentialsHelper entityCredentialsHelper;
@@ -70,7 +72,7 @@ public class CredentialManagementImpl implements CredentialManagement
 	public CredentialManagementImpl(LocalCredentialsRegistry localCredReg,
 			CredentialDB credentialDB, CredentialReqRepository credentialRequirementRepository,
 			IdentityHelper identityHelper, AttributeTypeDAO attributeTypeDAO,
-			AttributeDAO attributeDAO, AuthorizationManager authz,
+			AttributeDAO attributeDAO, InternalAuthorizationManager authz,
 			SystemCredentialProvider sysProvider, CredentialRepository credentialRepository, 
 			AttributeTypeHelper attrTypeHelper, EntityCredentialsHelper entityCredentialsHelper,
 			AuthenticatorSupportService authenticatorsService)
@@ -116,6 +118,8 @@ public class CredentialManagementImpl implements CredentialManagement
 		authz.checkAuthorization(AuthzCapability.maintenance);
 		assertIsNotReadOnly(updated);
 		assertIsNotSystemCredential(updated.getName());
+		CredentialDefinition existing = credentialDB.get(updated.getName());
+		assertTypeUnchanged(updated, existing);
 		
 		CredentialHolder helper = new CredentialHolder(updated, localCredReg);
 		//get all cred reqs with it
@@ -144,11 +148,28 @@ public class CredentialManagementImpl implements CredentialManagement
 			updateCredentialAfterDefinitionChange(entityWithCred.getKey(), entityWithCred.getValue(), 
 					helper, desiredAuthnState);
 		
-		credentialDB.update(updated);
+		EnumSet<UpdateFlag> flags = getUpdateFlags(updated);
+		credentialDB.updateControlled(updated, flags);
 		
 		authenticatorsService.refreshAuthenticatorsOfCredential(updated.getName());
 	}
 
+	private void assertTypeUnchanged(CredentialDefinition updated, CredentialDefinition existing)
+	{
+		if (!updated.getTypeId().equals(existing.getTypeId()))
+			throw new IllegalArgumentException("Credential '" + updated.getName() + 
+					"' can not have its type changed from " + existing.getTypeId());
+	}
+
+	private EnumSet<UpdateFlag> getUpdateFlags(CredentialDefinition updated)
+	{
+		CredentialDefinition existingConfig = credentialDB.get(updated.getName());
+		CredentialHolder existingHolder = new CredentialHolder(existingConfig, localCredReg);
+		boolean outdatesCredentials = existingHolder.getHandler().isCredentialDefinitionChagneOutdatingCredentials(
+				updated.getConfiguration());
+		return outdatesCredentials ? EnumSet.noneOf(UpdateFlag.class) 
+				: EnumSet.of(UpdateFlag.DOESNT_MAKE_INSTANCES_INVALID);
+	}
 
 	private void updateCredentialAfterDefinitionChange(Long entityId, String credential, CredentialHolder helper, 
 			LocalCredentialState desiredCredState)
@@ -179,6 +200,13 @@ public class CredentialManagementImpl implements CredentialManagement
 	{
 		authz.checkAuthorization(AuthzCapability.readInfo);
 		return credentialRepository.getCredentialDefinitions();
+	}
+	
+	@Override
+	public CredentialDefinition getCredentialDefinition(String name) throws EngineException
+	{
+		authz.checkAuthorization(AuthzCapability.readInfo);
+		return credentialRepository.get(name);
 	}
 	
 	/**
@@ -227,7 +255,8 @@ public class CredentialManagementImpl implements CredentialManagement
 	{
 		Set<String> systemProfiles = sysProvider.getSystemCredentials().stream().map(c -> c.getName()).collect(Collectors.toSet());
 		if (systemProfiles.contains(name))
-			throw new IllegalArgumentException("Credential '" + name + "' is the system credential and cannot be overwrite or remove");
+			throw new IllegalArgumentException("Credential '" + name + 
+					"' is the system credential and can not be overwritten or removed");
 	}
 	
 	private void assertIsNotReadOnly(CredentialDefinition cred) throws EngineException
@@ -235,5 +264,4 @@ public class CredentialManagementImpl implements CredentialManagement
 		if (cred.isReadOnly())
 			throw new IllegalArgumentException("Cannot create read only credentials through this API");
 	}
-
 }

@@ -5,7 +5,6 @@
 
 package pl.edu.icm.unity.composite.password;
 
-import java.io.File;
 import java.io.IOException;
 import java.io.StringReader;
 import java.io.StringWriter;
@@ -17,6 +16,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
+import java.util.concurrent.ForkJoinPool;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.logging.log4j.Logger;
@@ -30,15 +30,18 @@ import pl.edu.icm.unity.engine.api.authn.AbstractCredentialVerificatorFactory;
 import pl.edu.icm.unity.engine.api.authn.AbstractVerificator;
 import pl.edu.icm.unity.engine.api.authn.AuthenticationException;
 import pl.edu.icm.unity.engine.api.authn.AuthenticationResult;
+import pl.edu.icm.unity.engine.api.authn.AuthenticationResult.ResolvableError;
 import pl.edu.icm.unity.engine.api.authn.AuthenticationResult.Status;
+import pl.edu.icm.unity.engine.api.authn.AuthenticationSubject;
 import pl.edu.icm.unity.engine.api.authn.CredentialReset;
 import pl.edu.icm.unity.engine.api.authn.CredentialVerificator;
 import pl.edu.icm.unity.engine.api.authn.CredentialVerificatorFactory;
 import pl.edu.icm.unity.engine.api.authn.EntityWithCredential;
+import pl.edu.icm.unity.engine.api.authn.LocalAuthenticationResult;
 import pl.edu.icm.unity.engine.api.authn.local.CredentialHelper;
 import pl.edu.icm.unity.engine.api.authn.local.LocalCredentialVerificator;
 import pl.edu.icm.unity.engine.api.authn.local.LocalCredentialVerificatorFactory;
-import pl.edu.icm.unity.engine.api.authn.remote.SandboxAuthnResultCallback;
+import pl.edu.icm.unity.engine.api.authn.remote.AuthenticationTriggeringContext;
 import pl.edu.icm.unity.engine.api.notification.NotificationProducer;
 import pl.edu.icm.unity.engine.api.utils.PrototypeComponent;
 import pl.edu.icm.unity.exceptions.InternalException;
@@ -46,6 +49,8 @@ import pl.edu.icm.unity.ldap.client.LdapPasswordVerificator;
 import pl.edu.icm.unity.pam.PAMVerificator;
 import pl.edu.icm.unity.stdext.credential.NoCredentialResetImpl;
 import pl.edu.icm.unity.stdext.credential.pass.PasswordCredential;
+import pl.edu.icm.unity.stdext.credential.pass.PasswordEncodingPoolProvider;
+import pl.edu.icm.unity.stdext.credential.pass.PasswordEngine;
 import pl.edu.icm.unity.stdext.credential.pass.PasswordExchange;
 import pl.edu.icm.unity.stdext.credential.pass.PasswordVerificator;
 import pl.edu.icm.unity.types.authn.CredentialDefinition;
@@ -66,7 +71,7 @@ import pl.edu.icm.unity.types.authn.CredentialDefinition;
 @PrototypeComponent
 public class CompositePasswordVerificator extends AbstractVerificator implements PasswordExchange
 {
-	private static final Logger log = Log.getLogger(Log.U_SERVER,
+	private static final Logger log = Log.getLogger(Log.U_SERVER_AUTHN,
 			CompositePasswordVerificator.class);
 
 	public static final String NAME = "composite-password";
@@ -79,15 +84,15 @@ public class CompositePasswordVerificator extends AbstractVerificator implements
 	private List<CredentialVerificator> remoteVerificators;
 	private CompositePasswordProperties compositePasswordProperties;
 	private NotificationProducer notificationProducer;
+	private PasswordEngine passwordEngine;
 	
-	
-
 	@Autowired
 	public CompositePasswordVerificator(
 			pl.edu.icm.unity.stdext.credential.pass.PasswordVerificator.Factory passwordVerificator,
 			pl.edu.icm.unity.pam.PAMVerificator.Factory pamVerificator,
 			pl.edu.icm.unity.ldap.client.LdapPasswordVerificator.Factory ldapVerificator,
-			CredentialHelper credentialHelper, NotificationProducer notificationProducer)
+			CredentialHelper credentialHelper, NotificationProducer notificationProducer,
+			Optional<PasswordEncodingPoolProvider> threadPoolProvider)
 	{
 		super(NAME, DESC, PasswordExchange.ID);
 		this.credentialHelper = credentialHelper;
@@ -98,6 +103,9 @@ public class CompositePasswordVerificator extends AbstractVerificator implements
 		credentialVerificatorFactories.put(LdapPasswordVerificator.NAME, ldapVerificator);
 		localVerificators = new ArrayList<>();
 		remoteVerificators = new ArrayList<>();
+		this.passwordEngine = new PasswordEngine(threadPoolProvider
+				.map(pp->pp.pool)
+				.orElse(ForkJoinPool.commonPool()));
 	}
 
 	@Override
@@ -133,24 +141,7 @@ public class CompositePasswordVerificator extends AbstractVerificator implements
 		localVerificator.setCredentialName(credential);
 		return localVerificator;
 	}
-
-	private CredentialVerificator getRemoteVerificator(CredentialVerificator verificator,
-			File config)
-	{
-		try
-		{
-			String rConfiguration = config == null ? null
-					: FileUtils.readFileToString(config,
-							StandardCharsets.UTF_8);
-			verificator.setSerializedConfiguration(rConfiguration);
-			return verificator;
-		} catch (IOException e)
-		{
-			throw new InternalException(
-					"Invalid configuration of the composite-password verificator(?)", e);
-		}
-	}
-
+	
 	@Override
 	public void setSerializedConfiguration(String config)
 	{
@@ -190,21 +181,53 @@ public class CompositePasswordVerificator extends AbstractVerificator implements
 
 			} else
 			{
-				File configFile = compositePasswordProperties.getFileValue(
-						verificatorKey + CompositePasswordProperties.VERIFICATOR_CONFIG,
-						false);
-				remoteVerificators.add(getRemoteVerificator(verificator, configFile));
+				verificator.setSerializedConfiguration(getRemoteAuthenticatorConfig(verificatorKey));
+				remoteVerificators.add(verificator);
 			}
 		}
 
 	}
+	
+	private String getRemoteAuthenticatorConfig(String verificatorKey)
+	{
+
+		if (!compositePasswordProperties
+				.isSet(verificatorKey + CompositePasswordProperties.VERIFICATOR_CONFIG_EMBEDDED)
+				&& !compositePasswordProperties
+						.isSet(verificatorKey + CompositePasswordProperties.VERIFICATOR_CONFIG))
+		{
+			throw new InternalException(
+					"Misconfigured composite-password verificator, remote verificator has no defined configuration");
+		}
+
+		if (!compositePasswordProperties.isSet(verificatorKey + CompositePasswordProperties.VERIFICATOR_CONFIG))
+		{
+			return compositePasswordProperties.getValue(
+					verificatorKey + CompositePasswordProperties.VERIFICATOR_CONFIG_EMBEDDED);
+		} else
+		{
+			try
+			{
+				return FileUtils.readFileToString(compositePasswordProperties.getFileValue(
+						verificatorKey + CompositePasswordProperties.VERIFICATOR_CONFIG, false),
+						StandardCharsets.UTF_8);
+
+			} catch (IOException e)
+			{
+				throw new InternalException(
+						"Misconfigured composite-password verificator composite-password, remote verificator config file is not available",
+						e);
+			}
+		}
+	}
 
 	@Override
 	public AuthenticationResult checkPassword(String username, String password,
-			SandboxAuthnResultCallback sandboxCallback) throws AuthenticationException
+			String formForUnknown, boolean enableAssociation, 
+			AuthenticationTriggeringContext triggeringContext) throws AuthenticationException
 	{
-
-		Optional<EntityWithCredential> resolveIdentity = CompositePasswordHelper.getLocalEntity(identityResolver, username);
+		Optional<EntityWithCredential> resolveIdentity = CompositePasswordHelper.getLocalEntity(identityResolver, 
+				AuthenticationSubject.identityBased(username));
 		if (resolveIdentity.isPresent())
 		{
 			for (LocalCredentialVerificator localVerificator : localVerificators)
@@ -220,7 +243,7 @@ public class CompositePasswordVerificator extends AbstractVerificator implements
 						username, localVerificator.getCredentialName());
 				PasswordExchange passExchange = (PasswordExchange) localVerificator;
 				return passExchange.checkPassword(username, password,
-						sandboxCallback);
+						formForUnknown, enableAssociation, triggeringContext);
 
 			}
 		}
@@ -231,7 +254,7 @@ public class CompositePasswordVerificator extends AbstractVerificator implements
 					remoteVerificator.getName());
 			PasswordExchange passExchange = (PasswordExchange) remoteVerificator;
 			AuthenticationResult result = passExchange.checkPassword(username, password,
-					sandboxCallback);
+					formForUnknown, enableAssociation, triggeringContext);
 			if (result.getStatus().equals(Status.deny)
 					|| result.getStatus().equals(Status.notApplicable))
 				continue;
@@ -239,8 +262,8 @@ public class CompositePasswordVerificator extends AbstractVerificator implements
 			return result;
 		}
 
-		log.debug("Password provided by {} is invalid", username);
-		return new AuthenticationResult(Status.deny, null);
+		log.info("Password provided by {} is invalid", username);
+		return LocalAuthenticationResult.failed(new ResolvableError("WebPasswordRetrieval.wrongPassword"));
 	}
 
 	private List<LocalCredentialVerificator> getVerificatorsWithCredentialResetSupport()
@@ -275,7 +298,7 @@ public class CompositePasswordVerificator extends AbstractVerificator implements
 			return new NoCredentialResetImpl();
 
 		return new CompositePasswordResetImpl(credentialHelper, localVerificatorWithReset,
-				identityResolver, notificationProducer);
+				identityResolver, notificationProducer, passwordEngine);
 	}
 	
 	@Override

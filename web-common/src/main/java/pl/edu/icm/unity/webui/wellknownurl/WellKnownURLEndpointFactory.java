@@ -4,58 +4,65 @@
  */
 package pl.edu.icm.unity.webui.wellknownurl;
 
-import java.util.HashMap;
-import java.util.Map;
+import java.util.Collections;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Component;
 
+import pl.edu.icm.unity.MessageSource;
 import pl.edu.icm.unity.engine.api.endpoint.EndpointFactory;
 import pl.edu.icm.unity.engine.api.endpoint.EndpointInstance;
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
+import pl.edu.icm.unity.engine.api.server.AdvertisedAddressProvider;
 import pl.edu.icm.unity.engine.api.server.NetworkServer;
 import pl.edu.icm.unity.engine.api.wellknown.SecuredWellKnownURLServlet;
 import pl.edu.icm.unity.types.endpoint.EndpointTypeDescription;
 import pl.edu.icm.unity.webui.VaadinEndpoint;
 import pl.edu.icm.unity.webui.authn.VaadinAuthentication;
+import pl.edu.icm.unity.webui.authn.remote.RemoteRedirectedAuthnResponseProcessingFilter;
 
 @Component
 public class WellKnownURLEndpointFactory implements EndpointFactory
 {
 	public static final String NAME = "WellKnownLinksHandler";
 
-	private EndpointTypeDescription description;
+	public static final EndpointTypeDescription TYPE = new EndpointTypeDescription(NAME,
+			"Provides access to public links which can be used to access parts of Unity UIs directly",
+			VaadinAuthentication.NAME,
+			Collections.singletonMap(SecuredWellKnownURLServlet.SERVLET_PATH, "Well known links endpoint"));
 	private ApplicationContext applicationContext;
 	private NetworkServer server;
-	private UnityMessageSource msg;
-	
+	private MessageSource msg;
+	private AdvertisedAddressProvider advertisedAddrProvider;
+
+	private RemoteRedirectedAuthnResponseProcessingFilter remoteAuthnResponseProcessingFilter;
+
 	@Autowired
-	public WellKnownURLEndpointFactory(ApplicationContext applicationContext, NetworkServer server, 
-			UnityMessageSource msg)
+	public WellKnownURLEndpointFactory(ApplicationContext applicationContext,
+			NetworkServer server,
+			AdvertisedAddressProvider advertisedAddrProvider,
+			MessageSource msg,
+			RemoteRedirectedAuthnResponseProcessingFilter remoteAuthnResponseProcessingFilter)
 	{
 		this.applicationContext = applicationContext;
 		this.server = server;
+		this.advertisedAddrProvider = advertisedAddrProvider;
 		this.msg = msg;
-		
-		Map<String,String> paths = new HashMap<>();
-		paths.put(SecuredWellKnownURLServlet.SERVLET_PATH, "Well known links endpoint");
-		description = new EndpointTypeDescription(NAME, 
-				"Provides access to public links which can be used to access parts of "
-				+ "Unity UIs directly", VaadinAuthentication.NAME, paths);
+		this.remoteAuthnResponseProcessingFilter = remoteAuthnResponseProcessingFilter;
 	}
-	
+
 	@Override
 	public EndpointTypeDescription getDescription()
 	{
-		return description;
+		return TYPE;
 	}
 
 	@Override
 	public EndpointInstance newInstance()
 	{
-		return new VaadinEndpoint(server, msg, applicationContext, 
-				SecuredNavigationUI.class.getSimpleName(), SecuredWellKnownURLServlet.SERVLET_PATH);
+		return new VaadinEndpoint(server, advertisedAddrProvider, msg, applicationContext,
+				SecuredNavigationUI.class.getSimpleName(), SecuredWellKnownURLServlet.SERVLET_PATH,
+				remoteAuthnResponseProcessingFilter);
 	}
 
 }

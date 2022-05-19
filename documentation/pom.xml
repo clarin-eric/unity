@@ -1,8 +1,8 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
 	<parent>
-		<groupId>pl.edu.icm.unity</groupId>
+		<groupId>io.imunity</groupId>
 		<artifactId>unity-server-parent</artifactId>
-		<version>2.8.0-1.0.0-SNAPSHOT</version>
+		<version>3.9.0-1.0.0-SNAPSHOT</version>
 		<relativePath>../pom.xml</relativePath>
 	</parent>
 	<modelVersion>4.0.0</modelVersion>
@@ -18,7 +18,7 @@
 	<scm>
 		<connection>${scm.base}/${m.name}</connection>
 		<developerConnection>${scm.base}/${m.name}</developerConnection>
-	  <tag>HEAD</tag>
+	  <tag>unity-server-parent-3.9.0</tag>
   </scm>
 
 	<distributionManagement>
@@ -31,58 +31,83 @@
 	<dependencies>
 		<!-- dependencies are used to generate documentation from the code -->
 		<dependency>
-			<groupId>pl.edu.icm.unity</groupId>
+			<groupId>io.imunity</groupId>
 			<artifactId>unity-server-engine</artifactId>
 			<version>${project.version}</version>
 		</dependency>
 		<dependency>
-			<groupId>pl.edu.icm.unity</groupId>
+			<groupId>io.imunity</groupId>
+			<artifactId>unity-types-api</artifactId>
+			<version>${project.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>io.imunity</groupId>
 			<artifactId>unity-server-engine-api</artifactId>
 			<version>${project.version}</version>
 		</dependency>
 		<dependency>
-			<groupId>pl.edu.icm.unity</groupId>
+			<groupId>io.imunity</groupId>
 			<artifactId>unity-server-storage</artifactId>
 			<version>${project.version}</version>
 		</dependency>
 		<dependency>
-			<groupId>pl.edu.icm.unity</groupId>
+			<groupId>io.imunity</groupId>
 			<artifactId>unity-server-ws</artifactId>
 			<version>${project.version}</version>
 		</dependency>
 		<dependency>
-			<groupId>pl.edu.icm.unity</groupId>
+			<groupId>io.imunity</groupId>
 			<artifactId>unity-server-saml</artifactId>
 			<version>${project.version}</version>
 		</dependency>
 		<dependency>
-			<groupId>pl.edu.icm.unity</groupId>
+			<groupId>io.imunity</groupId>
 			<artifactId>unity-server-oauth</artifactId>
 			<version>${project.version}</version>
 		</dependency>
 		<dependency>
-			<groupId>pl.edu.icm.unity</groupId>
+			<groupId>io.imunity</groupId>
 			<artifactId>unity-server-pam</artifactId>
 			<version>${project.version}</version>
 		</dependency>
 		<dependency>
-			<groupId>pl.edu.icm.unity</groupId>
+			<groupId>io.imunity</groupId>
+			<artifactId>unity-server-otp-ldap</artifactId>
+			<version>${project.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>io.imunity</groupId>
 			<artifactId>unity-server-web-common</artifactId>
 			<version>${project.version}</version>
 		</dependency>
 		<dependency>
-			<groupId>pl.edu.icm.unity</groupId>
+			<groupId>io.imunity</groupId>
 			<artifactId>unity-server-ldap</artifactId>
 			<version>${project.version}</version>
 		</dependency>
 		<dependency>
-			<groupId>pl.edu.icm.unity</groupId>
+			<groupId>io.imunity</groupId>
 			<artifactId>unity-server-rest</artifactId>
 			<version>${project.version}</version>
 		</dependency>
 		<dependency>
-			<groupId>pl.edu.icm.unity</groupId>
-			<artifactId>unity-server-web-admin</artifactId>
+			<groupId>io.imunity</groupId>
+			<artifactId>unity-server-user-home</artifactId>
+			<version>${project.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>io.imunity</groupId>
+			<artifactId>unity-server-web-attr-introspection</artifactId>
+			<version>${project.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>io.imunity</groupId>
+			<artifactId>unity-server-web-upman</artifactId>
+			<version>${project.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>io.imunity</groupId>
+			<artifactId>unity-server-scim</artifactId>
 			<version>${project.version}</version>
 		</dependency>
 		<dependency>
@@ -95,9 +120,8 @@
 		<extensions>
 			<!-- Enabling the use of FTP -->
 			<extension>
-				<groupId>pl.edu.icm.maven</groupId>
-				<artifactId>wagon-sftp</artifactId>
-				<version>1.0.0</version>
+				<groupId>org.apache.maven.wagon</groupId>
+				<artifactId>wagon-ftp</artifactId>
 			</extension>
 		</extensions>
 
@@ -187,6 +211,7 @@
 						<phase>pre-site</phase>
 						<configuration>
 							<mainClass>pl.edu.icm.unity.doc.utils.AsciidoctorFormatter</mainClass>
+							<cleanupDaemonThreads>false</cleanupDaemonThreads>
 							<arguments>
 								<argument>target/workspace</argument>
 								<argument>eu.unicore.security.canl.TruststoreProperties|sec-ref-trustProperties.txt|.</argument>
@@ -196,25 +221,27 @@
 								<argument>pl.edu.icm.unity.engine.api.config.UnityServerConfiguration|ref-mainServerProperties.txt|</argument>
 								<argument>pl.edu.icm.unity.ws.CXFEndpointProperties|ref-cxfEndpointProperties.txt|</argument>
 								<argument>pl.edu.icm.unity.rest.RESTEndpointProperties|ref-restEndpointProperties.txt|</argument>
-								<argument>pl.edu.icm.unity.ldap.client.LdapProperties|ref-ldapProperties.txt|</argument>
+								<argument>pl.edu.icm.unity.ldap.client.config.LdapProperties|ref-ldapProperties.txt|</argument>
 								<argument>pl.edu.icm.unity.webui.VaadinEndpointProperties|ref-vaadinEndpointProperties.txt|</argument>
 								<argument>pl.edu.icm.unity.saml.idp.SamlIdpProperties|ref-samlIdPProperties.txt|</argument>
 								<argument>pl.edu.icm.unity.saml.sp.SAMLSPProperties|ref-samlSPProperties.txt|</argument>
 								<argument>pl.edu.icm.unity.oauth.client.config.OAuthClientProperties|ref-oauthClientProperties.txt|</argument>
 								<argument>pl.edu.icm.unity.oauth.client.config.CustomProviderProperties|ref-oauthProviderProperties.txt|</argument>
 								<argument>pl.edu.icm.unity.store.StorageConfiguration|ref-dbProperties.txt|</argument>
-								<argument>pl.edu.icm.unity.store.hz.HzConfiguration|ref-storeHzProperties.txt|</argument>
 								<argument>pl.edu.icm.unity.store.rdbms.RDBMSConfiguration|ref-storeRDBMSProperties.txt|</argument>
 								<argument>pl.edu.icm.unity.rest.jwt.JWTAuthenticationProperties|ref-JWTManProperties.txt|</argument>
 								<argument>pl.edu.icm.unity.oauth.as.OAuthASProperties|ref-oauthASProperties.txt|</argument>
 								<argument>pl.edu.icm.unity.oauth.rp.OAuthRPProperties|ref-oauthRPProperties.txt|</argument>
-								<argument>pl.edu.icm.unity.home.HomeEndpointProperties|ref-homeEndpointProperties.txt|</argument>
+								<argument>io.imunity.home.HomeEndpointProperties|ref-homeEndpointProperties.txt|</argument>
 								<argument>pl.edu.icm.unity.webui.association.afterlogin.ConnectIdWellKnownURLProperties|ref-connectIdWellKnownURLProperties.txt|</argument>
 								<argument>pl.edu.icm.unity.engine.userimport.UserImportProperties|ref-genericUserImportProperties.txt|</argument>
 								<argument>pl.edu.icm.unity.pam.PAMProperties|ref-PAMProperties.txt|</argument>
 								<argument>pl.edu.icm.unity.webui.authn.extensions.PasswordRetrievalProperties|ref-PasswordRetrievalProperties.txt|</argument>
 								<argument>pl.edu.icm.unity.webui.authn.extensions.SMSRetrievalProperties|ref-SMSRetrievalProperties.txt|</argument>
 								<argument>pl.edu.icm.unity.webui.authn.extensions.TLSRetrievalProperties|ref-TLSRetrievalProperties.txt|</argument>
+								<argument>io.imunity.otp.ldap.OTPWithLDAPProperties|ref-OTPLDAPProperties.txt|</argument>
+								<argument>io.imunity.upman.UpmanEndpointProperties|ref-UpmanProperties.txt|</argument>
+								<argument>io.imunity.scim.config.SCIMEndpointProperties|ref-scimEndpointProperties.txt|</argument>
 							</arguments>
 						</configuration>
 						<goals>
@@ -308,15 +335,23 @@
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-javadoc-plugin</artifactId>
-				<version>2.10.4</version>
+				<version>3.3.1</version>
 				<configuration>
 					<includeDependencySources>true</includeDependencySources>
 					<dependencySourceIncludes>
-						<dependencySourceInclude>pl.edu.icm.unity:unity-server-engine-api</dependencySourceInclude>
+						<dependencySourceInclude>io.imunity:unity-types-api</dependencySourceInclude>
+						<dependencySourceInclude>io.imunity:unity-server-engine-api</dependencySourceInclude>
 					</dependencySourceIncludes>
 					<additionalparam>-Xdoclint:none</additionalparam>
-					<subpackages>pl.edu.icm.unity.engine.api</subpackages>
+					<subpackages>pl.edu.icm.unity</subpackages>
 				</configuration>
+				<reportSets>
+					<reportSet>
+						<reports>
+							<report>javadoc</report>
+						</reports>
+					</reportSet>
+				</reportSets>
 			</plugin>
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>

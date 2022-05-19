@@ -4,11 +4,11 @@
  */
 package pl.edu.icm.unity.webui.authn.column;
 
-import com.vaadin.server.VaadinRequest;
 import com.vaadin.ui.AbstractOrderedLayout;
 import com.vaadin.ui.Component;
 import com.vaadin.ui.CustomComponent;
 
+import pl.edu.icm.unity.types.authn.AuthenticationOptionKey;
 import pl.edu.icm.unity.webui.authn.VaadinAuthentication.VaadinAuthenticationUI;
 
 /**
@@ -18,10 +18,10 @@ import pl.edu.icm.unity.webui.authn.VaadinAuthentication.VaadinAuthenticationUI;
 abstract class AuthNPanelBase extends CustomComponent implements AuthenticationUIController
 {
 	protected final VaadinAuthenticationUI authnUI;
-	protected final String optionId;
+	protected final AuthenticationOptionKey optionId;
 	protected final AbstractOrderedLayout authenticatorContainer;
 	
-	protected AuthNPanelBase(VaadinAuthenticationUI authnUI, String optionId,
+	protected AuthNPanelBase(VaadinAuthenticationUI authnUI, AuthenticationOptionKey optionId,
 			AbstractOrderedLayout authenticatorContainer)
 	{
 		this.authnUI = authnUI;
@@ -29,12 +29,6 @@ abstract class AuthNPanelBase extends CustomComponent implements AuthenticationU
 		this.authenticatorContainer = authenticatorContainer;
 	}
 
-	@Override
-	public void refresh(VaadinRequest request)
-	{
-		authnUI.refresh(request);
-	}
-	
 	@Override
 	public boolean focusIfPossible()
 	{
@@ -50,7 +44,7 @@ abstract class AuthNPanelBase extends CustomComponent implements AuthenticationU
 	}
 
 	@Override
-	public String getAuthenticationOptionId()
+	public AuthenticationOptionKey getAuthenticationOptionId()
 	{
 		return optionId;
 	}

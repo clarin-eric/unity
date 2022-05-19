@@ -4,10 +4,17 @@
  */
 package pl.edu.icm.unity.store.impl.attribute;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.catchThrowable;
-import static org.hamcrest.CoreMatchers.is;
-import static org.junit.Assert.assertThat;
+import com.google.common.collect.Lists;
+import org.assertj.core.api.Assertions;
+import org.junit.Before;
+import org.junit.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import pl.edu.icm.unity.store.api.*;
+import pl.edu.icm.unity.store.impl.AbstractBasicDAOTest;
+import pl.edu.icm.unity.store.impl.StorageLimits.SizeLimitExceededException;
+import pl.edu.icm.unity.store.rdbms.tx.SQLTransactionTL;
+import pl.edu.icm.unity.store.types.StoredAttribute;
+import pl.edu.icm.unity.types.basic.*;
 
 import java.util.Collections;
 import java.util.Comparator;
@@ -15,26 +22,10 @@ import java.util.Date;
 import java.util.List;
 import java.util.stream.IntStream;
 
-import org.junit.Before;
-import org.junit.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-
-import com.google.common.collect.Lists;
-
-import pl.edu.icm.unity.store.api.AttributeDAO;
-import pl.edu.icm.unity.store.api.AttributeTypeDAO;
-import pl.edu.icm.unity.store.api.EntityDAO;
-import pl.edu.icm.unity.store.api.GroupDAO;
-import pl.edu.icm.unity.store.api.MembershipDAO;
-import pl.edu.icm.unity.store.impl.AbstractBasicDAOTest;
-import pl.edu.icm.unity.store.impl.StorageLimits.SizeLimitExceededException;
-import pl.edu.icm.unity.store.types.StoredAttribute;
-import pl.edu.icm.unity.types.basic.Attribute;
-import pl.edu.icm.unity.types.basic.AttributeExt;
-import pl.edu.icm.unity.types.basic.AttributeType;
-import pl.edu.icm.unity.types.basic.EntityInformation;
-import pl.edu.icm.unity.types.basic.Group;
-import pl.edu.icm.unity.types.basic.GroupMembership;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.catchThrowable;
+import static org.hamcrest.CoreMatchers.is;
+import static org.junit.Assert.assertThat;
 
 public class AttributeTest extends AbstractBasicDAOTest<StoredAttribute>
 {
@@ -53,10 +44,11 @@ public class AttributeTest extends AbstractBasicDAOTest<StoredAttribute>
 	private long entityId;
 	private long entityId2;
 
+	@Override
 	@Before
 	public void cleanDB()
 	{
-		dbCleaner.reset();
+		dbCleaner.cleanOrDelete();
 		tx.runInTransaction(() -> {
 			entityId = entityDAO.create(new EntityInformation());
 			entityId2 = entityDAO.create(new EntityInformation());
@@ -154,7 +146,40 @@ public class AttributeTest extends AbstractBasicDAOTest<StoredAttribute>
 			assertAllAndOnlyAllInSA(Lists.newArrayList(obj, obj2), attributes);
 		});
 	}
-	
+
+
+	@Test
+	public void selectedAttributesFormSelectedGroupsOfGroupMembersAreReturned()
+	{
+		tx.runInTransaction(() -> {
+			AttributeDAO dao = getDAO();
+			StoredAttribute obj = getObject("");
+			obj.getAttribute().setGroupPath("/");
+			obj.getAttribute().setName("attr");
+			dao.create(obj);
+
+			StoredAttribute obj2 = getObject("");
+			obj2.getAttribute().setGroupPath("/C");
+			obj2.getAttribute().setName("attr2");
+			dao.create(obj2);
+
+			StoredAttribute obj4 = getObject("");
+			obj4.getAttribute().setGroupPath("/C");
+			obj4.getAttribute().setName("attr3");
+			obj4 = new StoredAttribute(obj4.getAttribute(), entityId2);
+			dao.create(obj4);
+
+
+			membershipDao.create(new GroupMembership("/C", entityId, new Date(1)));
+			membershipDao.create(new GroupMembership("/", entityId, new Date(1)));
+			membershipDao.create(new GroupMembership("/", entityId2, new Date(1)));
+
+			List<StoredAttribute> attributes = dao.getAttributesOfGroupMembers(List.of("attr3"), List.of("/C"));
+
+			assertAllAndOnlyAllInSA(Lists.newArrayList(obj4), attributes);
+		});
+	}
+
 	@Test
 	public void allAttributesByNameAndGroupAreReturned()
 	{
@@ -556,6 +581,121 @@ public class AttributeTest extends AbstractBasicDAOTest<StoredAttribute>
 		});
 	}
 
+	@Test
+	public void shouldRetrieveAttributeLinkedWithKeyword()
+	{
+		tx.runInTransaction(() -> {
+			// given
+			AttributeDAO dao = getDAO();
+			StoredAttribute obj = getObject("");
+			long id = dao.create(obj);
+			
+			AttributesLookupMapper lookupMapper = SQLTransactionTL.getSql().getMapper(AttributesLookupMapper.class);
+			lookupMapper.create(new AttributeLookupBean(null, "keyword", id));
+			
+			// when
+			List<StoredAttribute> linked = dao.getAllWithKeyword("keyword");
+			
+			// then
+			Assertions.assertThat(linked)
+				.hasSize(1)
+				.isEqualTo(Lists.newArrayList(obj));
+		});
+	}
+	
+	@Test
+	public void shouldReturnAllKeywordsForGivenAttribute()
+	{
+		tx.runInTransaction(() -> {
+			// given
+			AttributeDAO dao = getDAO();
+			StoredAttribute obj = getObject("");
+			long id = dao.create(obj);
+			
+			AttributesLookupMapper lookupMapper = SQLTransactionTL.getSql().getMapper(AttributesLookupMapper.class);
+			lookupMapper.create(new AttributeLookupBean(null, "keyword1", id));
+			lookupMapper.create(new AttributeLookupBean(null, "keyword2", id));
+
+			// when
+			List<String> keywords = dao.getAllKeywordsFor(id);
+
+			// then
+			Assertions.assertThat(keywords)
+				.hasSize(2)
+				.isEqualTo(Lists.newArrayList("keyword1", "keyword2"));
+		});
+	}
+	
+	@Test
+	public void shouldRetrieveMultipleAttributesLinkedWithKeyword()
+	{
+		tx.runInTransaction(() -> {
+			// given
+			AttributeDAO dao = getDAO();
+			StoredAttribute obj = getObject("");
+			long id = dao.create(obj);
+			
+			StoredAttribute obj2 = getObject("");
+			obj2.getAttribute().setName("attr2");
+			dao.create(obj2);
+
+			StoredAttribute obj3 = getObject("");
+			obj3.getAttribute().setGroupPath("/C");
+			long id3 = dao.create(obj3);
+			
+			AttributesLookupMapper lookupMapper = SQLTransactionTL.getSql().getMapper(AttributesLookupMapper.class);
+			lookupMapper.create(new AttributeLookupBean(null, "keyword", id));
+			lookupMapper.create(new AttributeLookupBean(null, "keyword", id3));
+
+			// when
+			List<StoredAttribute> linked = dao.getAllWithKeyword("keyword");
+
+			// then
+			Assertions.assertThat(linked)
+				.hasSize(2)
+				.isEqualTo(Lists.newArrayList(obj, obj3));
+		});
+	}
+	
+	@Test
+	public void shouldLinkAttributeWithKeyword()
+	{
+		tx.runInTransaction(() -> {
+			// given
+			AttributeDAO dao = getDAO();
+			StoredAttribute obj = getObject("");
+			long id = dao.create(obj);
+			
+			// when
+			dao.linkKeywordToAttribute("keyword", id);
+			
+			// then
+			AttributesLookupMapper lookupMapper = SQLTransactionTL.getSql().getMapper(AttributesLookupMapper.class);
+			Assertions.assertThat(lookupMapper.getByKeyword("keyword"))
+				.hasSize(1)
+				.extracting(AttributeLookupBean::getAttributeId)
+				.contains(id);
+		});
+	}
+	
+	@Test
+	public void shouldRemoveLinkWhenAttributeRemoved()
+	{
+		tx.runInTransaction(() -> {
+			// given
+			AttributeDAO dao = getDAO();
+			StoredAttribute obj = getObject("");
+			long id = dao.create(obj);
+			dao.linkKeywordToAttribute("keyword", id);
+			
+			// when
+			dao.deleteByKey(id);
+			
+			// then
+			AttributesLookupMapper lookupMapper = SQLTransactionTL.getSql().getMapper(AttributesLookupMapper.class);
+			Assertions.assertThat(lookupMapper.getAll()).isEmpty();
+		});
+	}
 	
 	private StoredAttribute getSizedAttr(int size)
 	{
@@ -570,7 +710,29 @@ public class AttributeTest extends AbstractBasicDAOTest<StoredAttribute>
 		AttributeExt a = new AttributeExt(attr, true, new Date(100), new Date(1000));
 		return new StoredAttribute(a, entityId);
 	}
-
+	
+	@Test
+	public void importExportWithKeywords()
+	{
+		StoredAttribute imported = importExportIsIdempotent(attributeId -> 
+		{ 
+			getDAO().linkKeywordToAttribute("keyword", attributeId);
+		});
+		
+		tx.runInTransaction(() -> {
+			List<StoredAttribute> attrs = getDAO().getAllWithKeyword("keyword");
+			Assertions.assertThat(attrs)
+				.hasSize(1)
+				.contains(imported);
+		});
+	}
+	
+	@Test
+	public void insertedListIsReturned()
+	{
+		super.insertedListIsReturned();
+	}
+	
 	@Override
 	protected AttributeDAO getDAO()
 	{
@@ -593,7 +755,7 @@ public class AttributeTest extends AbstractBasicDAOTest<StoredAttribute>
 	@Override
 	protected StoredAttribute mutateObject(StoredAttribute src)
 	{
-		AttributeExt a = (AttributeExt) src.getAttribute();
+		AttributeExt a = src.getAttribute();
 		a.setRemoteIdp("remoteIdp2");
 		a.setTranslationProfile("translationProfile2");
 		a.setValues(Lists.newArrayList("w1"));

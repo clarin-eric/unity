@@ -4,6 +4,8 @@
  */
 package pl.edu.icm.unity.engine;
 
+import static pl.edu.icm.unity.types.authn.AuthenticationOptionKey.authenticatorOnlyKey;
+
 import java.io.IOException;
 import java.security.KeyStoreException;
 import java.util.Collections;
@@ -26,7 +28,7 @@ import pl.edu.icm.unity.engine.api.authn.InvocationContext;
 import pl.edu.icm.unity.engine.api.authn.LoginSession;
 import pl.edu.icm.unity.engine.api.identity.IdentityResolver;
 import pl.edu.icm.unity.engine.api.session.SessionManagement;
-import pl.edu.icm.unity.engine.authz.AuthorizationManager;
+import pl.edu.icm.unity.engine.authz.InternalAuthorizationManager;
 import pl.edu.icm.unity.engine.authz.RoleAttributeTypeProvider;
 import pl.edu.icm.unity.engine.mock.MockPasswordVerificatorFactory;
 import pl.edu.icm.unity.exceptions.EngineException;
@@ -61,7 +63,7 @@ public abstract class DBIntegrationTestBase extends SecuredDBIntegrationTestBase
 	public static final String DEF_PASSWORD = "mock~!)(@*#&$^%:?,'.\\|";
 	
 	@Autowired
-	protected AuthorizationManager authzMan;
+	protected InternalAuthorizationManager authzMan;
 	@Autowired
 	protected SessionManagement sessionMan;
 	
@@ -71,6 +73,7 @@ public abstract class DBIntegrationTestBase extends SecuredDBIntegrationTestBase
 		setupUserContext("admin", null);
 		authzMan.clearCache();
 	}
+	
 	@After
 	public void clearAuthnCtx() throws EngineException
 	{
@@ -104,7 +107,7 @@ public abstract class DBIntegrationTestBase extends SecuredDBIntegrationTestBase
 				MockPasswordVerificatorFactory.ID);
 		InvocationContext virtualAdmin = new InvocationContext(null, getDefaultRealm(), endpointFlows);
 		LoginSession ls = sessionMan.getCreateSession(entity.getEntityId(), getDefaultRealm(),
-				user, credentialId, null, null, null);
+				user, credentialId, null, authenticatorOnlyKey("authn1"), null);
 		virtualAdmin.setLoginSession(ls);
 		virtualAdmin.setLocale(Locale.ENGLISH);
 		//override for tests: it can happen that existing session is returned, therefore old state of cred is
@@ -141,7 +144,7 @@ public abstract class DBIntegrationTestBase extends SecuredDBIntegrationTestBase
 	protected Identity createUsernameUser(String username, String role, String password, String cr) throws Exception
 	{
 		Identity added1 = idsMan.addEntity(new IdentityParam(UsernameIdentity.ID, username), 
-				cr, EntityState.valid, false);
+				cr, EntityState.valid);
 		eCredMan.setEntityCredential(new EntityParam(added1), "credential1", 
 				new PasswordToken(password).toJson());
 		if (role != null)
@@ -163,9 +166,9 @@ public abstract class DBIntegrationTestBase extends SecuredDBIntegrationTestBase
 	protected Identity createCertUserNoPassword(String role) throws EngineException
 	{
 		Identity added2 = idsMan.addEntity(new IdentityParam(UsernameIdentity.ID, "user2"), 
-				"cr-certpass", EntityState.valid, false);
+				"cr-certpass", EntityState.valid);
 		idsMan.addIdentity(new IdentityParam(X500Identity.ID, DEMO_SERVER_DN), 
-				new EntityParam(added2), false);
+				new EntityParam(added2));
 		if (role != null)
 		{
 			Attribute sa = EnumAttribute.of(RoleAttributeTypeProvider.AUTHORIZATION_ROLE, 
@@ -201,6 +204,7 @@ public abstract class DBIntegrationTestBase extends SecuredDBIntegrationTestBase
 	{
 		CredentialDefinition credDef2 = new CredentialDefinition(
 				CertificateVerificator.NAME, "credential2");
+		credDef2.setConfiguration("");
 		credMan.addCredentialDefinition(credDef2);
 		
 		CredentialRequirements cr2 = new CredentialRequirements("cr-cert", "", 
@@ -212,5 +216,4 @@ public abstract class DBIntegrationTestBase extends SecuredDBIntegrationTestBase
 		CredentialRequirements cr3 = new CredentialRequirements("cr-certpass", "", creds);
 		credReqMan.addCredentialRequirement(cr3);
 	}
-
 }

@@ -8,6 +8,7 @@ import static pl.edu.icm.unity.webui.forms.FormParser.isGroupParamUsedAsMandator
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -32,30 +33,35 @@ import com.vaadin.ui.Layout;
 import com.vaadin.ui.TextArea;
 import com.vaadin.ui.VerticalLayout;
 
+import pl.edu.icm.unity.MessageSource;
 import pl.edu.icm.unity.base.utils.Log;
 import pl.edu.icm.unity.engine.api.AttributeTypeManagement;
 import pl.edu.icm.unity.engine.api.CredentialManagement;
 import pl.edu.icm.unity.engine.api.GroupsManagement;
 import pl.edu.icm.unity.engine.api.authn.AuthenticationException;
-import pl.edu.icm.unity.engine.api.authn.remote.RemotelyAuthenticatedContext;
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
+import pl.edu.icm.unity.engine.api.authn.remote.RemotelyAuthenticatedPrincipal;
 import pl.edu.icm.unity.engine.api.registration.GroupPatternMatcher;
+import pl.edu.icm.unity.engine.api.utils.FreemarkerUtils;
 import pl.edu.icm.unity.exceptions.EngineException;
 import pl.edu.icm.unity.exceptions.IllegalAttributeValueException;
 import pl.edu.icm.unity.exceptions.IllegalCredentialException;
 import pl.edu.icm.unity.exceptions.IllegalFormContentsException;
 import pl.edu.icm.unity.exceptions.IllegalFormContentsException.Category;
 import pl.edu.icm.unity.exceptions.IllegalIdentityValueException;
+import pl.edu.icm.unity.types.I18nString;
 import pl.edu.icm.unity.types.authn.CredentialDefinition;
 import pl.edu.icm.unity.types.basic.Attribute;
 import pl.edu.icm.unity.types.basic.AttributeType;
 import pl.edu.icm.unity.types.basic.Group;
 import pl.edu.icm.unity.types.basic.IdentityParam;
 import pl.edu.icm.unity.types.basic.IdentityTaV;
+import pl.edu.icm.unity.types.policyAgreement.PolicyAgreementConfiguration;
+import pl.edu.icm.unity.types.policyAgreement.PolicyAgreementDecision;
 import pl.edu.icm.unity.types.registration.AgreementRegistrationParam;
 import pl.edu.icm.unity.types.registration.AttributeRegistrationParam;
 import pl.edu.icm.unity.types.registration.BaseForm;
 import pl.edu.icm.unity.types.registration.BaseRegistrationInput;
+import pl.edu.icm.unity.types.registration.ConfirmationMode;
 import pl.edu.icm.unity.types.registration.CredentialParamValue;
 import pl.edu.icm.unity.types.registration.CredentialRegistrationParam;
 import pl.edu.icm.unity.types.registration.GroupRegistrationParam;
@@ -73,8 +79,8 @@ import pl.edu.icm.unity.types.registration.layout.FormParameterElement;
 import pl.edu.icm.unity.types.registration.layout.FormSeparatorElement;
 import pl.edu.icm.unity.webui.common.ComponentWithLabel;
 import pl.edu.icm.unity.webui.common.ComponentsContainer;
+import pl.edu.icm.unity.webui.common.ConfirmationEditMode;
 import pl.edu.icm.unity.webui.common.FormValidationException;
-import pl.edu.icm.unity.webui.common.ImageUtils;
 import pl.edu.icm.unity.webui.common.NotificationPopup;
 import pl.edu.icm.unity.webui.common.ReadOnlyField;
 import pl.edu.icm.unity.webui.common.Styles;
@@ -82,7 +88,6 @@ import pl.edu.icm.unity.webui.common.attributes.AttributeHandlerRegistry;
 import pl.edu.icm.unity.webui.common.attributes.AttributeViewer;
 import pl.edu.icm.unity.webui.common.attributes.AttributeViewerContext;
 import pl.edu.icm.unity.webui.common.attributes.edit.AttributeEditContext;
-import pl.edu.icm.unity.webui.common.attributes.edit.AttributeEditContext.ConfirmationMode;
 import pl.edu.icm.unity.webui.common.attributes.edit.FixedAttributeEditor;
 import pl.edu.icm.unity.webui.common.composite.ComponentsGroup;
 import pl.edu.icm.unity.webui.common.composite.CompositeLayoutAdapter;
@@ -90,10 +95,13 @@ import pl.edu.icm.unity.webui.common.credentials.CredentialEditor;
 import pl.edu.icm.unity.webui.common.credentials.CredentialEditorContext;
 import pl.edu.icm.unity.webui.common.credentials.CredentialEditorRegistry;
 import pl.edu.icm.unity.webui.common.credentials.MissingCredentialException;
+import pl.edu.icm.unity.webui.common.file.ImageAccessService;
 import pl.edu.icm.unity.webui.common.groups.GroupsSelection;
 import pl.edu.icm.unity.webui.common.identities.IdentityEditor;
 import pl.edu.icm.unity.webui.common.identities.IdentityEditorContext;
 import pl.edu.icm.unity.webui.common.identities.IdentityEditorRegistry;
+import pl.edu.icm.unity.webui.common.policyAgreement.PolicyAgreementRepresentation;
+import pl.edu.icm.unity.webui.common.policyAgreement.PolicyAgreementRepresentationBuilder;
 import pl.edu.icm.unity.webui.common.safehtml.HtmlConfigurableLabel;
 import pl.edu.icm.unity.webui.common.safehtml.HtmlTag;
 
@@ -104,15 +112,17 @@ import pl.edu.icm.unity.webui.common.safehtml.HtmlTag;
 public abstract class BaseRequestEditor<T extends BaseRegistrationInput> extends CustomComponent
 {
 	private static final Logger log = Log.getLogger(Log.U_SERVER_WEB, BaseRequestEditor.class);
-	protected UnityMessageSource msg;
+	protected MessageSource msg;
+	protected ImageAccessService imageAccessService;
 	private BaseForm form;
-	protected RemotelyAuthenticatedContext remotelyAuthenticated;
+	protected RemotelyAuthenticatedPrincipal remotelyAuthenticated;
 	private IdentityEditorRegistry identityEditorRegistry;
 	private CredentialEditorRegistry credentialEditorRegistry;
 	private AttributeHandlerRegistry attributeHandlerRegistry;
 	private AttributeTypeManagement aTypeMan;
 	private GroupsManagement groupsMan;
 	private CredentialManagement credMan;
+	private PolicyAgreementRepresentationBuilder policyAgreementsRepresentationBuilder;
 	
 	private Map<String, IdentityTaV> remoteIdentitiesByType;
 	private Map<String, Attribute> remoteAttributes;
@@ -121,21 +131,24 @@ public abstract class BaseRequestEditor<T extends BaseRegistrationInput> extends
 	private Map<Integer, FixedAttributeEditor> attributeEditor;
 	private Map<Integer, GroupsSelection> groupSelectors;
 	private List<CheckBox> agreementSelectors;
+	private List<PolicyAgreementRepresentation> policyAgreementSelectors;
 	private TextArea comment;
 	private Map<String, AttributeType> atTypes;
 	private Map<String, CredentialDefinition> credentials;
+	private PrefilledSet prefilled;
 
 	/**
 	 * Note - the two managers must be insecure, if the form is used in not-authenticated context, 
 	 * what is possible for registration form.
 	 */
-	public BaseRequestEditor(UnityMessageSource msg, BaseForm form,
-			RemotelyAuthenticatedContext remotelyAuthenticated,
+	public BaseRequestEditor(MessageSource msg, BaseForm form,
+			RemotelyAuthenticatedPrincipal remotelyAuthenticated,
 			IdentityEditorRegistry identityEditorRegistry,
 			CredentialEditorRegistry credentialEditorRegistry,
 			AttributeHandlerRegistry attributeHandlerRegistry,
 			AttributeTypeManagement atMan, CredentialManagement credMan,
-			GroupsManagement groupsMan)
+			GroupsManagement groupsMan, ImageAccessService imageAccessService,
+			PolicyAgreementRepresentationBuilder policyAgreementsRepresentationBuilder)
 	{
 		this.msg = msg;
 		this.form = form;
@@ -146,6 +159,8 @@ public abstract class BaseRequestEditor<T extends BaseRegistrationInput> extends
 		this.aTypeMan = atMan;
 		this.credMan = credMan;
 		this.groupsMan = groupsMan;
+		this.imageAccessService = imageAccessService;
+		this.policyAgreementsRepresentationBuilder = policyAgreementsRepresentationBuilder;
 		
 		this.remoteAttributes = RemoteDataRegistrationParser.parseRemoteAttributes(form, remotelyAuthenticated);
 		this.remoteIdentitiesByType = RemoteDataRegistrationParser.parseRemoteIdentities(
@@ -214,6 +229,7 @@ public abstract class BaseRequestEditor<T extends BaseRegistrationInput> extends
 		setRequestAttributes(ret, status);
 		setRequestGroups(ret, status);
 		setRequestAgreements(ret, status);
+		setRequestPolicyAgreements(ret, status);
 		
 		if (form.isCollectComments())
 			ret.setComments(comment.getValue());
@@ -232,9 +248,9 @@ public abstract class BaseRequestEditor<T extends BaseRegistrationInput> extends
 			if (regParam.getRetrievalSettings().isInteractivelyEntered(rid != null))
 			{
 				IdentityEditor editor = identityParamEditors.get(i);
-				if (editor == null) //OK - invitation parameter
+				if (editor == null) //was pre-filled in a way we don't have editor
 				{
-					ip = null;
+					ip = prefilled.identities.get(i).getEntry();
 				} else
 				{
 					try
@@ -308,9 +324,9 @@ public abstract class BaseRequestEditor<T extends BaseRegistrationInput> extends
 				if (aparam.getRetrievalSettings().isInteractivelyEntered(rattr != null))
 				{
 					FixedAttributeEditor ae = attributeEditor.get(i);
-					if (ae == null)	//ok, attribute specified by invitation
+					if (ae == null)	//was pre-filled in a way we don't have editor
 					{
-						attr = null;
+						attr = prefilled.attributes.get(i).getEntry();
 					} else
 					{
 						try
@@ -363,7 +379,7 @@ public abstract class BaseRequestEditor<T extends BaseRegistrationInput> extends
 					if (selector == null)	//ok, group specified by invitation
 						g.add(null);
 					else
-						g.add(new GroupSelection(selector.getSelectedGroups()));
+						g.add(new GroupSelection(selector.getSelectedGroupsWithoutParents()));
 				} else
 				{
 					List<String> remotelySelectedPaths = remotelySelected.stream()
@@ -395,10 +411,36 @@ public abstract class BaseRequestEditor<T extends BaseRegistrationInput> extends
 		}
 	}
 
+	private void setRequestPolicyAgreements(BaseRegistrationInput ret, FormErrorStatus status)
+	{
+		if (policyAgreementSelectors != null)
+		{
+			List<PolicyAgreementDecision> a = new ArrayList<>();
+			for (PolicyAgreementRepresentation ar : policyAgreementSelectors)
+			{
+				if (ar == null)
+				{
+					a.add(null);
+					continue;
+				}
+				
+				if (!ar.isValid())
+				{
+					ar.setComponentError(new UserError(msg.getMessage("selectionRequired")));
+				}else
+				{
+					ar.setComponentError(null);
+				}
+				a.add(ar.getDecision());
+			}
+			ret.setPolicyAgreements(a);
+		}
+	}
+	
 	/**
 	 * Creates main layout, inserts title and form information
 	 */
-	protected RegistrationLayoutsContainer createLayouts()
+	protected RegistrationLayoutsContainer createLayouts(Map<String, Object> params)
 	{
 		VerticalLayout main = new VerticalLayout();
 		main.setSpacing(true);
@@ -408,13 +450,13 @@ public abstract class BaseRequestEditor<T extends BaseRegistrationInput> extends
 		
 		addLogo(main);
 		
-		Label formName = new Label(form.getDisplayedName().getValue(msg));
+		Label formName = new Label(processFreeemarkerTemplate(params, form.getDisplayedName().getValue(msg)));
 		formName.addStyleName(Styles.vLabelH1.toString());
 		formName.addStyleName("u-reg-title");
 		main.addComponent(formName);
 		main.setComponentAlignment(formName, Alignment.MIDDLE_CENTER);
 		
-		String info = form.getFormInformation() == null ? null : form.getFormInformation().getValue(msg);
+		String info = form.getFormInformation() == null ? null : processFreeemarkerTemplate(params, form.getFormInformation().getValue(msg));
 		if (info != null)
 		{
 			HtmlConfigurableLabel formInformation = new HtmlConfigurableLabel(info);
@@ -427,22 +469,22 @@ public abstract class BaseRequestEditor<T extends BaseRegistrationInput> extends
 		container.addFormLayoutToRootLayout(main);
 		return container;
 	}
+
+	protected String processFreeemarkerTemplate(Map<String, Object> params, String template) 
+	{
+		return FreemarkerUtils.processStringTemplate(
+				params != null ? params : Collections.emptyMap(), template);
+	}
 	
 	private void addLogo(VerticalLayout main)
 	{
 		String logoURL = form.getLayoutSettings().getLogoURL();
-		if (logoURL != null && !logoURL.isEmpty())
+			
+		Optional<Resource> res = imageAccessService.getConfiguredImageResourceFromNullableUri(logoURL);
+		
+		if (res.isPresent())
 		{
-			Resource logoResource;
-			try
-			{
-				logoResource = ImageUtils.getConfiguredImageResource(logoURL);
-			} catch (Exception e)
-			{
-				log.warn("Can't add logo", e);
-				return;
-			}
-			Image image = new Image(null, logoResource);
+			Image image = new Image(null, res.get());
 			image.addStyleName("u-signup-logo");
 			main.addComponent(image);
 			main.setComponentAlignment(image, Alignment.TOP_CENTER);
@@ -451,10 +493,12 @@ public abstract class BaseRequestEditor<T extends BaseRegistrationInput> extends
 	
 	protected void createControls(RegistrationLayoutsContainer layoutContainer, FormLayout formLayout, PrefilledSet prefilled) 
 	{
+		this.prefilled = prefilled;
 		identityParamEditors = new HashMap<>();
 		attributeEditor = new HashMap<>();
 		atTypes = getAttributeTypesMap();
 		agreementSelectors = new ArrayList<>();
+		policyAgreementSelectors  = new ArrayList<>();
 		groupSelectors = new HashMap<>();
 		credentialParamEditors = new ArrayList<>();
 		Collection<CredentialDefinition> allCreds = getCredentialDefinitions();
@@ -541,7 +585,8 @@ public abstract class BaseRequestEditor<T extends BaseRegistrationInput> extends
 			
 		case AGREEMENT:
 			return createAgreementControl(layoutContainer.registrationFormLayout, (FormParameterElement) element);
-			
+		case POLICY_AGREEMENT:
+			return createPolicyAgreementControl(layoutContainer.registrationFormLayout, (FormParameterElement) element);	
 		case COMMENTS:
 			return createCommentsControl(layoutContainer.registrationFormLayout, (BasicFormElement) element);
 			
@@ -552,7 +597,7 @@ public abstract class BaseRequestEditor<T extends BaseRegistrationInput> extends
 		}
 		return false;
 	}
-	
+
 	protected boolean createLabelControl(AbstractOrderedLayout layout, FormElement previousInserted, 
 			FormElement next, FormCaptionElement element)
 	{
@@ -604,6 +649,24 @@ public abstract class BaseRequestEditor<T extends BaseRegistrationInput> extends
 		}
 		return true;
 	}
+	
+	private boolean createPolicyAgreementControl(Layout layout,
+			FormParameterElement element)
+	{
+		PolicyAgreementConfiguration aParam = form.getPolicyAgreements().get(element.getIndex());
+		if (isPolicyAgreementsIsFiltered(aParam))
+		{
+			policyAgreementSelectors.add(null);
+			return true;
+		}
+		PolicyAgreementRepresentation ar = policyAgreementsRepresentationBuilder.getAgreementRepresentation(aParam);
+		policyAgreementSelectors.add(ar);
+		layout.addComponent(ar);
+		return true;	
+	}
+	
+	protected abstract boolean isPolicyAgreementsIsFiltered(PolicyAgreementConfiguration toCheck);
+	
 	
 	protected boolean createCommentsControl(Layout layout, BasicFormElement element)
 	{
@@ -657,6 +720,7 @@ public abstract class BaseRequestEditor<T extends BaseRegistrationInput> extends
 					.withLabelInLine(form.getLayoutSettings().isCompactInputs())
 					.withCustomWidth(formWidth())
 					.withCustomWidthUnit(formWidthUnit())
+					.withConfirmationEditMode(registrationConfirmModeToConfirmationEditMode(idParam.getConfirmationMode()))
 					.build());
 			layout.addComponents(editorUI.getComponents());
 			
@@ -715,16 +779,12 @@ public abstract class BaseRequestEditor<T extends BaseRegistrationInput> extends
 			String aName = isEmpty(aParam.getLabel()) ? null : aParam.getLabel();
 			
 			
-			ConfirmationMode confirmationMode = ConfirmationMode.OFF;
-			if (aParam.getConfirmationMode().equals(
-					pl.edu.icm.unity.types.registration.ConfirmationMode.ON_SUBMIT))
-				confirmationMode = ConfirmationMode.FORCE_CONFIRMED;
-			else if (aParam.getConfirmationMode().equals(
-					pl.edu.icm.unity.types.registration.ConfirmationMode.ON_ACCEPT))
-				confirmationMode = ConfirmationMode.USER;
+			ConfirmationEditMode confirmationMode = 
+					registrationConfirmModeToConfirmationEditMode(aParam.getConfirmationMode());
 			
 			AttributeEditContext editContext = AttributeEditContext.builder()
-					.withConfirmationMode(confirmationMode).withRequired(!aParam.isOptional())
+					.withConfirmationMode(confirmationMode)
+					.withRequired(!aParam.isOptional())
 					.withAttributeType(aType)
 					.withAttributeGroup(aParam.isUsingDynamicGroup() ? "/" : aParam.getGroup())
 					.withLabelInline(form.getLayoutSettings().isCompactInputs())
@@ -746,6 +806,18 @@ public abstract class BaseRequestEditor<T extends BaseRegistrationInput> extends
 			attributeEditor.put(index, editor);
 		}
 		return true;
+	}	
+	
+	private ConfirmationEditMode registrationConfirmModeToConfirmationEditMode(ConfirmationMode registrationMode)
+	{
+		if (registrationMode == ConfirmationMode.ON_SUBMIT)
+			return ConfirmationEditMode.FORCE_CONFIRMED_IF_SYNC;
+		return ConfirmationEditMode.OFF;
+	}
+	
+	public BaseForm getForm()
+	{
+		return form;
 	}	
 	
 	protected boolean createGroupControl(AbstractOrderedLayout layout, FormParameterElement element, 
@@ -858,16 +930,18 @@ public abstract class BaseRequestEditor<T extends BaseRegistrationInput> extends
 				.withShowLabelInline(form.getLayoutSettings().isCompactInputs())
 				.withCustomWidth(formWidth())
 				.withCustomWidthUnit(formWidthUnit())
+				.withCredentialName(param.getCredentialName())
 				.build());
 		if (param.getLabel() != null)
 			editorUI.setLabel(param.getLabel());
-		else
-			editorUI.setLabel(credDefinition.getDisplayedName().getValue(msg));
+		else 
+		{
+			I18nString displayedName = credDefinition.getDisplayedName();
+			if (displayedName.hasNonDefaultValue())
+				editorUI.setLabel(displayedName.getValue(msg));
+		}
 		if (param.getDescription() != null)
 			editorUI.setDescription(HtmlConfigurableLabel.conditionallyEscape(param.getDescription()));
-		else if (!credDefinition.getDescription().isEmpty())
-			editorUI.setDescription(HtmlConfigurableLabel.conditionallyEscape(
-					credDefinition.getDescription().getValue(msg)));
 		credentialParamEditors.add(editor);
 		layout.addComponents(editorUI.getComponents());
 		return true;

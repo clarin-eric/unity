@@ -23,7 +23,6 @@ import io.imunity.webelements.navigation.NavigationHierarchyManager;
 import io.imunity.webelements.navigation.NavigationInfo;
 import io.imunity.webelements.navigation.NavigationInfo.Type;
 import pl.edu.icm.unity.webui.common.Images;
-import pl.edu.icm.unity.webui.common.SidebarStyles;
 import pl.edu.icm.unity.webui.common.Styles;
 
 /**
@@ -55,7 +54,7 @@ public class LeftMenu extends CustomComponent implements ViewChangeListener, Men
 		main = new VerticalLayout();
 		setWidth(250, Unit.PIXELS);
 		setHeight(100, Unit.PERCENTAGE);
-		setStyleName(SidebarStyles.leftMenu.toString());
+		setStyleName(Styles.leftMenu.toString());
 		main.setMargin(false);
 		main.setSpacing(false);
 		setCompositionRoot(main);
@@ -184,30 +183,33 @@ public class LeftMenu extends CustomComponent implements ViewChangeListener, Men
 			if (child.type == Type.ViewGroup)
 			{
 
-				MenuElementContainer subMenu = SubMenu.get(child.id)
-						.withCaption(child.caption).withIcon(child.icon);
+				MenuElementContainer subMenu = SubMenu.get(child.id).withCaption(getCaption(child))
+						.withIcon(child.icon);
 				buildSubMenu(navMan.getChildren(child.id), subMenu);
 				addSubContainerElement(subMenu);
 
 			} else if (child.type == Type.View || child.type == Type.DefaultView)
 			{
-				addMenuElement(MenuButton.get(child.id).withCaption(child.caption)
+				addMenuElement(MenuButton.get(child.id).withCaption(getCaption(child))
 						.withNavigateTo(child.id).withIcon(child.icon));
 			}
 		}
 	}
 
-	private void buildSubMenu(List<NavigationInfo> viewChildren,
-			MenuElementContainer menuContainer)
+	private void buildSubMenu(List<NavigationInfo> viewChildren, MenuElementContainer menuContainer)
 	{
 		for (NavigationInfo child : viewChildren)
 		{
-			menuContainer.addMenuElement(MenuButton.get(child.id)
-					.withCaption(child.caption).withNavigateTo(child.id)
-					.withIcon(child.icon));
+			menuContainer.addMenuElement(MenuButton.get(child.id).withCaption(getCaption(child))
+					.withNavigateTo(child.id).withIcon(child.icon));
 		}
 	}
 
+	String getCaption(NavigationInfo element)
+	{
+		return element.shortCaption != null ? element.shortCaption : element.caption;
+	}
+	
 	@Override
 	public boolean beforeViewChange(ViewChangeEvent event)
 	{

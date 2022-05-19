@@ -12,6 +12,8 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.text.ParseException;
+import java.util.List;
+import java.util.Map;
 import java.util.Map.Entry;
 
 import org.junit.Test;
@@ -20,16 +22,27 @@ import com.nimbusds.jose.util.JSONObjectUtils;
 
 import net.minidev.json.JSONArray;
 import net.minidev.json.JSONObject;
+import net.minidev.json.parser.JSONParser;
 
 public class ProfileFetcherTest
 {
+	
+	@Test
+	public void testHandleNullValues() throws Exception {
+		String s = "{\"test-field\": \"null\"}";
+		JSONParser p = new JSONParser(JSONParser.MODE_RFC4627);
+		JSONObject o = (JSONObject)p.parse(s);
+		Map<String,List<String>> m = ProfileFetcherUtils.convertToAttributes(o);
+		assertThat(m.size(), is(0));
+	}
+	
 
 	@Test
 	public void shouldResolveToJsonObjects() throws ParseException, IOException
 	{
 
-		JSONObject ob = JSONObjectUtils.parse(new String(Files
-				.readAllBytes(Paths.get("src/test/resources/orcidOutput.json"))));
+		JSONObject ob = new JSONObject(JSONObjectUtils.parse(new String(Files
+				.readAllBytes(Paths.get("src/test/resources/orcidOutput.json")))));
 		JSONObject converted = ProfileFetcherUtils.convertToRawAttributes(ob);
 		assertThat(converted.entrySet().size(), is(ob.entrySet().size()));
 

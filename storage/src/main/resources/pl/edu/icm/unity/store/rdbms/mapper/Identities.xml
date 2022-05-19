@@ -20,6 +20,13 @@
 			VALUES (#{id}, #{name}, #{contents}, #{typeId}, #{entityId})
 	</insert>
 	
+	<insert id="createList" parameterType="java.util.List" useGeneratedKeys="true" keyProperty="id">
+		INSERT INTO IDENTITIES (NAME, CONTENTS, TYPE_ID, ENTITY_ID) VALUES 
+		<foreach open="(" separator="),(" close=")" collection="list" index="index" item="element">
+			#{element.name}, #{element.contents}, #{element.typeId}, #{element.entityId}
+		</foreach>
+	</insert>
+	
 	<update id="updateByKey" parameterType="IdentityB">
 		UPDATE IDENTITIES SET CONTENTS = #{contents}, ENTITY_ID = #{entityId} WHERE ID = #{id}
 	</update>
@@ -55,12 +62,21 @@
 		WHERE IDENTITIES.NAME = #{value} AND IDENTITIES.TYPE_ID = IDENTITY_TYPES.ID 
 	</select>
 
+	<select id="getCount" resultType="long">
+		SELECT COUNT(*) FROM IDENTITIES
+	</select>
+	
+	<select id="getCountByType" parameterType="list" resultType="long">
+		SELECT COUNT(*) from IDENTITIES, IDENTITY_TYPES 
+		WHERE IDENTITIES.TYPE_ID = IDENTITY_TYPES.ID AND IDENTITY_TYPES.NAME IN 
+		<foreach item="type" index="index" collection="list" open="(" separator="," close=")"> #{type} </foreach>
+	</select>
 
 	<!-- non standard -->
 	<select id="getByGroup" parameterType="string" resultMap="identityResult">
-		select IDENTITIES.*, IDENTITY_TYPES.NAME AS TYPE_NAME from IDENTITIES, IDENTITY_TYPES, ENTITIES, GROUP_ENTITIES, GROUPS 
-		where GROUP_ENTITIES.GROUP_ID = GROUPS.ID AND GROUP_ENTITIES.ENTITY_ID = ENTITIES.ID
-			AND GROUPS.NAME = #{value} AND IDENTITIES.ENTITY_ID = ENTITIES.ID AND IDENTITIES.TYPE_ID = IDENTITY_TYPES.ID
+		select IDENTITIES.*, IDENTITY_TYPES.NAME AS TYPE_NAME from IDENTITIES, IDENTITY_TYPES, ENTITIES, GROUP_ENTITIES, <include refid="io.imunity.sql.groups"/> 
+		where GROUP_ENTITIES.GROUP_ID = <include refid="io.imunity.sql.groups"/>.ID AND GROUP_ENTITIES.ENTITY_ID = ENTITIES.ID
+			AND <include refid="io.imunity.sql.groups"/>.NAME = #{value} AND IDENTITIES.ENTITY_ID = ENTITIES.ID AND IDENTITIES.TYPE_ID = IDENTITY_TYPES.ID
 	</select>
 	
 	<select id="getByEntity" parameterType="long" resultMap="identityResult">

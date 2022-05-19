@@ -21,14 +21,15 @@ import com.vaadin.ui.Grid.SelectionMode;
 import com.vaadin.ui.VerticalLayout;
 
 import pl.edu.icm.unity.Constants;
+import pl.edu.icm.unity.MessageSource;
 import pl.edu.icm.unity.base.token.Token;
 import pl.edu.icm.unity.base.utils.Log;
 import pl.edu.icm.unity.engine.api.EntityManagement;
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
 import pl.edu.icm.unity.engine.api.token.SecuredTokensManagement;
 import pl.edu.icm.unity.exceptions.EngineException;
 import pl.edu.icm.unity.oauth.as.OAuthProcessor;
 import pl.edu.icm.unity.oauth.as.OAuthToken;
+import pl.edu.icm.unity.oauth.as.OAuthTokenRepository;
 import pl.edu.icm.unity.types.basic.EntityParam;
 import pl.edu.icm.unity.webui.common.ComponentWithToolbar;
 import pl.edu.icm.unity.webui.common.CompositeSplitPanel;
@@ -50,7 +51,7 @@ class AdminTokensComponent extends VerticalLayout
 			AdminTokensComponent.class);
 	private EntityManagement entityManagement;
 	protected SecuredTokensManagement tokenMan;
-	private UnityMessageSource msg;
+	private MessageSource msg;
 	
 	protected VerticalLayout main;
 	protected VerticalLayout tokensTablePanel;
@@ -58,12 +59,15 @@ class AdminTokensComponent extends VerticalLayout
 	protected Grid<TableTokensBean> tokensTable;
 	private OAuthTokenViewer viewer;
 	private boolean showViewer;
+	protected final OAuthTokenRepository oauthTokenDAO;
 	
-	AdminTokensComponent(SecuredTokensManagement tokenMan, UnityMessageSource msg,
+	AdminTokensComponent(SecuredTokensManagement tokenMan, OAuthTokenRepository oauthTokenDAO, 
+			MessageSource msg,
 			EntityManagement entityManagement, boolean showViewer)
 	{
 		
 		this.tokenMan = tokenMan;
+		this.oauthTokenDAO = oauthTokenDAO;
 		this.msg = msg;
 		this.entityManagement = entityManagement;
 		this.showViewer = showViewer;
@@ -208,7 +212,7 @@ class AdminTokensComponent extends VerticalLayout
 	protected List<Token> getTokens() throws EngineException
 	{
 		List<Token> tokens = new ArrayList<>();	
-		tokens.addAll(tokenMan.getAllTokens(OAuthProcessor.INTERNAL_ACCESS_TOKEN));
+		tokens.addAll(oauthTokenDAO.getAllAccessTokens());
 		tokens.addAll(tokenMan.getAllTokens(OAuthProcessor.INTERNAL_REFRESH_TOKEN));
 		return tokens;
 	}
@@ -258,10 +262,10 @@ class AdminTokensComponent extends VerticalLayout
 	{
 		private Token token;
 		private OAuthToken oauthToken;
-		private UnityMessageSource msg;
+		private MessageSource msg;
 		private String owner;
 		
-		public TableTokensBean(Token token, UnityMessageSource msg, String owner)
+		public TableTokensBean(Token token, MessageSource msg, String owner)
 		{
 			this.token = token;
 			this.msg = msg;
@@ -293,8 +297,8 @@ class AdminTokensComponent extends VerticalLayout
 		
 		public String getExpires()
 		{
-			return new SimpleDateFormat(Constants.SIMPLE_DATE_FORMAT)
-			.format(token.getExpires());
+			return token.getExpires() == null ? "" : 
+				new SimpleDateFormat(Constants.SIMPLE_DATE_FORMAT).format(token.getExpires());
 		}
 		
 		public String getValue()

@@ -4,12 +4,8 @@
  */
 package pl.edu.icm.unity.store.impl.attribute;
 
-import java.util.ArrayList;
-import java.util.List;
-
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
-
 import pl.edu.icm.unity.store.StorageConfiguration;
 import pl.edu.icm.unity.store.api.AttributeDAO;
 import pl.edu.icm.unity.store.api.GroupDAO;
@@ -19,6 +15,11 @@ import pl.edu.icm.unity.store.rdbms.tx.SQLTransactionTL;
 import pl.edu.icm.unity.store.types.StoredAttribute;
 import pl.edu.icm.unity.types.basic.Attribute;
 import pl.edu.icm.unity.types.basic.AttributeExt;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import static java.util.stream.Collectors.toList;
 
 
 /**
@@ -31,9 +32,10 @@ public class AttributeRDBMSStore extends GenericRDBMSCRUD<StoredAttribute, Attri
 	public static final String BEAN = DAO_ID + "rdbms";
 	private final GroupDAO groupDAO;
 	private final Integer attributeSizeLimit;
-	
+
 	@Autowired
-	AttributeRDBMSStore(AttributeRDBMSSerializer dbSerializer, GroupDAO groupDAO, 
+	AttributeRDBMSStore(AttributeRDBMSSerializer dbSerializer,
+			GroupDAO groupDAO,
 			StorageConfiguration storageConfiguration)
 	{
 		super(AttributesMapper.class, dbSerializer, NAME);
@@ -53,7 +55,8 @@ public class AttributeRDBMSStore extends GenericRDBMSCRUD<StoredAttribute, Attri
 			throw new IllegalArgumentException(elementName + " [" + a.getAttribute().getName() + 
 					"] does not exist");
 		AttributeBean oldSingle = old.get(0);
-		preUpdateCheck(oldSingle, a);
+		StoredAttribute oldParsed = jsonSerializer.fromDB(oldSingle);
+		preUpdateCheck(oldParsed, a);
 		toUpdate.setId(oldSingle.getId());
 		mapper.updateByKey(toUpdate);		
 	}
@@ -120,5 +123,60 @@ public class AttributeRDBMSStore extends GenericRDBMSCRUD<StoredAttribute, Attri
 		AttributesMapper mapper = SQLTransactionTL.getSql().getMapper(AttributesMapper.class);
 		List<AttributeBean> groupMembersAttributes = mapper.getGroupMembersAttributes(group);
 		return convertList(groupMembersAttributes);
+	}
+
+	@Override
+	public List<StoredAttribute> getAttributesOfGroupMembers(List<String> attributes, List<String> groups)
+	{
+		AttributesMapper mapper = SQLTransactionTL.getSql().getMapper(AttributesMapper.class);
+		return convertList(mapper.getSelectedGroupsMembersAttributes(groups, attributes));
+	}
+
+	@Override
+	public List<StoredAttribute> getAttributesOfGroupMembers(List<String> groups)
+	{
+		AttributesMapper mapper = SQLTransactionTL.getSql().getMapper(AttributesMapper.class);
+		return convertList(mapper.getGroupsMembersAttributes(groups));
+	}
+
+	@Override
+	public long getCountWithoutType(List<String> types)
+	{
+		AttributesMapper mapper = SQLTransactionTL.getSql().getMapper(AttributesMapper.class);
+		return mapper.getCountWithoutType(types);
+	}
+
+	@Override
+	public void linkKeywordToAttribute(String keyword, long attributeId)
+	{
+		AttributesLookupMapper lookupMapper = SQLTransactionTL.getSql().getMapper(AttributesLookupMapper.class);
+		lookupMapper.create(new AttributeLookupBean(null, keyword, attributeId));
+	}
+
+	@Override
+	public List<StoredAttribute> getAllWithKeyword(String keyword)
+	{
+		AttributesLookupMapper lookupMapper = SQLTransactionTL.getSql().getMapper(AttributesLookupMapper.class);
+		List<AttributeLookupBean> lookupResult = lookupMapper.getByKeyword(keyword);
+		return lookupResult.stream()
+				.map(AttributeLookupBean::getAttributeId)
+				.map(this::getByKey)
+				.collect(toList());
+	}
+
+	@Override
+	public List<Long> getAllIds()
+	{
+		AttributesMapper mapper = SQLTransactionTL.getSql().getMapper(AttributesMapper.class);
+		return mapper.getAll().stream()
+				.map(AttributeBean::getId)
+				.collect(toList());
+	}
+
+	@Override
+	public List<String> getAllKeywordsFor(Long attributeId)
+	{
+		AttributesLookupMapper lookupMapper = SQLTransactionTL.getSql().getMapper(AttributesLookupMapper.class);
+		return lookupMapper.getAllKeywords(attributeId);
 	}
 }

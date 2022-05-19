@@ -5,6 +5,7 @@
 package pl.edu.icm.unity.types.registration.invite;
 
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonValue;
@@ -30,8 +31,7 @@ public class InvitationWithCode implements NamedObject
 	public InvitationWithCode(InvitationParam base,
 			String registrationCode)
 	{
-		this.invitation = base;
-		this.registrationCode = registrationCode;
+		this(base, registrationCode, null, 0);
 	}
 
 	public InvitationWithCode(InvitationParam base, String registrationCode,
@@ -40,21 +40,30 @@ public class InvitationWithCode implements NamedObject
 		this.registrationCode = registrationCode;
 		this.lastSentTime = lastSentTime;
 		this.numberOfSends = numberOfSends;
-		invitation = base;	
+		this.invitation = base;	
+		this.creationTime = Instant.now().truncatedTo(ChronoUnit.SECONDS);
 	}
 
 	@JsonCreator
-	public InvitationWithCode(ObjectNode json)
+	public InvitationWithCode(ObjectNode json) 
 	{
 		InvitationType type = InvitationType.valueOf(json.get("type").asText());
-		if (type.equals(InvitationType.REGISTRATION))
+
+		switch (type)
 		{
+		case REGISTRATION:
 			invitation = new RegistrationInvitationParam(json);
-		}
-		else
-		{
+			break;
+		case ENQUIRY:
 			invitation = new EnquiryInvitationParam(json);
-		}	
+			break;
+		case COMBO:
+			invitation = new ComboInvitationParam(json);
+			break;
+		default:
+			throw new IllegalArgumentException("Illegal invitation type");
+		}
+
 		fromJson(json);
 	}
 	

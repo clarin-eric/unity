@@ -23,6 +23,7 @@ import pl.edu.icm.unity.store.StorageCleanerImpl;
 import pl.edu.icm.unity.store.api.ImportExport;
 import pl.edu.icm.unity.store.api.generic.EndpointDB;
 import pl.edu.icm.unity.store.api.tx.TransactionalRunner;
+import pl.edu.icm.unity.types.basic.DBDumpContentElements;
 import pl.edu.icm.unity.types.endpoint.Endpoint;
 
 @RunWith(SpringJUnit4ClassRunner.class)
@@ -45,7 +46,7 @@ public class TestMigrationFrom2_5
 	@Before
 	public void cleanDB()
 	{
-		dbCleaner.reset();
+		dbCleaner.cleanOrDelete();
 	}
 	
 	@Test
@@ -57,7 +58,7 @@ public class TestMigrationFrom2_5
 				ie.load(new BufferedInputStream(new FileInputStream(
 						"src/test/resources/updateData/from2.5.x/"
 								+ "testbed-from2.5.0.json")));
-				ie.store(new FileOutputStream("target/afterImport.json"));
+				ie.store(new FileOutputStream("target/afterImport.json"),  new DBDumpContentElements());
 			} catch (Exception e)
 			{
 				e.printStackTrace();
@@ -70,11 +71,12 @@ public class TestMigrationFrom2_5
 	
 	private void checkEndpointConfiguration()
 	{
-		assertThat(endpointDAO.getAll().size(), is(11));
-		Endpoint endpoint = endpointDAO.get("UNITY administration interface");
-		assertThat(endpoint.getName(), is("UNITY administration interface"));	
-		assertThat(endpoint.getConfiguration().getAuthenticationOptions().size(), is(4));	
+		assertThat(endpointDAO.getAll().size(), is(10));
+		Endpoint endpoint = endpointDAO.get("UNITY user's account");
+		assertThat(endpoint.getName(), is("UNITY user's account"));	
+		assertThat(endpoint.getConfiguration().getAuthenticationOptions().size(), is(3));	
 		assertThat(endpoint.getConfiguration().getAuthenticationOptions().get(0), is("pwdWeb"));
-		assertThat(endpoint.getConfiguration().getAuthenticationOptions().get(3), is("samlWeb"));
+		assertThat(endpoint.getConfiguration().getAuthenticationOptions().get(1), is("oauthWeb"));
+		assertThat(endpoint.getConfiguration().getAuthenticationOptions().get(2), is("samlWeb"));
 	}
 }

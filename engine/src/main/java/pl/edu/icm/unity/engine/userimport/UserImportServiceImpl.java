@@ -18,10 +18,11 @@ import org.springframework.stereotype.Component;
 
 import eu.unicore.util.configuration.ConfigurationException;
 import pl.edu.icm.unity.base.utils.Log;
-import pl.edu.icm.unity.engine.api.authn.AuthenticationException;
 import pl.edu.icm.unity.engine.api.authn.AuthenticationResult;
 import pl.edu.icm.unity.engine.api.authn.AuthenticationResult.Status;
-import pl.edu.icm.unity.engine.api.authn.remote.RemoteAuthnResultProcessor;
+import pl.edu.icm.unity.engine.api.authn.RemoteAuthenticationException;
+import pl.edu.icm.unity.engine.api.authn.RemoteAuthenticationResult;
+import pl.edu.icm.unity.engine.api.authn.remote.RemoteAuthnResultTranslator;
 import pl.edu.icm.unity.engine.api.config.ConfigurationLoader;
 import pl.edu.icm.unity.engine.api.config.UnityServerConfiguration;
 import pl.edu.icm.unity.engine.api.userimport.UserImportSPI;
@@ -41,19 +42,19 @@ import pl.edu.icm.unity.types.basic.IdentityTaV;
 @Component
 public class UserImportServiceImpl implements UserImportSerivce
 {
-	private static final Logger log = Log.getLogger(Log.U_SERVER, UserImportServiceImpl.class);
+	private static final Logger log = Log.getLogger(Log.U_SERVER_USER_IMPORT, UserImportServiceImpl.class);
 	private Map<String, SingleUserImportHandler> handlersByKey;
 	
 	@Autowired
 	public UserImportServiceImpl(UnityServerConfiguration mainCfg, Optional<List<UserImportSPIFactory>> importersF,
-			CacheProvider cacheProvider, RemoteAuthnResultProcessor remoteAuthnResultProcessor)
+			CacheProvider cacheProvider, RemoteAuthnResultTranslator remoteAuthnResultProcessor)
 	{
 		this(mainCfg, importersF.orElse(new ArrayList<>()), cacheProvider, 
 				remoteAuthnResultProcessor, new ConfigurationLoader());
 	}
 	
 	public UserImportServiceImpl(UnityServerConfiguration mainCfg, List<UserImportSPIFactory> importersF,
-			CacheProvider cacheProvider, RemoteAuthnResultProcessor verificatorUtil, 
+			CacheProvider cacheProvider, RemoteAuthnResultTranslator verificatorUtil, 
 			ConfigurationLoader configLoader)
 	{
 		Map<String, UserImportSPIFactory> importersFM = new HashMap<>();
@@ -70,7 +71,7 @@ public class UserImportServiceImpl implements UserImportSerivce
 	}
 	
 	private SingleUserImportHandler loadHandler(String importerCfg, Map<String, UserImportSPIFactory> importersFM,
-			CacheProvider cacheProvider, RemoteAuthnResultProcessor verificatorUtil, 
+			CacheProvider cacheProvider, RemoteAuthnResultTranslator verificatorUtil, 
 			ConfigurationLoader cfgLoader, String key)
 	{
 		Properties properties = cfgLoader.getProperties(importerCfg);
@@ -124,33 +125,28 @@ public class UserImportServiceImpl implements UserImportSerivce
 			{
 				result = handler.importUser(userImport.identityValue, 
 						userImport.identityType, existingIdentity);
-			} catch (AuthenticationException e)
+			} catch (RemoteAuthenticationException e)
 			{
 				log.debug("User import has thrown an authentication exception, skipping it", e);
-				ret.add(new ImportResult(userImport.importerKey,
-						new AuthenticationResult(Status.notApplicable, null)));
+				ret.add(new ImportResult(userImport.importerKey, RemoteAuthenticationResult.notApplicable()));
 				continue;
 			} catch (Exception e)
 			{
-				log.error("User import has thrown an exception, skipping it", e);
-				ret.add(new ImportResult(userImport.importerKey,
-						new AuthenticationResult(Status.notApplicable, null)));
+				log.debug("User import has thrown an exception, skipping it", e);
+				ret.add(new ImportResult(userImport.importerKey, RemoteAuthenticationResult.notApplicable()));
 				continue;
 			}
 			
-			if (result != null)
-				ret.add(new ImportResult(userImport.importerKey, result));
-			else
-				ret.add(new ImportResult(userImport.importerKey, 
-						new AuthenticationResult(Status.notApplicable, null)));
+			ret.add(new ImportResult(userImport.importerKey, result != null ? 
+					result : RemoteAuthenticationResult.notApplicable()));
 			
 			if (result != null && result.getStatus() != Status.notApplicable)
 			{
-				log.debug("Import handler {} has imported the user {}", 
+				log.info("Import handler {} has imported the user {}", 
 						userImport.importerKey, userImport.identityValue);
 			} else
 			{
-				log.debug("Import handler {} returned nothing or notApplicable status",
+				log.info("Import handler {} returned nothing or notApplicable status",
 						userImport.importerKey);
 			}
 		}

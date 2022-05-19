@@ -19,30 +19,29 @@ import com.vaadin.server.VaadinService;
 import com.vaadin.server.VaadinServletResponse;
 import com.vaadin.server.VaadinSession;
 import com.vaadin.ui.Alignment;
-import com.vaadin.ui.ComboBox;
+import com.vaadin.ui.MenuBar;
+import com.vaadin.ui.MenuBar.MenuItem;
 
+import pl.edu.icm.unity.MessageSource;
 import pl.edu.icm.unity.engine.api.authn.InvocationContext;
 import pl.edu.icm.unity.engine.api.config.UnityServerConfiguration;
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
 import pl.edu.icm.unity.webui.common.CompactFormLayout;
 import pl.edu.icm.unity.webui.common.Images;
-import pl.edu.icm.unity.webui.common.Styles;
 
 
 /**
  * Allows for choosing the language
  * @author K. Benedyczak
  */
-@SuppressWarnings("serial")
 @Component
 @Scope(ConfigurableBeanFactory.SCOPE_PROTOTYPE)
 public class LocaleChoiceComponent extends CompactFormLayout
 {
-	private ComboBox<String> chooser;
+	private MenuBar chooser;
 	private Map<String, Locale> selectableLocales;
 	
 	@Autowired
-	public LocaleChoiceComponent(UnityServerConfiguration cfg, UnityMessageSource msg)
+	public LocaleChoiceComponent(UnityServerConfiguration cfg, MessageSource msg)
 	{
 		selectableLocales = cfg.getEnabledLocales();
 		if (selectableLocales.size() < 2)
@@ -50,7 +49,6 @@ public class LocaleChoiceComponent extends CompactFormLayout
 			return;
 		} else
 		{
-			chooser = new ComboBox<>(msg.getMessage("LanguageChoiceComponent.language"));
 			String selected = null;
 			Locale selectedLocale = InvocationContext.getCurrent().getLocale();
 			for (Map.Entry<String, Locale> locale : selectableLocales.entrySet())
@@ -58,30 +56,28 @@ public class LocaleChoiceComponent extends CompactFormLayout
 				if (locale.getValue().equals(selectedLocale))
 					selected = locale.getKey();
 			}
-			chooser.setItems(selectableLocales.keySet());
-			chooser.setEmptySelectionAllowed(false);
-			chooser.setItemIconGenerator(i -> Images.getFlagForLocale(selectableLocales.get(i).toString()));
-			if (selected != null)
-				chooser.setValue(selected);
-			chooser.setTextInputAllowed(false);
-			chooser.addStyleName(Styles.vComboSmall.toString());
-			chooser.addSelectionListener(event ->
+			
+			chooser = new MenuBar();
+			chooser.setCaption(msg.getMessage("LanguageChoiceComponent.language"));
+			chooser.addStyleName("u-authn-languageSelector");
+
+			MenuItem current = chooser.addItem(selected, Images.getFlagForLocale(selectableLocales.get(selected.toString()).toString()), null);
+			current.setStyleName("u-authn-languageSelector-first");
+			
+			for (String locale : selectableLocales.keySet())
+			{
+				current.addItem(locale, Images.getFlagForLocale(selectableLocales.get(locale).toString()), s -> 
 				{
-					String localeName = (String) chooser.getValue();
-					Locale l = selectableLocales.get(localeName);
-					
-					Cookie languageCookie = new Cookie(InvocationContextSetupFilter.LANGUAGE_COOKIE, 
-							l.toString());
-					languageCookie.setPath("/");
-					languageCookie.setMaxAge(3600*24*31);
-					languageCookie.setHttpOnly(true);
+					Locale l = selectableLocales.get(locale);
+					Cookie languageCookie = new LanguageCookie(l.toString());
 					((VaadinServletResponse)VaadinService.getCurrentResponse()).addCookie(languageCookie);
 					
 					VaadinSession vSession = VaadinSession.getCurrent();
 					VaadinService.getCurrent().closeSession(vSession);
-					Page.getCurrent().reload();
-				}
-			);
+					Page.getCurrent().reload();		
+				});
+			}
+			
 			addComponent(chooser);
 			setComponentAlignment(chooser, Alignment.TOP_RIGHT);
 		}

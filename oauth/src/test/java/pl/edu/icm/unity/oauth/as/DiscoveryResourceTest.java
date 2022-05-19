@@ -6,6 +6,7 @@ package pl.edu.icm.unity.oauth.as;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.Mockito.mock;
 
 import java.util.HashSet;
 
@@ -30,8 +31,8 @@ public class DiscoveryResourceTest
 	{
 		OAuthEndpointsCoordinator coordinator = new OAuthEndpointsCoordinator();
 		coordinator.registerAuthzEndpoint("https://localhost:233/foo/token", "https://localhost:233/as");
-		OAuthASProperties config = OAuthTestUtils.getConfig();
-		DiscoveryResource tested = new DiscoveryResource(config, coordinator);
+		OAuthASProperties config = OAuthTestUtils.getOIDCConfig();
+		DiscoveryResource tested = new DiscoveryResource(config, coordinator, new OAuthScopesService(mock(SystemOAuthScopeProvidersRegistry.class)));
 		
 		Response resp = tested.getMetadata();
 		String body = resp.readEntity(String.class);
@@ -43,7 +44,7 @@ public class DiscoveryResourceTest
 		assertEquals("https://localhost:233/foo/token", parsed.getTokenEndpointURI().toString());
 		assertEquals("https://localhost:233/foo/userinfo", parsed.getUserInfoEndpointURI().toString());
 		assertEquals("https://localhost:233/foo/jwk", parsed.getJWKSetURI().toString());
-		assertTrue(Sets.newHashSet("s1", "s2").equals(new HashSet<>(parsed.getScopes().toStringList())));
+		assertTrue(Sets.newHashSet("s1", "s2", "openid", "offline_access").equals(new HashSet<>(parsed.getScopes().toStringList())));
 		assertEquals(7, parsed.getResponseTypes().size());
 	}
 	

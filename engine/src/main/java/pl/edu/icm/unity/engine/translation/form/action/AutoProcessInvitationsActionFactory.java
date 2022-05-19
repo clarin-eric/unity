@@ -8,6 +8,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import pl.edu.icm.unity.engine.api.translation.form.AutomaticInvitationProcessingParam;
+import pl.edu.icm.unity.engine.api.translation.form.RegistrationContext;
 import pl.edu.icm.unity.engine.api.translation.form.RegistrationTranslationAction;
 import pl.edu.icm.unity.engine.api.translation.form.TranslatedRegistrationRequest;
 import pl.edu.icm.unity.exceptions.EngineException;
@@ -53,9 +54,9 @@ public class AutoProcessInvitationsActionFactory extends AbstractRegistrationTra
 
 		@Override
 		protected void invokeWrapped(TranslatedRegistrationRequest state, Object mvelCtx,
-				String currentProfile) throws EngineException
+				RegistrationContext context, String currentProfile) throws EngineException
 		{
-			state.setInvitationProcessing(invitationProcessing);
+			state.addInvitationProcessingParam(invitationProcessing);
 		}
 
 		private void setParameters(String[] parameters)

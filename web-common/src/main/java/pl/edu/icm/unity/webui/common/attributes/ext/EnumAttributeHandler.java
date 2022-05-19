@@ -14,19 +14,17 @@ import org.springframework.beans.factory.annotation.Autowired;
 
 import com.vaadin.server.Sizeable.Unit;
 import com.vaadin.server.UserError;
-import com.vaadin.shared.ui.ContentMode;
 import com.vaadin.ui.Button;
 import com.vaadin.ui.Button.ClickEvent;
 import com.vaadin.ui.Button.ClickListener;
 import com.vaadin.ui.ComboBox;
 import com.vaadin.ui.Component;
 import com.vaadin.ui.HorizontalLayout;
-import com.vaadin.ui.Label;
 import com.vaadin.ui.TextField;
 import com.vaadin.ui.VerticalLayout;
 
+import pl.edu.icm.unity.MessageSource;
 import pl.edu.icm.unity.engine.api.attributes.AttributeValueSyntax;
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
 import pl.edu.icm.unity.exceptions.IllegalAttributeTypeException;
 import pl.edu.icm.unity.exceptions.IllegalAttributeValueException;
 import pl.edu.icm.unity.stdext.attr.EnumAttributeSyntax;
@@ -47,10 +45,10 @@ import pl.edu.icm.unity.webui.common.attributes.edit.AttributeValueEditor;
  */
 public class EnumAttributeHandler implements WebAttributeHandler
 {
-	private UnityMessageSource msg;
+	private MessageSource msg;
 	private EnumAttributeSyntax syntax;
 	
-	public EnumAttributeHandler(UnityMessageSource msg, EnumAttributeSyntax syntax)
+	public EnumAttributeHandler(MessageSource msg, EnumAttributeSyntax syntax)
 	{
 		this.msg = msg;
 		this.syntax = syntax;
@@ -59,10 +57,7 @@ public class EnumAttributeHandler implements WebAttributeHandler
 	@Override
 	public Component getRepresentation(String value, AttributeViewerContext context)
 	{
-		Label label = new Label(value.toString(), ContentMode.PREFORMATTED);
-		if (context.isCustomWidth())
-			label.setWidth(context.getCustomWidth(), context.getCustomWidthUnit());
-		return label;
+		return AttributeHandlerHelper.getRepresentation(value, context);
 	}
 	
 	@Override
@@ -164,9 +159,9 @@ public class EnumAttributeHandler implements WebAttributeHandler
 		private TextField value;
 		private Button add;
 		private GenericElementsTable<String> current;
-		private UnityMessageSource msg;
+		private MessageSource msg;
 		
-		public EnumSyntaxEditor(EnumAttributeSyntax initial, UnityMessageSource msg)
+		public EnumSyntaxEditor(EnumAttributeSyntax initial, MessageSource msg)
 		{
 			this.initial = initial;
 			this.msg = msg;
@@ -252,10 +247,10 @@ public class EnumAttributeHandler implements WebAttributeHandler
 	@org.springframework.stereotype.Component
 	public static class EnumAttributeHandlerFactory implements WebAttributeHandlerFactory
 	{
-		private UnityMessageSource msg;
+		private MessageSource msg;
 
 		@Autowired
-		public EnumAttributeHandlerFactory(UnityMessageSource msg)
+		public EnumAttributeHandlerFactory(MessageSource msg)
 		{
 			this.msg = msg;
 		}

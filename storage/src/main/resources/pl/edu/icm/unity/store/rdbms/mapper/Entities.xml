@@ -9,6 +9,13 @@
 	<insert id="createWithKey" parameterType="BaseB">
 		INSERT INTO ENTITIES (ID, CONTENTS) VALUES (#{id}, #{contents})
 	</insert>
+
+	<insert id="createList" parameterType="java.util.List" useGeneratedKeys="true" keyProperty="id">
+		INSERT INTO ENTITIES (CONTENTS) VALUES 
+		<foreach open="(" separator="),(" close=")" collection="list" index="index" item="element">
+			#{element.contents}
+		</foreach>
+	</insert>
 	
 	<update id="updateByKey" parameterType="BaseB">
 		UPDATE ENTITIES SET CONTENTS = #{contents} WHERE ID = #{id}
@@ -23,9 +30,13 @@
 	</select>
 
 	<select id="getByGroup" parameterType="string" resultType="BaseB">
-		select ENTITIES.* from ENTITIES, GROUP_ENTITIES, GROUPS 
-		where GROUP_ENTITIES.GROUP_ID = GROUPS.ID AND GROUP_ENTITIES.ENTITY_ID = ENTITIES.ID
-			AND GROUPS.NAME = #{value}  
+		select ENTITIES.* from ENTITIES, GROUP_ENTITIES, <include refid="io.imunity.sql.groups"/> 
+		where GROUP_ENTITIES.GROUP_ID = <include refid="io.imunity.sql.groups"/>.ID AND GROUP_ENTITIES.ENTITY_ID = ENTITIES.ID
+			AND <include refid="io.imunity.sql.groups"/>.NAME = #{value}  
+	</select>
+	
+	<select id="getCount" resultType="long">
+		SELECT COUNT(*) FROM ENTITIES
 	</select>
 
 	<delete id="deleteByKey" parameterType="long">

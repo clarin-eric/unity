@@ -1,8 +1,8 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
 	<parent>
-		<groupId>pl.edu.icm.unity</groupId>
+		<groupId>io.imunity</groupId>
 		<artifactId>unity-server-parent</artifactId>
-                <version>2.8.0-1.0.0-SNAPSHOT</version>
+		<version>3.9.0-1.0.0-SNAPSHOT</version>
 		<relativePath>../pom.xml</relativePath>
 	</parent>
 	<modelVersion>4.0.0</modelVersion>
@@ -20,21 +20,8 @@
 	<scm>
 		<connection>${scm.base}/${m.name}</connection>
 		<developerConnection>${scm.base}/${m.name}</developerConnection>
-		<tag>HEAD</tag>
+		<tag>unity-server-parent-3.9.0</tag>
 	</scm>
-
-	<distributionManagement>
-		<repository>
-			<id>unicore.eu</id>
-			<name>UNICORE repository</name>
-			<url>dav:https://unicore-dev.zam.kfa-juelich.de/maven</url>
-		</repository>
-		<snapshotRepository>
-			<id>unicore.eu</id>
-			<name>UNICORE SNAPSHOT Repository</name>
-			<url>dav:https://unicore-dev.zam.kfa-juelich.de/maven</url>
-		</snapshotRepository>
-	</distributionManagement>
 
 	<dependencies>
 		<dependency>
@@ -42,12 +29,12 @@
 			<artifactId>jackson-databind</artifactId>
 		</dependency>
 		<dependency>
-			<groupId>org.mvel</groupId>
-			<artifactId>mvel2</artifactId>
+    			<groupId>com.fasterxml.jackson.datatype</groupId>
+  				<artifactId>jackson-datatype-jsr310</artifactId>
 		</dependency>
 		<dependency>
-			<groupId>org.apache.logging.log4j</groupId>
-			<artifactId>log4j-core</artifactId>
+			<groupId>org.mvel</groupId>
+			<artifactId>mvel2</artifactId>
 		</dependency>
 		<!-- We use some spring annotations. However only for spring aware containers, 
 			the classes can be used without spring as well. -->
@@ -62,4 +49,23 @@
 			<scope>test</scope>
 		</dependency>
 	</dependencies>
+	
+	
+	<build>
+		<plugins>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-source-plugin</artifactId>
+				<executions>
+					<execution>
+						<id>attach-sources</id>
+						<phase>verify</phase>
+						<goals>
+							<goal>jar-no-fork</goal>
+						</goals>
+					</execution>
+				</executions>
+			</plugin>
+		</plugins>
+	</build>
 </project>

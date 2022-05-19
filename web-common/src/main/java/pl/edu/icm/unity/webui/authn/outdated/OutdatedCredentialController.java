@@ -15,21 +15,22 @@ import com.vaadin.ui.Component;
 import com.vaadin.ui.Component.Focusable;
 import com.vaadin.ui.VerticalLayout;
 
+import pl.edu.icm.unity.MessageSource;
 import pl.edu.icm.unity.engine.api.CredentialManagement;
 import pl.edu.icm.unity.engine.api.CredentialRequirementManagement;
 import pl.edu.icm.unity.engine.api.EntityCredentialManagement;
 import pl.edu.icm.unity.engine.api.EntityManagement;
 import pl.edu.icm.unity.engine.api.authn.LoginSession;
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
 import pl.edu.icm.unity.engine.api.session.LoginToHttpSessionBinder;
 import pl.edu.icm.unity.engine.api.utils.PrototypeComponent;
 import pl.edu.icm.unity.exceptions.EngineException;
 import pl.edu.icm.unity.exceptions.InternalException;
 import pl.edu.icm.unity.types.authn.CredentialDefinition;
-import pl.edu.icm.unity.webui.authn.StandardWebAuthenticationProcessor;
+import pl.edu.icm.unity.webui.authn.StandardWebLogoutHandler;
 import pl.edu.icm.unity.webui.authn.additional.AdditionalAuthnHandler;
 import pl.edu.icm.unity.webui.common.NotificationPopup;
 import pl.edu.icm.unity.webui.common.credentials.CredentialEditorRegistry;
+import pl.edu.icm.unity.webui.common.file.ImageAccessService;
 
 
 /**
@@ -45,21 +46,22 @@ public class OutdatedCredentialController
 	private EntityManagement entityMan;
 	private CredentialEditorRegistry credEditorReg;
 	private final AdditionalAuthnHandler additionalAuthnHandler;
+	private ImageAccessService imageAccessService;
 	
 	private long entityId;
 	private String credentialId;
 	private CredentialChangePanel ui;
 	private CredentialChangeConfiguration uiConfig;
-	private UnityMessageSource msg;
-	private StandardWebAuthenticationProcessor authnProcessor;
+	private MessageSource msg;
+	private StandardWebLogoutHandler authnProcessor;
 	private Runnable finishHandler;
 	
 	@Autowired
 	public OutdatedCredentialController(AdditionalAuthnHandler additionalAuthnHandler,
-			UnityMessageSource msg, CredentialManagement credMan,
+			MessageSource msg, CredentialManagement credMan,
 			EntityCredentialManagement ecredMan, EntityManagement entityMan,
 			CredentialRequirementManagement credReqMan,
-			CredentialEditorRegistry credEditorReg)
+			CredentialEditorRegistry credEditorReg, ImageAccessService imageAccessService)
 	{
 		this.additionalAuthnHandler = additionalAuthnHandler;
 		this.msg = msg;
@@ -67,9 +69,10 @@ public class OutdatedCredentialController
 		this.ecredMan = ecredMan;
 		this.entityMan = entityMan;
 		this.credEditorReg = credEditorReg;
+		this.imageAccessService = imageAccessService;
 	}
 
-	public void init(CredentialChangeConfiguration uiConfig, StandardWebAuthenticationProcessor authnProcessor,
+	public void init(CredentialChangeConfiguration uiConfig, StandardWebLogoutHandler authnProcessor,
 			Runnable finishHandler)
 	{
 		this.authnProcessor = authnProcessor;
@@ -87,7 +90,7 @@ public class OutdatedCredentialController
 		VerticalLayout master = new VerticalLayout();
 		master.setMargin(false);
 		master.setSizeFull();
-		ui = new CredentialChangePanel(msg, entityId, ecredMan, entityMan,
+		ui = new CredentialChangePanel(msg, entityId, imageAccessService, ecredMan, entityMan,
 					credEditorReg, credDef, additionalAuthnHandler, uiConfig,
 					() -> afterCredentialUpdate(true),
 					() -> afterCredentialUpdate(false));
@@ -124,16 +127,21 @@ public class OutdatedCredentialController
 
 	private void afterCredentialUpdate(boolean changed)
 	{
-		finishHandler.run();
-		authnProcessor.logout(true);
+		ui.setEnabled(false);
 		if (changed)
 		{
-			NotificationPopup.showSuccess(msg.getMessage("OutdatedCredentialDialog.finalOK"), 
-					msg.getMessage("OutdatedCredentialDialog.finalInfo"));
+			NotificationPopup.showWarningAutoClosing(msg.getMessage("OutdatedCredentialDialog.finalOK"), 
+					msg.getMessage("OutdatedCredentialDialog.finalInfo"), this::cleanup);
 		} else
 		{
-			NotificationPopup.showError(msg.getMessage("OutdatedCredentialDialog.finalError"), 
-					msg.getMessage("OutdatedCredentialDialog.finalInfoNotChanged"));
+			NotificationPopup.showWarningAutoClosing(msg.getMessage("OutdatedCredentialDialog.finalError"), 
+					msg.getMessage("OutdatedCredentialDialog.finalInfoNotChanged"), this::cleanup);
 		}
+	}
+	
+	private void cleanup()
+	{
+		finishHandler.run();
+		authnProcessor.logout(true);
 	}
 }

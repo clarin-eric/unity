@@ -12,21 +12,24 @@ import java.util.HashSet;
 import java.util.Optional;
 import java.util.Set;
 
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.stereotype.Component;
+
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.google.common.collect.Lists;
 import com.nimbusds.jose.JOSEException;
 import com.nimbusds.jose.JWSAlgorithm;
+import com.nimbusds.jose.jwk.Curve;
 import com.nimbusds.jwt.JWT;
 import com.nimbusds.oauth2.sdk.AuthorizationCode;
 import com.nimbusds.oauth2.sdk.AuthorizationSuccessResponse;
 import com.nimbusds.oauth2.sdk.ParseException;
 import com.nimbusds.oauth2.sdk.ResponseType;
-import com.nimbusds.oauth2.sdk.Scope;
 import com.nimbusds.oauth2.sdk.id.Audience;
 import com.nimbusds.oauth2.sdk.id.Issuer;
 import com.nimbusds.oauth2.sdk.id.Subject;
 import com.nimbusds.oauth2.sdk.token.AccessToken;
-import com.nimbusds.oauth2.sdk.token.BearerAccessToken;
 import com.nimbusds.openid.connect.sdk.AuthenticationRequest;
 import com.nimbusds.openid.connect.sdk.AuthenticationSuccessResponse;
 import com.nimbusds.openid.connect.sdk.OIDCResponseTypeValue;
@@ -36,29 +39,46 @@ import com.nimbusds.openid.connect.sdk.claims.CodeHash;
 import com.nimbusds.openid.connect.sdk.claims.IDTokenClaimsSet;
 import com.nimbusds.openid.connect.sdk.claims.UserInfo;
 
+import pl.edu.icm.unity.MessageSource;
 import pl.edu.icm.unity.engine.api.token.TokensManagement;
 import pl.edu.icm.unity.engine.api.translation.out.TranslationResult;
 import pl.edu.icm.unity.exceptions.EngineException;
 import pl.edu.icm.unity.oauth.as.OAuthSystemAttributesProvider.GrantFlow;
+import pl.edu.icm.unity.oauth.as.OAuthToken.PKCSInfo;
+import pl.edu.icm.unity.oauth.as.token.AccessTokenFactory;
 import pl.edu.icm.unity.types.basic.Attribute;
 import pl.edu.icm.unity.types.basic.DynamicAttribute;
 import pl.edu.icm.unity.types.basic.EntityParam;
 import pl.edu.icm.unity.types.basic.IdentityParam;
+import pl.edu.icm.unity.types.basic.idpStatistic.IdpStatistic.Status;
 
 /**
  * Groups OAuth related logic for processing the request and preparing the response.  
  * @author K. Benedyczak
  */
+@Component
 public class OAuthProcessor
 {
 	public static final String INTERNAL_CODE_TOKEN = "oauth2Code";
-	public static final String INTERNAL_ACCESS_TOKEN = "oauth2Access";
+
 	public static final String INTERNAL_REFRESH_TOKEN = "oauth2Refresh";
 	
+	
+	private final TokensManagement tokensMan;
+	private final OAuthTokenRepository tokenDAO;
+
+	@Autowired
+	public OAuthProcessor(TokensManagement tokensMan, OAuthTokenRepository tokenDAO,
+			ApplicationEventPublisher eventPublisher, MessageSource msg)
+	{
+		this.tokensMan = tokensMan;
+		this.tokenDAO = tokenDAO;
+	}
+
 	/**
 	 * Returns only requested attributes for which we have mapping.
 	 */
-	public Set<DynamicAttribute> filterAttributes(TranslationResult userInfo, 
+	public static Set<DynamicAttribute> filterAttributes(TranslationResult userInfo, 
 			Set<String> requestedAttributes)
 	{
 		Set<DynamicAttribute> ret = filterNotRequestedAttributes(userInfo, requestedAttributes);
@@ -70,8 +90,9 @@ public class OAuthProcessor
 	 * the internal state token, which is needed to associate further use of the code and/or id tokens with
 	 * the authorization that currently takes place.
 	 */
-	public AuthorizationSuccessResponse prepareAuthzResponseAndRecordInternalState(Collection<DynamicAttribute> attributes, 
-			IdentityParam identity,	OAuthAuthzContext ctx, TokensManagement tokensMan) 
+	public AuthorizationSuccessResponse prepareAuthzResponseAndRecordInternalState(
+			Collection<DynamicAttribute> attributes,
+			IdentityParam identity,	OAuthAuthzContext ctx, OAuthIdpStatisticReporter statReporter) 
 					throws EngineException, JsonProcessingException, ParseException, JOSEException
 	{
 		OAuthToken internalToken = new OAuthToken();
@@ -87,11 +108,14 @@ public class OAuthProcessor
 		internalToken.setTokenValidity(config.getAccessTokenValidity()); 
 		internalToken.setAudience(ctx.getClientUsername());
 		internalToken.setIssuerUri(config.getIssuerName());
-		internalToken.setCodeChallenge(ctx.getRequest().getCodeChallenge() == null ? 
-				null : ctx.getRequest().getCodeChallenge().getValue());
-		internalToken.setCodeChallengeMethod(ctx.getRequest().getCodeChallengeMethod() == null ? 
-				null : ctx.getRequest().getCodeChallengeMethod().getValue());
 		internalToken.setClientType(ctx.getClientType());
+		
+		String codeChallenge = ctx.getRequest().getCodeChallenge() == null ? 
+				null : ctx.getRequest().getCodeChallenge().getValue();
+		String codeChallengeMethod = ctx.getRequest().getCodeChallengeMethod() == null ? 
+				null : ctx.getRequest().getCodeChallengeMethod().getValue();
+		PKCSInfo pkcsInfo = new PKCSInfo(codeChallenge, codeChallengeMethod);
+		internalToken.setPkcsInfo(pkcsInfo);
 	
 		Date now = new Date();
 		
@@ -103,15 +127,19 @@ public class OAuthProcessor
 		
 		Optional<IDTokenClaimsSet> idToken = generateIdTokenIfRequested(config, ctx, responseType, 
 				internalToken, identity, userInfo, now);
-		JWSAlgorithm signingAlgorithm = config.getTokenSigner().getSigningAlgorithm();
+		TokenSigner tokenSigner = config.getTokenSigner();
+		JWSAlgorithm signingAlgorithm = tokenSigner.isPKIEnabled() ? 
+				tokenSigner.getSigningAlgorithm() : null;
+		Curve curve = tokenSigner.getCurve();
 		
 		AuthorizationSuccessResponse oauthResponse = null;
+		AccessTokenFactory accessTokenFactory = new AccessTokenFactory(config);
 		if (GrantFlow.authorizationCode == ctx.getFlow())
 		{
 			AuthorizationCode authzCode = new AuthorizationCode();
 			internalToken.setAuthzCode(authzCode.getValue());
 			
-			signAndRecordIdToken(idToken, config.getTokenSigner(), responseType, internalToken);
+			signAndRecordIdToken(idToken, tokenSigner, responseType, internalToken);
 			
 			oauthResponse = new AuthorizationSuccessResponse(ctx.getReturnURI(), authzCode, null,
 					ctx.getRequest().getState(), ctx.getRequest().impliedResponseMode());
@@ -122,7 +150,7 @@ public class OAuthProcessor
 		{
 			if (responseType.contains(OIDCResponseTypeValue.ID_TOKEN) && responseType.size() == 1)
 			{
-				Optional<JWT> idTokenSigned = signAndRecordIdToken(idToken, config.getTokenSigner(), 
+				Optional<JWT> idTokenSigned = signAndRecordIdToken(idToken, tokenSigner, 
 						responseType, internalToken);
 				//we return only the id token, no access token so we don't need an internal token.
 				return new AuthenticationSuccessResponse(
@@ -131,11 +159,11 @@ public class OAuthProcessor
 						ctx.getRequest().impliedResponseMode());
 			}
 
-			AccessToken accessToken = createAccessToken(ctx);
+			AccessToken accessToken = accessTokenFactory.create(internalToken, now);
 			internalToken.setAccessToken(accessToken.getValue());
 			
-			addAccessTokenHashIfNeededToIdToken(idToken, accessToken, signingAlgorithm, responseType);
-			Optional<JWT> idTokenSigned = signAndRecordIdToken(idToken, config.getTokenSigner(), 
+			addAccessTokenHashIfNeededToIdToken(idToken, accessToken, signingAlgorithm, responseType, curve);
+			Optional<JWT> idTokenSigned = signAndRecordIdToken(idToken, tokenSigner, 
 					responseType, internalToken);
 			
 			Date expiration = new Date(now.getTime() + config.getAccessTokenValidity() * 1000);
@@ -143,17 +171,17 @@ public class OAuthProcessor
 						ctx.getReturnURI(), null, idTokenSigned.orElse(null), 
 						accessToken, ctx.getRequest().getState(), null, 
 						ctx.getRequest().impliedResponseMode());
-			tokensMan.addToken(INTERNAL_ACCESS_TOKEN, accessToken.getValue(), 
-					new EntityParam(identity), internalToken.getSerialized(), now, expiration);
+			statReporter.reportStatus(ctx, Status.SUCCESSFUL);
+			tokenDAO.storeAccessToken(accessToken, internalToken, new EntityParam(identity), now, expiration);
 		} else if (GrantFlow.openidHybrid == ctx.getFlow())
 		{
 			//in hybrid mode authz code is returned always
 			AuthorizationCode authzCode = new AuthorizationCode();
 			internalToken.setAuthzCode(authzCode.getValue());
 			Date codeExpiration = new Date(now.getTime() + config.getCodeTokenValidity() * 1000);
-			addCodeHashIfNeededToIdToken(idToken, authzCode, signingAlgorithm, responseType);
+			addCodeHashIfNeededToIdToken(idToken, authzCode, signingAlgorithm, responseType, curve);
 
-			signAndRecordIdToken(idToken, config.getTokenSigner(), responseType, internalToken);
+			signAndRecordIdToken(idToken, tokenSigner, responseType, internalToken);
 			tokensMan.addToken(INTERNAL_CODE_TOKEN, authzCode.getValue(), 
 					new EntityParam(identity), internalToken.getSerialized(), 
 					now, codeExpiration);
@@ -162,19 +190,18 @@ public class OAuthProcessor
 			AccessToken accessToken = null;
 			if (responseType.contains(ResponseType.Value.TOKEN))
 			{
-				accessToken = createAccessToken(ctx);
+				accessToken = accessTokenFactory.create(internalToken, now);
 				internalToken.setAccessToken(accessToken.getValue());
 				Date accessExpiration = new Date(now.getTime() + config.getAccessTokenValidity() * 1000);
-				addAccessTokenHashIfNeededToIdToken(idToken, accessToken, signingAlgorithm, responseType);
+				addAccessTokenHashIfNeededToIdToken(idToken, accessToken, signingAlgorithm, responseType, curve);
 				
-				signAndRecordIdToken(idToken, config.getTokenSigner(), responseType, internalToken);
-				tokensMan.addToken(INTERNAL_ACCESS_TOKEN, accessToken.getValue(), 
-						new EntityParam(identity), internalToken.getSerialized(), 
-						now, accessExpiration);
-				
+				signAndRecordIdToken(idToken, tokenSigner, responseType, internalToken);
+				statReporter.reportStatus(ctx, Status.SUCCESSFUL);
+				tokenDAO.storeAccessToken(accessToken, internalToken, new EntityParam(identity), now, 
+						accessExpiration);
 			}
 			
-			Optional<JWT> idTokenSigned = signAndRecordIdToken(idToken, config.getTokenSigner(), 
+			Optional<JWT> idTokenSigned = signAndRecordIdToken(idToken, tokenSigner, 
 					responseType, internalToken);
 
 			oauthResponse = new AuthenticationSuccessResponse(
@@ -190,9 +217,8 @@ public class OAuthProcessor
 			ResponseType responseType, OAuthToken internalToken, IdentityParam identity, 
 			UserInfo userInfo, Date now) throws ParseException, JOSEException
 	{
-		return Optional.ofNullable(
-				ctx.isOpenIdMode() ? prepareIdInfoClaimSet(identity.getValue(), 
-					internalToken.getAudience(), ctx, userInfo, now) 
+		return Optional.ofNullable(ctx.isOpenIdMode() ? 
+				prepareIdInfoClaimSet(identity.getValue(), internalToken.getAudience(), ctx, userInfo, now) 
 				: null);
 	}
 
@@ -214,7 +240,7 @@ public class OAuthProcessor
 	 * Returns a collection of attributes including only those attributes for which there is an OAuth 
 	 * representation.
 	 */
-	private Set<DynamicAttribute> filterUnsupportedAttributes(Set<DynamicAttribute> src)
+	private static Set<DynamicAttribute> filterUnsupportedAttributes(Set<DynamicAttribute> src)
 	{
 		Set<DynamicAttribute> ret = new HashSet<>();
 		OAuthAttributeMapper mapper = new DefaultOAuthAttributeMapper();
@@ -226,7 +252,7 @@ public class OAuthProcessor
 	}
 	
 	
-	private Set<DynamicAttribute> filterNotRequestedAttributes(TranslationResult translationResult, 
+	private static Set<DynamicAttribute> filterNotRequestedAttributes(TranslationResult translationResult, 
 			Set<String> requestedAttributes)
 	{
 		Collection<DynamicAttribute> allAttrs = translationResult.getAttributes();
@@ -266,27 +292,27 @@ public class OAuthProcessor
 	}
 	
 	private void addAccessTokenHashIfNeededToIdToken(Optional<IDTokenClaimsSet> idTokenOpt, AccessToken accessToken, 
-			JWSAlgorithm jwsAlgorithm, ResponseType responseType)
+			JWSAlgorithm jwsAlgorithm, ResponseType responseType, Curve curve)
 	{
 		if (!idTokenOpt.isPresent())
 			return;
 		IDTokenClaimsSet idToken = idTokenOpt.get();
 		boolean onlyIdTokenRequested = responseType.contains(ID_TOKEN) && responseType.size() == 1; 
 		if (!onlyIdTokenRequested)
-			idToken.setAccessTokenHash(AccessTokenHash.compute(accessToken, jwsAlgorithm));
+			idToken.setAccessTokenHash(AccessTokenHash.compute(accessToken, jwsAlgorithm, curve));
 	}
 
 	private void addCodeHashIfNeededToIdToken(Optional<IDTokenClaimsSet> idTokenOpt, AuthorizationCode code, 
-			JWSAlgorithm jwsAlgorithm, ResponseType responseType)
+			JWSAlgorithm jwsAlgorithm, ResponseType responseType, Curve curve)
 	{
 		if (!idTokenOpt.isPresent())
 			return;
 		IDTokenClaimsSet idToken = idTokenOpt.get();
 		if (responseType.contains(ID_TOKEN) && responseType.contains(ResponseType.Value.CODE))
-			idToken.setCodeHash(CodeHash.compute(code, jwsAlgorithm));
+			idToken.setCodeHash(CodeHash.compute(code, jwsAlgorithm, curve));
 	}
 	
-	public UserInfo prepareUserInfoClaimSet(String userIdentity, Collection<DynamicAttribute> attributes)
+	public static UserInfo prepareUserInfoClaimSet(String userIdentity, Collection<DynamicAttribute> attributes)
 	{
 		UserInfo userInfo = new UserInfo(new Subject(userIdentity));
 		
@@ -304,25 +330,5 @@ public class OAuthProcessor
 		}
 		
 		return userInfo;
-	}
-	
-	/**
-	 * @return a properly set up access token. It contains the effective scopes if those
-	 * are different from requested.  
-	 */
-	public static AccessToken createAccessToken(OAuthAuthzContext ctx)
-	{
-		int tokenValidity = ctx.getConfig().getAccessTokenValidity();
-		return new BearerAccessToken(tokenValidity, new Scope(ctx.getEffectiveRequestedScopesList()));
-	}
-	
-	/**
-	 * @return a properly set up access token. It contains the effective scopes if those
-	 * are different from requested.  
-	 */
-	public static AccessToken createAccessToken(OAuthToken token)
-	{
-		int tokenValidity = token.getTokenValidity();
-		return new BearerAccessToken(tokenValidity, new Scope(token.getEffectiveScope()));
 	}
 }

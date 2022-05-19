@@ -16,7 +16,7 @@ import org.springframework.util.StringUtils;
 import com.vaadin.event.selection.SingleSelectionEvent;
 import com.vaadin.ui.Button.ClickEvent;
 
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
+import pl.edu.icm.unity.MessageSource;
 import pl.edu.icm.unity.types.basic.Group;
 import pl.edu.icm.unity.webui.common.chips.ChipsWithDropdown;
 import pl.edu.icm.unity.webui.common.groups.GroupSelectionHelper.GroupNameComparator;
@@ -27,43 +27,52 @@ import pl.edu.icm.unity.webui.common.groups.GroupSelectionHelper.GroupNameCompar
  */
 public class OptionalGroupsSelection extends ChipsWithDropdown<Group> implements GroupsSelection
 {
-	private UnityMessageSource msg;
+	private MessageSource msg;
 	private Set<Group> selectedWithNextChild;
+	private boolean multiSelectableGroups;
 	
-	public OptionalGroupsSelection(UnityMessageSource msg)
+	public OptionalGroupsSelection(MessageSource msg)
 	{
 		this(msg, true);
 	}
 	
-	public OptionalGroupsSelection(UnityMessageSource msg, boolean multiSelectable)
+	public OptionalGroupsSelection(MessageSource msg, boolean multiSelectable)
 	{
 		super(group -> group.getDisplayedName().getValue(msg), group -> group.getDisplayedName().getValue(msg), true);	
 		this.msg = msg;
-		if (multiSelectable)
-		{
-			
-			addChipRemovalListener(this::onMultiGroupRemoval);
-		}else
-		{
-			setMaxSelection(1);
-			addChipRemovalListener(this::onSingleGroupRemoval);
-		}
-		
+		setMultiSelectable(multiSelectable);
+		addChipRemovalListener(this::onGroupRemoval);
 		addSelectionListener(this::onGroupSelection);
 		selectedWithNextChild = new HashSet<>();
 		setComboStyleGenerator(g -> selectedWithNextChild.contains(g) ? "inactive" : "");
 	}
 	
 	@Override
-	public List<String> getSelectedGroups()
+	public List<String> getSelectedGroupsWithParents()
 	{
+		 //at selection time parents are explicitely added
 		return getSelectedItems().stream().map(group -> group.toString()).collect(Collectors.toList());
+	}
+
+	@Override
+	public List<String> getSelectedGroupsWithoutParents()
+	{
+		Set<Group> allGroupsSet = new HashSet<>(getSelectedItems());
+		return Group.getOnlyChildrenOfSet(allGroupsSet).stream().map(Group::getPathEncoded).collect(Collectors.toList());
 	}
 	
 	@Override
 	public Set<String> getItems()
 	{
 		return super.getAllItems().stream().map(g -> g.toString()).collect(Collectors.toSet());
+	}
+	
+	private void onGroupRemoval(ClickEvent event)
+	{
+		if (multiSelectableGroups)
+			onMultiGroupRemoval(event);
+		else 
+			onSingleGroupRemoval(event);
 	}
 	
 	private void onMultiGroupRemoval(ClickEvent event)
@@ -149,6 +158,13 @@ public class OptionalGroupsSelection extends ChipsWithDropdown<Group> implements
 		
 	}
 
+	@Override
+	public void setMultiSelectable(boolean multiSelectable)
+	{
+		this.multiSelectableGroups = multiSelectable;
+		setMaxSelection(multiSelectable ? 0 : 1);
+	}
+	
 	protected void sortItems(List<Group> source)
 	{
 		GroupSelectionHelper.sort(source, new GroupNameComparator(msg));

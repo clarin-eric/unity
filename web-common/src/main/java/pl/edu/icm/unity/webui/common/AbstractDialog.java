@@ -23,8 +23,8 @@ import com.vaadin.ui.UI;
 import com.vaadin.ui.VerticalLayout;
 import com.vaadin.ui.Window;
 
+import pl.edu.icm.unity.MessageSource;
 import pl.edu.icm.unity.base.utils.Log;
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
 import pl.edu.icm.unity.webui.common.safehtml.SafePanel;
 
 
@@ -54,7 +54,7 @@ public abstract class AbstractDialog extends Window implements Button.ClickListe
 	private Button enterButton;
 	private Button escapeButton;
 	protected Component contentsComponent;
-	protected UnityMessageSource msg;
+	protected MessageSource msg;
 	protected boolean lightweightWrapperPanel = false;
 	private int width = 50;
 	private int height = 50;
@@ -62,6 +62,8 @@ public abstract class AbstractDialog extends Window implements Button.ClickListe
 	private float heightEm;
 	private String confirmMessage;
 	private String cancelMessage;
+	private String confirmTooltip;
+	private String cancelTooltip;
 	
 	/**
 	 * With only one, confirm button, which usually should be labelled as 'close'. 
@@ -69,12 +71,12 @@ public abstract class AbstractDialog extends Window implements Button.ClickListe
 	 * @param caption
 	 * @param confirmM
 	 */
-	public AbstractDialog(UnityMessageSource msg, String caption, String confirmM) 
+	public AbstractDialog(MessageSource msg, String caption, String confirmM) 
 	{
 		this(msg, caption, confirmM, null);
 	}
 
-	public AbstractDialog(UnityMessageSource msg, String caption, String confirmM, String cancelM) 
+	public AbstractDialog(MessageSource msg, String caption, String confirmM, String cancelM) 
 	{
 		super(caption);
 		this.msg = msg;
@@ -85,12 +87,25 @@ public abstract class AbstractDialog extends Window implements Button.ClickListe
 		confirm = createConfirmButton();
 	}
 	
+	public AbstractDialog(MessageSource msg, String caption, String confirmM,String confirmT, String cancelM, String cancelT) 
+	{
+		super(caption);
+		this.msg = msg;
+		this.cancelMessage = cancelM;
+		this.confirmMessage = confirmM;
+		this.confirmTooltip = confirmT;
+		this.cancelTooltip = cancelT;
+		if (cancelM != null)
+			cancel = createCancelButton();
+		confirm = createConfirmButton();
+	}
+	
 	/**
 	 * Standard version with OK and cancel.
 	 * @param msg
 	 * @param caption
 	 */
-	public AbstractDialog(UnityMessageSource msg, String caption) 
+	public AbstractDialog(MessageSource msg, String caption) 
 	{
 		super(caption);
 		this.msg = msg;
@@ -116,6 +131,10 @@ public abstract class AbstractDialog extends Window implements Button.ClickListe
 	protected Button createConfirmButton()
 	{
 		Button confirm = new Button(confirmMessage == null ? msg.getMessage("ok") : confirmMessage, this);
+		if (confirmTooltip != null)
+		{
+			confirm.setDescription(confirmTooltip);
+		}
 		confirm.setId("AbstractDialog.confirm");
 		confirm.addStyleName("u-dialog-confirm");
 		return confirm;
@@ -123,9 +142,13 @@ public abstract class AbstractDialog extends Window implements Button.ClickListe
 
 	protected Button createCancelButton()
 	{
-		Button confirm = new Button(cancelMessage == null ? msg.getMessage("cancel") : cancelMessage, this);
-		confirm.addStyleName("u-dialog-cancel");
-		return confirm;
+		Button cancel = new Button(cancelMessage == null ? msg.getMessage("cancel") : cancelMessage, this);
+		if (cancelTooltip != null)
+		{
+			cancel.setDescription(cancelTooltip);
+		}
+		cancel.addStyleName("u-dialog-cancel");
+		return cancel;
 	}
 	
 	/**

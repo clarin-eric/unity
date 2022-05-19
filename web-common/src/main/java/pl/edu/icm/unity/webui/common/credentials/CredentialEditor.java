@@ -4,6 +4,10 @@
  */
 package pl.edu.icm.unity.webui.common.credentials;
 
+import java.util.Optional;
+
+import com.vaadin.ui.Component;
+
 import pl.edu.icm.unity.engine.api.authn.local.LocalCredentialVerificator;
 import pl.edu.icm.unity.exceptions.EngineException;
 import pl.edu.icm.unity.exceptions.IllegalCredentialException;
@@ -23,9 +27,9 @@ public interface CredentialEditor
 	/**
 	 * @param credentialInfo extra information about the credential as returned by the credential's verificator
 	 * {@link LocalCredentialVerificator#checkCredentialState(String)}.
-	 * @return the viewer component, or null if there is nothing to show
+	 * @return the viewer component, or empty optional if there is nothing to show
 	 */
-	ComponentsContainer getViewer(String credentialInfo);
+	Optional<Component> getViewer(String credentialInfo);
 	
 	
 	/**
@@ -40,4 +44,14 @@ public interface CredentialEditor
 	 * @param error either an error or null to clear the previous error.
 	 */
 	void setCredentialError(EngineException error);
+
+	/**
+	 * Indicate, if changes made in credential should result in credential removal instead of update.
+	 * @return  true, if the credential should be removed and not updated
+	 * 			false, otherwise
+	 */
+	default boolean isCredentialCleared()
+	{
+		return false;
+	}
 }

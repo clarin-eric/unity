@@ -4,20 +4,19 @@
  */
 package pl.edu.icm.unity.saml.sp;
 
+import java.security.PublicKey;
 import java.security.cert.X509Certificate;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 
-import org.apache.log4j.Logger;
+import org.apache.logging.log4j.Logger;
 
 import eu.emi.security.authn.x509.X509Credential;
-import eu.unicore.samly2.SAMLConstants;
-import eu.unicore.samly2.trust.CheckingMode;
-import eu.unicore.samly2.trust.SamlTrustChecker;
-import eu.unicore.samly2.trust.StrictSamlTrustChecker;
 import eu.unicore.util.configuration.ConfigurationException;
 import eu.unicore.util.configuration.DocumentationReferenceMeta;
 import eu.unicore.util.configuration.DocumentationReferencePrefix;
@@ -37,7 +36,7 @@ import xmlbeans.org.oasis.saml2.assertion.NameIDType;
  */
 public class SAMLSPProperties extends SamlProperties
 {
-	private static final Logger log = Log.getLegacyLogger(Log.U_SERVER_CFG, SAMLSPProperties.class);
+	private static final Logger log = Log.getLogger(Log.U_SERVER_CFG, SAMLSPProperties.class);
 	
 	public enum MetadataSignatureValidation {require, ignore};
 	
@@ -45,7 +44,7 @@ public class SAMLSPProperties extends SamlProperties
 	public static final String P = "unity.saml.requester.";
 	
 	@DocumentationReferenceMeta
-	public final static Map<String, PropertyMD> META = new HashMap<String, PropertyMD>();
+	public final static Map<String, PropertyMD> META = new HashMap<>();
 	
 	public static final String REQUESTER_ID = "requesterEntityId";
 	public static final String CREDENTIAL = "requesterCredential";
@@ -60,8 +59,12 @@ public class SAMLSPProperties extends SamlProperties
 
 	public static final String IDPMETA_PREFIX = "metadataSource.";
 	public static final String IDPMETA_TRANSLATION_PROFILE = "perMetadataTranslationProfile";
+	public static final String IDPMETA_EMBEDDED_TRANSLATION_PROFILE = "perMetadataEmbeddedTranslationProfile";
 	public static final String IDPMETA_REGISTRATION_FORM = "perMetadataRegistrationForm";
 	
+	
+	public static final String IDP_FEDERATION_ID = "samlFederationId";
+	public static final String IDP_FEDERATION_NAME = "samlFederationName";
 	public static final String IDP_PREFIX = "remoteIdp.";
 	public static final String IDP_NAME = "name";
 	public static final String IDP_LOGO = "logoURI";
@@ -75,6 +78,7 @@ public class SAMLSPProperties extends SamlProperties
 	public static final String IDP_GROUP_MEMBERSHIP_ATTRIBUTE = "groupMembershipAttribute";
 	
 	public static final String DEFAULT_TRANSLATION_PROFILE = "sys:saml";
+	public static final Binding DEFAULT_IDP_BINDING = Binding.HTTP_REDIRECT;
 	
 	static
 	{
@@ -88,7 +92,7 @@ public class SAMLSPProperties extends SamlProperties
 				"There must be at least one IdP defined. If there are multiple ones defined, then the user can choose which one to use."));
 		META.put(IDP_ADDRESS, new PropertyMD().setStructuredListEntry(IDP_PREFIX).setCategory(idp).setDescription(
 				"Address of the IdP endpoint."));
-		META.put(IDP_BINDING, new PropertyMD(Binding.HTTP_REDIRECT).setStructuredListEntry(IDP_PREFIX).setCategory(idp).setDescription(
+		META.put(IDP_BINDING, new PropertyMD(DEFAULT_IDP_BINDING).setStructuredListEntry(IDP_PREFIX).setCategory(idp).setDescription(
 				"SAML binding to be used to send a request to the IdP. If you use 'SOAP' here then the IdP will be available only for ECP logins, not via the web browser login."));
 		META.put(REDIRECT_LOGOUT_URL, new PropertyMD().setStructuredListEntry(IDP_PREFIX).setCategory(idp).setDescription(
 				"Address of the IdP Single Logout Endpoint supporting HTTP Redirect binding."));
@@ -111,6 +115,12 @@ public class SAMLSPProperties extends SamlProperties
 				+ "The value can be a file:, http(s): or data: URI. The last option allows for embedding the logo in the configuration. "
 				+ "The property can have subkeys being "
 				+ "locale names; then the localized value is used if it is matching the selected locale of the UI."));
+		
+		META.put(IDP_FEDERATION_ID, new PropertyMD().setStructuredListEntry(IDP_PREFIX).setCategory(idp).setHidden().setDescription(
+				"SAML federation identifier of the IdP."));
+		META.put(IDP_FEDERATION_NAME, new PropertyMD().setStructuredListEntry(IDP_PREFIX).setCategory(idp).setHidden().setDescription(
+				"SAML federation name of the IdP."));
+		
 		META.put(IDP_ID, new PropertyMD().setStructuredListEntry(IDP_PREFIX).setMandatory().setCategory(idp).setDescription(
 				"SAML entity identifier of the IdP."));
 		META.put(IDP_CERTIFICATE, new PropertyMD().setStructuredListEntry(IDP_PREFIX).setCategory(idp).setDescription(
@@ -136,10 +146,15 @@ public class SAMLSPProperties extends SamlProperties
 				setDescription("Name of a translation" +
 				" profile, which will be used to map remotely obtained attributes and identity" +
 				" to the local counterparts. The profile should at least map the remote identity."));
+		META.put(CommonWebAuthnProperties.EMBEDDED_TRANSLATION_PROFILE, new PropertyMD().setCategory(idp).setHidden()
+				.setStructuredListEntry(IDP_PREFIX)
+				.setDescription("Translation"
+						+ " profile, which will be used to map remotely obtained attributes and identity"
+						+ " to the local counterparts. The profile should at least map the remote identity."));
 		META.put(CommonWebAuthnProperties.REGISTRATION_FORM, new PropertyMD().setCategory(idp).setStructuredListEntry(IDP_PREFIX).setDescription(
 				"Name of a registration form to be shown for a remotely authenticated principal who " +
 				"has no local account. If unset such users will be denied."));	
-		META.put(CommonWebAuthnProperties.ENABLE_ASSOCIATION, new PropertyMD().setCategory(idp).
+		META.put(CommonWebAuthnProperties.ENABLE_ASSOCIATION, new PropertyMD().setBoolean().setCategory(idp).
 				setStructuredListEntry(IDP_PREFIX).setDescription(
 				"If true then unknown remote user gets an option to associate the remote identity "
 				+ "with an another local (already existing) account. Overrides the global setting."));	
@@ -182,6 +197,12 @@ public class SAMLSPProperties extends SamlProperties
 				setStructuredListEntry(IDPMETA_PREFIX).setDescription(
 				"Deafult translation profile for all the IdPs from the metadata. "
 				+ "Can be overwritten by individual IdP configuration entries."));
+		
+		META.put(IDPMETA_EMBEDDED_TRANSLATION_PROFILE, new PropertyMD().setCategory(remoteMeta).setHidden().
+				setStructuredListEntry(IDPMETA_PREFIX).setDescription(
+				"Deafult translation profile for all the IdPs from the metadata. "
+				+ "Can be overwritten by individual IdP configuration entries."));
+		
 		META.put(IDPMETA_REGISTRATION_FORM, new PropertyMD().setCategory(remoteMeta).
 				setStructuredListEntry(IDPMETA_PREFIX).setDescription(
 				"Deafult registration form for all the IdPs from the metadata. Can be overwritten by "
@@ -216,8 +237,6 @@ public class SAMLSPProperties extends SamlProperties
 
 	/**
 	 * For cloning only.
-	 * @param pkiMan
-	 * @throws ConfigurationException
 	 */
 	protected SAMLSPProperties(SAMLSPProperties cloned) throws ConfigurationException
 	{
@@ -250,7 +269,7 @@ public class SAMLSPProperties extends SamlProperties
 				throw new ConfigurationException("IdP " + name + " is configured to use " +
 						"HTTP Redirect binding or SOAP binding for ECP and at "
 						+ "the same time Unity is configured to sign requests for this IdP. "
-						+ "This is unsupported currently and against SAML interoperability specification.");
+						+ "This is unsupported.");
 			}
 			
 		}
@@ -275,7 +294,7 @@ public class SAMLSPProperties extends SamlProperties
 		Set<String> certs;
 		try
 		{
-			certs = pkiManagement.getCertificateNames();
+			certs = pkiManagement.getAllCertificateNames();
 		} catch (EngineException e)
 		{
 			throw new ConfigurationException("Can't retrieve available certificates", e);
@@ -297,12 +316,11 @@ public class SAMLSPProperties extends SamlProperties
 			}
 		}
 		
-		//test drive
-		getTrustChecker();
+		verifyTrustdedCertificatesExistence();
 		
 		if (getBooleanValue(PUBLISH_METADATA) && !isSet(METADATA_PATH))
 			throw new ConfigurationException("Metadata path " + getKeyDescription(METADATA_PATH) + 
-					" must be set if metadata publication is enabled.");
+					" must be set if CheckingMode modemetadata publication is enabled.");
 	}
 	
 	@Override
@@ -328,34 +346,43 @@ public class SAMLSPProperties extends SamlProperties
 		}
 	}
 	
-	public SamlTrustChecker getTrustChecker() throws ConfigurationException
+	private void verifyTrustdedCertificatesExistence() throws ConfigurationException
 	{
 		Set<String> idpKeys = getStructuredListKeys(IDP_PREFIX);
-		CheckingMode mode = getBooleanValue(REQUIRE_SIGNED_ASSERTION) ? 
-					CheckingMode.REQUIRE_SIGNED_ASSERTION : 
-					CheckingMode.REQUIRE_SIGNED_RESPONSE_OR_ASSERTION;
-		StrictSamlTrustChecker trustChecker = new StrictSamlTrustChecker(mode);
 		for (String idpKey: idpKeys)
 		{
-			String idpId = getValue(idpKey+IDP_ID);
 			Set<String> idpCertNames = getCertificateNames(idpKey);
-			
 			for (String idpCertName: idpCertNames)
 			{
-				X509Certificate idpCert;
 				try
 				{
-					idpCert = pkiManagement.getCertificate(idpCertName);
+					pkiManagement.getCertificate(idpCertName);
 				} catch (EngineException e)
 				{
 					throw new ConfigurationException("Remote SAML IdP certificate can not be loaded " 
 							+ idpCertName, e);
 				}
-				trustChecker.addTrustedIssuer(idpId, SAMLConstants.NFORMAT_ENTITY, 
-						idpCert.getPublicKey());
 			}
 		}
-		return trustChecker;
+	}
+	
+	public List<PublicKey> getPublicKeysOfIdp(String idpKey)
+	{
+		Set<String> idpCertNames = getCertificateNames(idpKey);
+		List<PublicKey> keys = new ArrayList<>();
+		for (String idpCertName: idpCertNames)
+		{
+			try
+			{
+				X509Certificate idpCert = pkiManagement.getCertificate(idpCertName).value;
+				keys.add(idpCert.getPublicKey());
+			} catch (EngineException e)
+			{
+				throw new ConfigurationException("Remote SAML IdP certificate can not be loaded " 
+						+ idpCertName, e);
+			}
+		}
+		return keys;
 	}
 	
 	public Set<String> getCertificateNames(String idpKey)
@@ -404,27 +431,20 @@ public class SAMLSPProperties extends SamlProperties
 			return false;
 		}
 		String translatioProfile = getValue(key + CommonWebAuthnProperties.TRANSLATION_PROFILE);
-		if (translatioProfile == null || translatioProfile.isEmpty())
+		String embeddedTranslatioProfile = getValue(
+				key + CommonWebAuthnProperties.EMBEDDED_TRANSLATION_PROFILE);
+		if ((translatioProfile == null || translatioProfile.isEmpty())
+				&& (embeddedTranslatioProfile == null || embeddedTranslatioProfile.isEmpty()))
 		{
 			log.warn("No translation profile for " + entityId + " ignoring IdP");
 			return false;
-		}		
+		}
 		return true;
 	}
 	
 	public String getIdPConfigKey(NameIDType requester)
 	{
-		Set<String> allowedKeys = getStructuredListKeys(IDP_PREFIX);
-		for (String allowedKey: allowedKeys)
-		{
-			String name = getValue(allowedKey + IDP_ID);
-			if (name == null)
-				continue;
-			if (!name.equals(requester.getStringValue()))
-				continue;
-			return allowedKey;
-		}
-		return null;
+		return getPrefixOfIdP(requester.getStringValue());
 	}
 	
 	/**

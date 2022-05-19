@@ -33,7 +33,7 @@ import pl.edu.icm.unity.engine.api.authn.InvocationContext;
 import pl.edu.icm.unity.engine.api.authn.LoginSession;
 import pl.edu.icm.unity.engine.api.token.TokensManagement;
 import pl.edu.icm.unity.exceptions.EngineException;
-import pl.edu.icm.unity.rest.jwt.JWTAuthenticationProperties;
+import pl.edu.icm.unity.rest.jwt.JWTAuthenticationConfig;
 import pl.edu.icm.unity.rest.jwt.JWTUtils;
 import pl.edu.icm.unity.stdext.identity.PersistentIdentity;
 import pl.edu.icm.unity.types.basic.Entity;
@@ -50,15 +50,15 @@ public class JWTManagement
 	private static final Logger log = Log.getLogger(Log.U_SERVER_REST, JWTManagement.class);
 	public static final String JWT_TOKEN_ID = "simpleJWT";
 	
-	private TokensManagement tokensMan;
-	private EntityManagement identitiesMan;
-	private PKIManagement pkiManagement;
-	private String audience;
-	private String issuer;
-	private JWTAuthenticationProperties config;
+	private final TokensManagement tokensMan;
+	private final EntityManagement identitiesMan;
+	private final PKIManagement pkiManagement;
+	private final String audience;
+	private final String issuer;
+	private final JWTAuthenticationConfig config;
 
 	public JWTManagement(TokensManagement tokensMan, PKIManagement pkiManagement, EntityManagement identitiesMan,
-			String realm, String address, JWTAuthenticationProperties config)
+			String realm, String address, JWTAuthenticationConfig config)
 	{
 		this.tokensMan = tokensMan;
 		this.pkiManagement = pkiManagement;
@@ -131,7 +131,7 @@ public class JWTManagement
 	private String generateCommon(X509Credential signingCred, String persistentId, EntityParam entityId)
 	{
 		Date now = new Date();
-		long ttl = 1000 * config.getIntValue(JWTAuthenticationProperties.TOKEN_TTL);
+		long ttl = 1000 * config.tokenTTLSeconds;
 		Date expiration = new Date(now.getTime() + ttl);
 		String id = UUID.randomUUID().toString();
 		
@@ -179,7 +179,7 @@ public class JWTManagement
 	
 	private X509Credential getCredential()
 	{
-		String credential = config.getValue(JWTAuthenticationProperties.SIGNING_CREDENTIAL);
+		String credential = config.signingCredential;
 		try
 		{
 			return pkiManagement.getCredential(credential);
@@ -197,7 +197,7 @@ public class JWTManagement
 			return JWTUtils.parseAndValidate(token, signingCred);
 		} catch (ParseException|JOSEException e1)
 		{
-			log.debug("Received invalid JWT to be refreshed", e1);
+			log.warn("Received invalid JWT to be refreshed", e1);
 			throw new BadRequestException(e1);
 		}
 	}

@@ -7,6 +7,7 @@ package pl.edu.icm.unity.engine.api;
 import java.io.File;
 
 import pl.edu.icm.unity.exceptions.EngineException;
+import pl.edu.icm.unity.types.basic.DBDumpContentElements;
 
 /**
  * Provides access to general maintenance operations.
@@ -24,11 +25,12 @@ public interface ServerManagement
 	public void resetDatabase() throws EngineException;
 	
 	/**
-	 * Exports the whole database contents to a JSON file.
+	 * Exports database contents to a JSON file.
+	 * @param content dump content type
 	 * @return the file reference
 	 * @throws EngineException
 	 */
-	public File exportDb() throws EngineException;
+	public File exportDb(DBDumpContentElements content) throws EngineException;
 	
 	/**
 	 * Imports the whole database from a given JSON file

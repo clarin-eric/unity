@@ -9,6 +9,7 @@ import java.net.URISyntaxException;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 import org.apache.logging.log4j.Logger;
@@ -23,18 +24,20 @@ import com.nimbusds.oauth2.sdk.client.ClientType;
 import com.nimbusds.openid.connect.sdk.AuthenticationRequest;
 import com.nimbusds.openid.connect.sdk.OIDCResponseTypeValue;
 import com.nimbusds.openid.connect.sdk.OIDCScopeValue;
+import com.nimbusds.openid.connect.sdk.Prompt;
 
 import pl.edu.icm.unity.base.utils.Log;
 import pl.edu.icm.unity.engine.api.AttributesManagement;
 import pl.edu.icm.unity.engine.api.EntityManagement;
-import pl.edu.icm.unity.engine.api.idp.CommonIdPProperties;
 import pl.edu.icm.unity.oauth.as.OAuthASProperties;
 import pl.edu.icm.unity.oauth.as.OAuthAuthzContext;
-import pl.edu.icm.unity.oauth.as.OAuthAuthzContext.ScopeInfo;
 import pl.edu.icm.unity.oauth.as.OAuthRequestValidator;
 import pl.edu.icm.unity.oauth.as.OAuthSystemAttributesProvider;
 import pl.edu.icm.unity.oauth.as.OAuthSystemAttributesProvider.GrantFlow;
+import pl.edu.icm.unity.oauth.as.OAuthSystemScopeProvider;
 import pl.edu.icm.unity.oauth.as.OAuthValidationException;
+import pl.edu.icm.unity.oauth.as.OAuthScope;
+import pl.edu.icm.unity.oauth.as.OAuthScopesService;
 import pl.edu.icm.unity.stdext.identity.UsernameIdentity;
 import pl.edu.icm.unity.types.basic.AttributeExt;
 import pl.edu.icm.unity.types.basic.Entity;
@@ -58,11 +61,12 @@ class OAuthWebRequestValidator
 	
 	public OAuthWebRequestValidator(OAuthASProperties oauthConfig, 
 			EntityManagement identitiesMan,
-			AttributesManagement attributesMan)
+			AttributesManagement attributesMan,
+			OAuthScopesService scopeService)
 	{
 		this.oauthConfig = oauthConfig;
 		this.identitiesMan = identitiesMan;
-		this.baseRequestValidator = new OAuthRequestValidator(oauthConfig, identitiesMan, attributesMan);
+		this.baseRequestValidator = new OAuthRequestValidator(oauthConfig, identitiesMan, attributesMan, scopeService);
 	}
 
 	/**
@@ -148,21 +152,69 @@ class OAuthWebRequestValidator
 		else
 			context.setUsersGroup(oauthConfig.getValue(OAuthASProperties.USERS_GROUP));
 		
-		context.setTranslationProfile(oauthConfig.getValue(CommonIdPProperties.TRANSLATION_PROFILE));
+		context.setTranslationProfile(oauthConfig.getOutputTranslationProfile());
 
-		Scope requestedScopes = authzRequest.getScope();
-		if (requestedScopes != null)
-		{
-			List<ScopeInfo> validRequestedScopes = baseRequestValidator
-					.getValidRequestedScopes(requestedScopes);
-			validRequestedScopes.forEach(si -> context.addEffectiveScopeInfo(si));
-			requestedScopes.forEach(si -> context.addRequestedScope(si.getValue()));
-		}
+		validateAndRecordPrompt(context, authzRequest);
+		
+		validateAndRecordScopes(attributes, context, authzRequest);
 		
 		if (context.getClientType() == ClientType.PUBLIC)
 			validatePKCEIsUsedForCodeFlow(authzRequest, client);
+		
 	}
 
+	private void validateAndRecordPrompt(OAuthAuthzContext context, AuthorizationRequest authzRequest)
+			throws OAuthValidationException
+	{
+		if (authzRequest.getPrompt() != null)
+		{
+			Prompt requestedPrompt = authzRequest.getPrompt();
+			if (requestedPrompt.contains(Prompt.Type.SELECT_ACCOUNT) || requestedPrompt.contains(Prompt.Type.CREATE))
+			{
+				throw new OAuthValidationException("Prompt " + requestedPrompt + " is not supported");
+			}
+
+			requestedPrompt.forEach(p -> context
+					.addPrompt(pl.edu.icm.unity.oauth.as.OAuthAuthzContext.Prompt.valueOf(p.toString().toUpperCase())));
+		}
+	}
+
+	private void validateAndRecordScopes(Map<String, AttributeExt> clientAttributes, OAuthAuthzContext context, AuthorizationRequest authzRequest)
+			throws OAuthValidationException
+	{
+		Scope requestedScopes = authzRequest.getScope();
+		if (requestedScopes != null)
+		{
+			List<OAuthScope> validRequestedScopes = baseRequestValidator.getValidRequestedScopes(clientAttributes, requestedScopes);
+			Optional<OAuthScope> offlineScope = validRequestedScopes.stream()
+					.filter(s -> s.name.equals(OAuthSystemScopeProvider.OFFLINE_ACCESS_SCOPE)).findAny();
+
+			if (!offlineScope.isEmpty()
+					&& !context.getPrompts().contains(pl.edu.icm.unity.oauth.as.OAuthAuthzContext.Prompt.CONSENT))
+			{
+				log.info("Client requested " + OAuthSystemScopeProvider.OFFLINE_ACCESS_SCOPE
+						+ " with scope, but the prompt parameter not contains 'consent', ignore offline_access scope");
+				validRequestedScopes.remove(offlineScope.get());
+			}
+
+			assertScopeSupportedByServer(OIDCScopeValue.OPENID, requestedScopes, validRequestedScopes);
+
+			validRequestedScopes.forEach(si -> context.addEffectiveScopeInfo(si));
+			requestedScopes.forEach(si -> context.addRequestedScope(si.getValue()));
+		}
+	}
+	
+	private void assertScopeSupportedByServer(OIDCScopeValue scope, Scope requestedScopes, List<OAuthScope> validRequestedScopes) throws OAuthValidationException
+	{
+		boolean scopeRequested = requestedScopes.contains(scope.getValue());
+		boolean scopeAvailable = validRequestedScopes.stream()
+				.filter(vscope -> vscope.name.equals(scope.getValue())).findAny().isPresent();
+		if (scopeRequested && !scopeAvailable)
+			throw new OAuthValidationException("Client requested " + scope.getValue() + " with scope, which is "
+					+ "not enabled on this server");
+		
+	}
+	
 	private void validatePKCEIsUsedForCodeFlow(AuthorizationRequest authzRequest, String client) throws OAuthValidationException
 	{
 		ResponseType responseType = authzRequest.getResponseType();
@@ -184,7 +236,7 @@ class OAuthWebRequestValidator
 			requestedURI = new URI(redirect);
 		} catch (URISyntaxException e)
 		{
-			log.debug("Requested URI parsing problem", e);
+			log.warn("Requested URI parsing problem", e);
 			throw new OAuthValidationException("The requested return address '" + redirect + 
 					"' can not be parsed as URI");
 		}

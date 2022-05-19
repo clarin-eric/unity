@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="pl.edu.icm.unity.store.impl.audit.AuditEventMapper">
+	<resultMap id="auditEventResult" type="AuditEventB">
+		<result property="id" column="ID"/>
+		<result property="name" column="NAME"/>
+		<result property="timestamp" column="TIMESTAMP"/>
+		<result property="type" column="TYPE"/>
+		<result property="subjectId" column="SUBJECT_ID"/>
+		<result property="subjectEntityId" column="SUBJECT_ENTITY_ID"/>
+		<result property="subjectName" column="SUBJECT_NAME"/>
+		<result property="subjectEmail" column="SUBJECT_EMAIL"/>
+		<result property="initiatorId" column="INITIATOR_ID"/>
+		<result property="initiatorEntityId" column="INITIATOR_ENTITY_ID"/>
+		<result property="initiatorName" column="INITIATOR_NAME"/>
+		<result property="initiatorEmail" column="INITIATOR_EMAIL"/>
+		<result property="action" column="ACTION"/>
+		<result property="contents" column="CONTENTS"/>
+		<collection property="tags" ofType="String" javaType="java.util.HashSet">
+			<result column="TAG" />
+		</collection>
+	</resultMap>
+	
+	<insert id="create" parameterType="AuditEventB" useGeneratedKeys="true" keyProperty="id">
+		INSERT INTO AUDIT_EVENTS (NAME, TIMESTAMP , TYPE, SUBJECT_ID, INITIATOR_ID, ACTION, CONTENTS)
+			VALUES (#{name}, #{timestamp}, #{type}, #{subjectId}, #{initiatorId}, #{action}, #{contents})
+	</insert>
+
+	<insert id="createWithKey" parameterType="EventB">
+		INSERT INTO AUDIT_EVENTS (ID, NAME, TIMESTAMP , TYPE, SUBJECT_ID, INITIATOR_ID, ACTION, CONTENTS)
+			VALUES (#{id}, #{timestamp}, #{type}, #{subjectId}, #{initiatorId}, #{action}, #{contents})
+	</insert>
+
+	<sql id="getWithJoin">
+		SELECT EVENT.ID, EVENT.NAME, EVENT.TIMESTAMP, EVENT.TYPE, EVENT.ACTION, EVENT.CONTENTS,
+       		SUBJ.ID AS SUBJECT_ID, SUBJ.ENTITY_ID AS SUBJECT_ENTITY_ID, SUBJ.NAME AS SUBJECT_NAME, SUBJ.EMAIL AS SUBJECT_EMAIL,
+       		INIT.ID AS INITIATOR_ID, INIT.ENTITY_ID AS INITIATOR_ENTITY_ID, INIT.NAME AS INITIATOR_NAME, INIT.EMAIL AS INITIATOR_EMAIL,
+       		AT.TAG AS TAG
+	  	FROM AUDIT_EVENTS AS EVENT
+       		LEFT JOIN AUDIT_ENTITIES AS SUBJ ON EVENT.SUBJECT_ID = SUBJ.ID
+       		LEFT JOIN AUDIT_ENTITIES AS INIT ON EVENT.INITIATOR_ID = INIT.ID
+       		LEFT JOIN AUDIT_EVENTS_TAGS AET ON EVENT.ID = AET.EVENT_ID
+       		LEFT JOIN AUDIT_TAGS AT ON AET.TAG_ID = AT.ID
+	</sql>
+
+	<select id="getAll" resultMap="auditEventResult">
+		<include refid="getWithJoin"/>
+		ORDER BY EVENT.TIMESTAMP DESC
+	</select>
+
+	<select id="getOrderedLogs" resultMap="auditEventResult">
+		<include refid="getWithJoin"/>
+		<if test="from != null and until != null">
+			WHERE EVENT.TIMESTAMP &gt;= #{from} AND EVENT.TIMESTAMP &lt;= #{until}
+		</if>
+		<if test="from != null and until == null">
+			WHERE EVENT.TIMESTAMP &gt;= #{from}
+		</if>
+		<if test="from == null and until != null">
+			WHERE EVENT.TIMESTAMP &lt;= #{until}
+		</if>
+		<if test="from == null and until == null">
+			WHERE EVENT.TIMESTAMP &gt; <include refid="io.imunity.sql.beginningOfEpoch"/>
+		</if>
+		ORDER BY ${order} ${direction}
+		LIMIT #{limit}
+	</select>
+
+	<select id="getByKey" parameterType="long" resultMap="auditEventResult">
+		<include refid="getWithJoin"/>
+		WHERE EVENT.ID = #{id}
+	</select>
+
+	<delete id="deleteByKey" parameterType="long">
+		DELETE FROM AUDIT_EVENTS WHERE ID = #{value}
+	</delete>
+
+	<delete id="deleteAll">
+		DELETE FROM AUDIT_EVENTS
+	</delete>
+
+	<!-- custom -->
+	<select id="getAuditEntityId" parameterType="AuditEntityB" resultType="long">
+		SELECT ID FROM AUDIT_ENTITIES WHERE
+				ENTITY_ID=#{entityId}
+			and
+				<if test="name != null"> NAME=#{name} </if>
+				<if test="name == null"> NAME is null </if>
+			and
+				<if test="email != null"> EMAIL=#{email} </if>
+				<if test="email == null"> EMAIL is null </if>
+	</select>
+
+	<insert id="createAuditEntity" parameterType="AuditEntityB" useGeneratedKeys="true" keyProperty="id">
+		INSERT INTO AUDIT_ENTITIES (ENTITY_ID, NAME, EMAIL)
+			VALUES (#{entityId}, #{name}, #{email})
+	</insert>
+
+	<select id="getAllTags" resultType="string">
+		SELECT TAG FROM AUDIT_TAGS;
+	</select>
+
+	<insert id="createTag">
+		INSERT INTO AUDIT_TAGS (TAG) VALUES (#{tag})
+	</insert>
+
+	<insert id="insertAuditTags">
+	INSERT INTO AUDIT_EVENTS_TAGS SELECT #{eventId},ID FROM AUDIT_TAGS WHERE TAG IN (
+	<foreach collection="tagList" item="item" index="index" separator=",">
+		#{item}
+	</foreach>
+	)
+	</insert>
+</mapper>

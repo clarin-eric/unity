@@ -6,7 +6,8 @@ package pl.edu.icm.unity.engine.credential;
 
 import java.util.Set;
 
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
+import pl.edu.icm.unity.MessageSource;
+import pl.edu.icm.unity.engine.api.CredentialRequirementManagement;
 import pl.edu.icm.unity.types.authn.CredentialRequirements;
 
 /**
@@ -16,9 +17,9 @@ import pl.edu.icm.unity.types.authn.CredentialRequirements;
  */
 public class SystemAllCredentialRequirements extends CredentialRequirements
 {
-	public static final String NAME = "sys:all";
+	public static final String NAME = CredentialRequirementManagement.DEFAULT_CREDENTIAL_REQUIREMENT;
 
-	public SystemAllCredentialRequirements(UnityMessageSource msg, Set<String> allCredentials)
+	public SystemAllCredentialRequirements(MessageSource msg, Set<String> allCredentials)
 	{
 		super(NAME, msg.getMessage("CredentialRequirements.systemCredentialRequirements.desc"), allCredentials);
 		setReadOnly(true);

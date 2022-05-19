@@ -23,12 +23,14 @@ import com.nimbusds.oauth2.sdk.token.RefreshToken;
 import pl.edu.icm.unity.base.token.Token;
 import pl.edu.icm.unity.base.utils.Log;
 import pl.edu.icm.unity.engine.api.authn.InvocationContext;
+import pl.edu.icm.unity.engine.api.authn.LoginSession;
 import pl.edu.icm.unity.engine.api.token.TokensManagement;
 import pl.edu.icm.unity.exceptions.EngineException;
 import pl.edu.icm.unity.oauth.as.OAuthASProperties;
 import pl.edu.icm.unity.oauth.as.OAuthProcessor;
 import pl.edu.icm.unity.oauth.as.OAuthToken;
-import pl.edu.icm.unity.oauth.as.token.AccessTokenResource.OAuthErrorException;
+import pl.edu.icm.unity.oauth.as.OAuthToken.PKCSInfo;
+import pl.edu.icm.unity.oauth.as.OAuthTokenRepository;
 import pl.edu.icm.unity.store.api.tx.TransactionalRunner;
 import pl.edu.icm.unity.types.basic.EntityParam;
 
@@ -43,16 +45,25 @@ class AuthzCodeHandler
 	private TokensManagement tokensManagement;
 	private OAuthASProperties config;
 	private TransactionalRunner tx;
+	private AccessTokenFactory accessTokenFactory;
+	private OAuthTokenRepository oauthTokenDAO;
+	private OAuthTokenStatisticPublisher statisticsPublisher;
 	
-	AuthzCodeHandler(TokensManagement tokensManagement, OAuthASProperties config, TransactionalRunner tx)
+	AuthzCodeHandler(TokensManagement tokensManagement, OAuthTokenRepository oauthTokenDAO,
+			OAuthASProperties config, TransactionalRunner tx, 
+			AccessTokenFactory accesstokenFactory,
+			OAuthTokenStatisticPublisher statisticsPublisher)
 	{
 		this.tokensManagement = tokensManagement;
+		this.oauthTokenDAO = oauthTokenDAO;
 		this.config = config;
 		this.tx = tx;
+		this.accessTokenFactory = accesstokenFactory;
+		this.statisticsPublisher = statisticsPublisher;
 	}
 
 
-	Response handleAuthzCodeFlow(String code, String redirectUri, String codeVerifier)
+	Response handleAuthzCodeFlow(String code, String redirectUri, String codeVerifier, String acceptHeader)
 			throws EngineException, JsonProcessingException
 	{
 		TokensPair tokensPair;
@@ -61,6 +72,7 @@ class AuthzCodeHandler
 			tokensPair = loadAndRemoveAuthzCodeToken(code);
 		} catch (OAuthErrorException e)
 		{
+			statisticsPublisher.reportFailAsLoggedClient();
 			return e.response;
 		}
 
@@ -69,48 +81,56 @@ class AuthzCodeHandler
 
 		try
 		{
-			verifyPKCE(parsedAuthzCodeToken, codeVerifier);
+			verifyPKCE(parsedAuthzCodeToken.getPkcsInfo(), parsedAuthzCodeToken.getClientType(), codeVerifier);
 		} catch (OAuthErrorException e)
 		{
+			statisticsPublisher.reportFail(parsedAuthzCodeToken.getClientUsername(), parsedAuthzCodeToken.getClientName());
 			return e.response;
 		} 
 		
 		if (parsedAuthzCodeToken.getRedirectUri() != null)
 		{
 			if (redirectUri == null)
+			{	
+				statisticsPublisher.reportFail(parsedAuthzCodeToken.getClientUsername(), parsedAuthzCodeToken.getClientName());
 				return BaseOAuthResource.makeError(OAuth2Error.INVALID_GRANT,
 						"redirect_uri is required");
+			}
 			if (!redirectUri.equals(parsedAuthzCodeToken.getRedirectUri()))
+			{
+				statisticsPublisher.reportFail(parsedAuthzCodeToken.getClientUsername(), parsedAuthzCodeToken.getClientName());
 				return BaseOAuthResource.makeError(OAuth2Error.INVALID_GRANT,
 						"redirect_uri is wrong");
+			}
 		}
 
 		OAuthToken internalToken = new OAuthToken(parsedAuthzCodeToken);
-		AccessToken accessToken = OAuthProcessor.createAccessToken(internalToken);
+		Date now = new Date();
+		AccessToken accessToken = accessTokenFactory.create(internalToken, now, acceptHeader);
 		internalToken.setAccessToken(accessToken.getValue());
 
-		Date now = new Date();
 		RefreshToken refreshToken = TokenUtils.addRefreshToken(config, tokensManagement, 
 				now, internalToken, codeToken.getOwner());
 		Date accessExpiration = TokenUtils.getAccessTokenExpiration(config, now);
 
 		AccessTokenResponse oauthResponse = TokenUtils.getAccessTokenResponse(internalToken,
 				accessToken, refreshToken, null);
-		log.debug("Authz code grant: issuing new access token {}, valid until {}", 
+		log.info("Authz code grant: issuing new access token {}, valid until {}", 
 				BaseOAuthResource.tokenToLog(accessToken.getValue()), 
 				accessExpiration);
-		tokensManagement.addToken(OAuthProcessor.INTERNAL_ACCESS_TOKEN,
-				accessToken.getValue(), new EntityParam(codeToken.getOwner()),
-				internalToken.getSerialized(), now, accessExpiration);
+		oauthTokenDAO.storeAccessToken(accessToken, internalToken, new EntityParam(codeToken.getOwner()), 
+				now, accessExpiration);
 
+		statisticsPublisher.reportSuccess(internalToken.getClientUsername(), internalToken.getClientName());
+		
+		
 		return BaseOAuthResource.toResponse(Response.ok(BaseOAuthResource.getResponseContent(oauthResponse)));
 	}
 
 	
-	private void verifyPKCE(OAuthToken parsedAuthzCodeToken, String codeVerifier) throws OAuthErrorException
+	private void verifyPKCE(PKCSInfo parsedAuthzCodeToken, ClientType clientType, String codeVerifier) throws OAuthErrorException
 	{
-		if (parsedAuthzCodeToken.getCodeChallenge() == null && 
-				parsedAuthzCodeToken.getClientType() == ClientType.PUBLIC)
+		if (parsedAuthzCodeToken.getCodeChallenge() == null &&	clientType == ClientType.PUBLIC)
 			throw new OAuthErrorException(
 					BaseOAuthResource.makeError(OAuth2Error.INVALID_GRANT, "missing mandatory PKCE"));
 		if (parsedAuthzCodeToken.getCodeChallenge() != null && codeVerifier == null)
@@ -133,8 +153,17 @@ class AuthzCodeHandler
 
 	private void verifyPKCEChallenge(String codeChallenge, String codeVerifier, String method) throws OAuthErrorException
 	{
-		CodeChallenge computedCodeChallenge = CodeChallenge.compute(CodeChallengeMethod.parse(method), 
+		CodeChallenge computedCodeChallenge;
+		try
+		{
+			computedCodeChallenge = CodeChallenge.compute(CodeChallengeMethod.parse(method), 
 				new CodeVerifier(codeVerifier));
+		} catch(Exception e)
+		{
+			log.warn("Failure to parse code challenge or verifier", e);
+			throw new OAuthErrorException(
+					BaseOAuthResource.makeError(OAuth2Error.INVALID_GRANT, "PKCE verification error"));
+		}
 		if (!computedCodeChallenge.getValue().equals(codeChallenge))
 			throw new OAuthErrorException(
 					BaseOAuthResource.makeError(OAuth2Error.INVALID_GRANT, "PKCE verification error"));
@@ -150,20 +179,16 @@ class AuthzCodeHandler
 						OAuthProcessor.INTERNAL_CODE_TOKEN, code);
 				OAuthToken parsedAuthzCodeToken = BaseOAuthResource.parseInternalToken(codeToken);
 
-				long callerEntityId = InvocationContext.getCurrent()
-						.getLoginSession().getEntityId();
-				if (parsedAuthzCodeToken.getClientId() != callerEntityId)
+				LoginSession loginSession = InvocationContext.getCurrent().getLoginSession();
+				if (loginSession != null && parsedAuthzCodeToken.getClientId() != loginSession.getEntityId())
 				{
-					log.warn("Client with id " + callerEntityId
-							+ " presented authorization code issued "
-							+ "for client "
-							+ parsedAuthzCodeToken.getClientId());
+					log.warn("Client with id {} presented authorization code issued for client {}",
+							loginSession.getEntityId(), parsedAuthzCodeToken.getClientId());
 					// intended - we mask the reason
 					throw new OAuthErrorException(BaseOAuthResource.makeError(
 							OAuth2Error.INVALID_GRANT, "wrong code"));
 				}
-				tokensManagement.removeToken(OAuthProcessor.INTERNAL_CODE_TOKEN,
-						code);
+				tokensManagement.removeToken(OAuthProcessor.INTERNAL_CODE_TOKEN, code);
 				return new TokensPair(codeToken, parsedAuthzCodeToken);
 			} catch (IllegalArgumentException e)
 			{

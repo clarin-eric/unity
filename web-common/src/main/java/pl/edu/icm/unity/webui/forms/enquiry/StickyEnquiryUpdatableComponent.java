@@ -6,6 +6,7 @@
 package pl.edu.icm.unity.webui.forms.enquiry;
 
 import java.util.List;
+import java.util.Optional;
 
 import org.apache.logging.log4j.Logger;
 
@@ -17,10 +18,10 @@ import com.vaadin.ui.CustomComponent;
 import com.vaadin.ui.Label;
 import com.vaadin.ui.VerticalLayout;
 
+import pl.edu.icm.unity.MessageSource;
 import pl.edu.icm.unity.base.utils.Log;
-import pl.edu.icm.unity.engine.api.authn.remote.RemotelyAuthenticatedContext;
+import pl.edu.icm.unity.engine.api.authn.remote.RemotelyAuthenticatedPrincipal;
 import pl.edu.icm.unity.engine.api.finalization.WorkflowFinalizationConfiguration;
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
 import pl.edu.icm.unity.exceptions.EngineException;
 import pl.edu.icm.unity.exceptions.WrongArgumentException;
 import pl.edu.icm.unity.types.registration.EnquiryForm;
@@ -41,11 +42,11 @@ public class StickyEnquiryUpdatableComponent extends CustomComponent
 {
 	private static final Logger log = Log.getLogger(Log.U_SERVER_WEB, StickyEnquiryUpdatableComponent.class);
 
-	private UnityMessageSource msg;
+	private MessageSource msg;
 	private EnquiryResponseEditorController controller;
 	private List<String> forms;
 
-	public StickyEnquiryUpdatableComponent(UnityMessageSource msg, EnquiryResponseEditorController controller,
+	public StickyEnquiryUpdatableComponent(MessageSource msg, EnquiryResponseEditorController controller, 
 			List<String> forms) throws WrongArgumentException
 	{
 		this.msg = msg;
@@ -103,7 +104,7 @@ public class StickyEnquiryUpdatableComponent extends CustomComponent
 		try
 		{
 
-			editor = controller.getEditorInstance(form, RemotelyAuthenticatedContext.getLocalContext());
+			editor = controller.getEditorInstanceForAuthenticatedUser(form, RemotelyAuthenticatedPrincipal.getLocalContext());
 		} catch (Exception e)
 		{
 			log.error("Can not get editor for enquiry form " + form.getName());
@@ -122,7 +123,7 @@ public class StickyEnquiryUpdatableComponent extends CustomComponent
 			try
 			{
 				WorkflowFinalizationConfiguration workflowConfig = controller.submitted(request, form,
-						TriggeringMode.manualStandalone);
+						TriggeringMode.manualStandalone, Optional.empty());
 				showNotificationAfterSubmit(workflowConfig);
 			} catch (Exception e)
 			{
@@ -178,7 +179,7 @@ public class StickyEnquiryUpdatableComponent extends CustomComponent
 		boolean requestExist = true;
 		try
 		{
-			requestExist = controller.checkIfRequestExists(form.getName());
+			requestExist = controller.checkIfRequestExistsForLoggedUser(form.getName());
 		} catch (Exception e)
 		{
 			log.error("Can not check if pending request exists for form " + form.getName(), e);

@@ -12,9 +12,10 @@ import com.vaadin.data.Validator;
 import com.vaadin.data.ValueContext;
 import com.vaadin.data.ValueProvider;
 import com.vaadin.server.Setter;
+import com.vaadin.shared.ui.ContentMode;
 import com.vaadin.ui.AbstractField;
 
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
+import pl.edu.icm.unity.MessageSource;
 
 /**
  * Configures fields that can be used to edit MVAL expression.
@@ -23,15 +24,21 @@ import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
  */
 class MVELExpressionEditor
 {
-	private UnityMessageSource msg;
+	private MessageSource msg;
 	private AbstractField<String> field;
 
-	public MVELExpressionEditor(AbstractField<String> field, UnityMessageSource msg, String caption, String description)
+	public MVELExpressionEditor(AbstractField<String> field, MessageSource msg, String caption, String description)
 	{
 		this.field = field;
 		this.msg = msg;
 		field.setCaption(caption);
-		field.setDescription(description);
+		field.setDescription(description, ContentMode.HTML);
+	}
+	
+	public MVELExpressionEditor(AbstractField<String> field, MessageSource msg)
+	{
+		this.field = field;
+		this.msg = msg;
 	}
 
 	void configureBinding(Binder<?> binder, String fieldName, boolean mandatory)
@@ -64,7 +71,7 @@ class MVELExpressionEditor
 
 	}
 
-	private static Validator<String> getValidator(UnityMessageSource msg, boolean mandatory)
+	public static Validator<String> getValidator(MessageSource msg, boolean mandatory)
 	{
 		Validator<String> expressionValidator = new Validator<String>()
 		{

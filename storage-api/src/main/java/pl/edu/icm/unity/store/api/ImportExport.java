@@ -7,6 +7,9 @@ package pl.edu.icm.unity.store.api;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.List;
+
+import pl.edu.icm.unity.types.basic.DBDumpContentElements;
 
 /**
  * Provides feature to export and import database dumps to a file. 
@@ -17,6 +20,7 @@ import java.io.OutputStream;
 public interface ImportExport
 {
 	void load(InputStream is) throws IOException;
-	void store(OutputStream os) throws IOException;
-	void storeWithVersion(OutputStream os, int version) throws IOException;
+	void store(OutputStream os, DBDumpContentElements content) throws IOException;
+	void storeWithVersion(OutputStream os, DBDumpContentElements content, int version) throws IOException;
+	List<String> getDBDumpElements(InputStream is) throws IOException;
 }

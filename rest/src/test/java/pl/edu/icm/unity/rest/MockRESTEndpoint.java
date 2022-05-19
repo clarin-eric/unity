@@ -4,6 +4,8 @@
  */
 package pl.edu.icm.unity.rest;
 
+import static org.mockito.Mockito.mock;
+
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashSet;
@@ -19,10 +21,12 @@ import org.springframework.beans.factory.ObjectFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import pl.edu.icm.unity.MessageSource;
+import pl.edu.icm.unity.engine.api.EntityManagement;
 import pl.edu.icm.unity.engine.api.authn.AuthenticationProcessor;
 import pl.edu.icm.unity.engine.api.endpoint.EndpointFactory;
 import pl.edu.icm.unity.engine.api.endpoint.EndpointInstance;
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
+import pl.edu.icm.unity.engine.api.server.AdvertisedAddressProvider;
 import pl.edu.icm.unity.engine.api.server.NetworkServer;
 import pl.edu.icm.unity.engine.api.session.SessionManagement;
 import pl.edu.icm.unity.engine.api.utils.PrototypeComponent;
@@ -41,11 +45,13 @@ public class MockRESTEndpoint extends RESTEndpoint
 			Collections.singletonMap(SERVLET_PATH, "Test endpoint"));
 
 	@Autowired
-	public MockRESTEndpoint(UnityMessageSource msg, SessionManagement sessionMan, 
+	public MockRESTEndpoint(MessageSource msg,
+			SessionManagement sessionMan,
 			AuthenticationProcessor authnProcessor,
-			NetworkServer server)
+			NetworkServer server,
+			AdvertisedAddressProvider advertisedAddrProvider)
 	{
-		super(msg, sessionMan, authnProcessor, server, SERVLET_PATH);
+		super(msg, sessionMan, authnProcessor, server, advertisedAddrProvider, SERVLET_PATH, mock(EntityManagement.class));
 	}
 
 
@@ -65,7 +71,7 @@ public class MockRESTEndpoint extends RESTEndpoint
 		{
 			HashSet<Object> ret = new HashSet<>();
 			ret.add(res);
-			installExceptionHandlers(ret);
+			RestEndpointHelper.installExceptionHandlers(ret);
 			return ret;
 		}
 	}

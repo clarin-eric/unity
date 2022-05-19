@@ -9,7 +9,8 @@ import com.vaadin.ui.Button;
 import com.vaadin.ui.Component;
 import com.vaadin.ui.VerticalLayout;
 
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
+import pl.edu.icm.unity.MessageSource;
+import pl.edu.icm.unity.webui.common.Styles;
 
 /**
  * Confirmation message post successful credential reset
@@ -18,7 +19,7 @@ import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
  */
 public class CredentialResetFinalMessage extends CredentialResetLayout
 {
-	private UnityMessageSource msg;
+	private MessageSource msg;
 	private Runnable closeCallback;
 	
 	public CredentialResetFinalMessage(CredentialResetFlowConfig credResetConfig, String message)
@@ -37,6 +38,7 @@ public class CredentialResetFinalMessage extends CredentialResetLayout
 		ret.setWidth(MAIN_WIDTH_EM, Unit.EM);
 
 		Button proceed = new Button(msg.getMessage("continue"));
+		proceed.addStyleName(Styles.buttonAction.toString());
 		proceed.addStyleName("u-cred-reset-proceed");
 		proceed.addClickListener(e -> closeCallback.run());
 		proceed.setWidth(100, Unit.PERCENTAGE);

@@ -12,12 +12,13 @@ import com.vaadin.shared.ui.MarginInfo;
 import com.vaadin.ui.Button;
 import com.vaadin.ui.HorizontalLayout;
 
+import pl.edu.icm.unity.MessageSource;
 import pl.edu.icm.unity.base.token.Token;
 import pl.edu.icm.unity.engine.api.EntityManagement;
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
 import pl.edu.icm.unity.engine.api.token.SecuredTokensManagement;
 import pl.edu.icm.unity.exceptions.EngineException;
 import pl.edu.icm.unity.oauth.as.OAuthProcessor;
+import pl.edu.icm.unity.oauth.as.OAuthTokenRepository;
 import pl.edu.icm.unity.webui.common.ConfirmDialog;
 import pl.edu.icm.unity.webui.common.Images;
 
@@ -31,10 +32,11 @@ public class UserHomeTokensComponent extends AdminTokensComponent
 	private Button removeButton;
 	private Button refreshButton;
 
-	public UserHomeTokensComponent(SecuredTokensManagement tokenMan, UnityMessageSource msg,
+	public UserHomeTokensComponent(SecuredTokensManagement tokenMan, OAuthTokenRepository tokensDAO,
+			MessageSource msg,
 			EntityManagement entityManagement)
 	{
-		super(tokenMan, msg, entityManagement, false);
+		super(tokenMan, tokensDAO, msg, entityManagement, false);
 		setCaption("");
 		HorizontalLayout buttons = new HorizontalLayout();
 		removeButton = new Button(msg.getMessage("OAuthTokenUserHomeUI.remove"));
@@ -78,7 +80,7 @@ public class UserHomeTokensComponent extends AdminTokensComponent
 	{
 		//Get only owned tokens	
 		List<Token> tokens = new ArrayList<>();	
-		tokens.addAll(tokenMan.getOwnedTokens(OAuthProcessor.INTERNAL_ACCESS_TOKEN));
+		tokens.addAll(oauthTokenDAO.getOwnedAccessTokens());
 		tokens.addAll(tokenMan.getOwnedTokens(OAuthProcessor.INTERNAL_REFRESH_TOKEN));
 		return tokens;
 	}

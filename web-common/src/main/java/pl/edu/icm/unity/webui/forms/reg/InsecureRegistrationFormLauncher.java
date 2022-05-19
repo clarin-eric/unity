@@ -11,12 +11,12 @@ import org.springframework.beans.factory.ObjectFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 
+import pl.edu.icm.unity.MessageSource;
 import pl.edu.icm.unity.base.utils.Log;
 import pl.edu.icm.unity.engine.api.RegistrationsManagement;
 import pl.edu.icm.unity.engine.api.authn.IdPLoginController;
-import pl.edu.icm.unity.engine.api.authn.remote.RemotelyAuthenticatedContext;
+import pl.edu.icm.unity.engine.api.authn.remote.RemotelyAuthenticatedPrincipal;
 import pl.edu.icm.unity.engine.api.finalization.WorkflowFinalizationConfiguration;
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
 import pl.edu.icm.unity.engine.api.registration.PostFillingHandler;
 import pl.edu.icm.unity.engine.api.utils.PrototypeComponent;
 import pl.edu.icm.unity.exceptions.EngineException;
@@ -33,6 +33,7 @@ import pl.edu.icm.unity.webui.AsyncErrorHandler;
 import pl.edu.icm.unity.webui.WebSession;
 import pl.edu.icm.unity.webui.bus.EventsBus;
 import pl.edu.icm.unity.webui.common.AbstractDialog;
+import pl.edu.icm.unity.webui.common.file.ImageAccessService;
 
 
 
@@ -42,25 +43,27 @@ import pl.edu.icm.unity.webui.common.AbstractDialog;
  * @author K. Benedyczak
  */
 @PrototypeComponent
-public class InsecureRegistrationFormLauncher extends AbstraceRegistrationFormDialogProvider
+public class InsecureRegistrationFormLauncher extends AbstractRegistrationFormDialogProvider
 {
 	private static final Logger log = Log.getLogger(Log.U_SERVER_WEB, InsecureRegistrationFormLauncher.class);
 	private RegistrationsManagement registrationsManagement;
 	private IdPLoginController idpLoginController;
 	private EventsBus bus;
 	private AutoLoginAfterSignUpProcessor autoLoginProcessor;
+	private ImageAccessService imageAccessService;
 	
 	@Autowired
-	public InsecureRegistrationFormLauncher(UnityMessageSource msg, IdPLoginController idpLoginController,
+	public InsecureRegistrationFormLauncher(MessageSource msg, IdPLoginController idpLoginController,
 			ObjectFactory<RequestEditorCreator> requestEditorCreatorFatory, 
 			@Qualifier("insecure") RegistrationsManagement registrationsManagement,
-			AutoLoginAfterSignUpProcessor autoLoginProcessor)
+			AutoLoginAfterSignUpProcessor autoLoginProcessor, ImageAccessService imageAccessService)
 	{
 		super(msg, requestEditorCreatorFatory);
 		this.idpLoginController = idpLoginController;
 		this.registrationsManagement = registrationsManagement;
 		this.bus = WebSession.getCurrent().getEventBus();
 		this.autoLoginProcessor = autoLoginProcessor;
+		this.imageAccessService = imageAccessService;
 	}
 
 	private WorkflowFinalizationConfiguration addRequest(RegistrationRequest request, 
@@ -117,7 +120,7 @@ public class InsecureRegistrationFormLauncher extends AbstraceRegistrationFormDi
 	}
 	
 	
-	public void showRegistrationDialog(String formName, RemotelyAuthenticatedContext remoteContext, 
+	public void showRegistrationDialog(String formName, RemotelyAuthenticatedPrincipal remoteContext, 
 			TriggeringMode mode, AsyncErrorHandler errorHandler) throws EngineException
 	{
 		List<RegistrationForm> forms = registrationsManagement.getForms();
@@ -138,7 +141,7 @@ public class InsecureRegistrationFormLauncher extends AbstraceRegistrationFormDi
 		RegistrationContext context = new RegistrationContext(
 				idpLoginController.isLoginInProgress(), mode);
 		boolean isSimplifiedFinalization = isRemoteLoginWhenUnknownUser(mode);
-		RegistrationFormFillDialog dialog = new RegistrationFormFillDialog(msg, 
+		RegistrationFormFillDialog dialog = new RegistrationFormFillDialog(msg, imageAccessService,
 				msg.getMessage("RegistrationFormsChooserComponent.dialogCaption"), 
 				editor, new RegistrationFormFillDialog.Callback()
 				{

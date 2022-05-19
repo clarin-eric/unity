@@ -4,18 +4,17 @@
  */
 package pl.edu.icm.unity.store.impl.identities;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.stream.Collectors;
-
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
-
 import pl.edu.icm.unity.store.api.IdentityDAO;
 import pl.edu.icm.unity.store.rdbms.GenericNamedRDBMSCRUD;
 import pl.edu.icm.unity.store.rdbms.tx.SQLTransactionTL;
 import pl.edu.icm.unity.store.types.StoredIdentity;
 import pl.edu.icm.unity.types.basic.Identity;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Collectors;
 
 
 /**
@@ -45,9 +44,9 @@ public class IdentityRDBMSStore extends GenericNamedRDBMSCRUD<StoredIdentity, Id
 	}
 	
 	@Override
-	protected void preUpdateCheck(IdentityBean oldBean, StoredIdentity supdated)
+	protected void preUpdateCheck(StoredIdentity oldBean, StoredIdentity supdated)
 	{
-		Identity old = jsonSerializer.fromDB(oldBean).getIdentity();
+		Identity old = oldBean.getIdentity();
 		Identity updated = supdated.getIdentity();
 		if (!old.getTypeId().equals(updated.getTypeId()))
 			throw new IllegalArgumentException("Can not change identity type from " + 
@@ -69,9 +68,18 @@ public class IdentityRDBMSStore extends GenericNamedRDBMSCRUD<StoredIdentity, Id
 	{
 		IdentitiesMapper mapper = SQLTransactionTL.getSql().getMapper(IdentitiesMapper.class);
 		List<IdentityBean> allInDB = mapper.getByGroup(group);
+
 		List<StoredIdentity> ret = new ArrayList<>(allInDB.size());
 		for (IdentityBean bean: allInDB)
 			ret.add(jsonSerializer.fromDB(bean));
+
 		return ret;
+	}
+
+	@Override
+	public long getCountByType(List<String> types)
+	{
+		IdentitiesMapper mapper = SQLTransactionTL.getSql().getMapper(IdentitiesMapper.class);
+		return mapper.getCountByType(types);
 	}
 }

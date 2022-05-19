@@ -7,24 +7,23 @@ package io.imunity.webconsole.authentication.realms;
 
 import org.springframework.beans.factory.ObjectFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
 
 import com.vaadin.navigator.ViewChangeListener.ViewChangeEvent;
-import com.vaadin.ui.Alignment;
 import com.vaadin.ui.CustomComponent;
-import com.vaadin.ui.Layout;
 import com.vaadin.ui.VerticalLayout;
 
 import io.imunity.webconsole.WebConsoleNavigationInfoProviderBase;
 import io.imunity.webconsole.authentication.realms.AuthenticationRealmsView.RealmsNavigationInfoProvider;
-import io.imunity.webelements.helpers.ConfirmViewHelper;
 import io.imunity.webelements.helpers.NavigationHelper;
 import io.imunity.webelements.helpers.NavigationHelper.CommonViewParam;
 import io.imunity.webelements.navigation.NavigationInfo;
 import io.imunity.webelements.navigation.NavigationInfo.Type;
 import io.imunity.webelements.navigation.UnityView;
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
+import pl.edu.icm.unity.MessageSource;
 import pl.edu.icm.unity.engine.api.utils.PrototypeComponent;
 import pl.edu.icm.unity.webui.common.NotificationPopup;
+import pl.edu.icm.unity.webui.common.StandardButtonsHelper;
 import pl.edu.icm.unity.webui.exceptions.ControllerException;
 
 /**
@@ -34,23 +33,49 @@ import pl.edu.icm.unity.webui.exceptions.ControllerException;
  *
  */
 @PrototypeComponent
-public class EditAuthenticationRealmView extends CustomComponent implements UnityView
+class EditAuthenticationRealmView extends CustomComponent implements UnityView
 {
 	public static final String VIEW_NAME = "EditAuthenticationRealm";
 
-	private AuthenticationRealmController controller;
+	private AuthenticationRealmsController controller;
 	private AuthenticationRealmEditor editor;
-	private UnityMessageSource msg;
+	private MessageSource msg;
 	private String realmName;
 
 	@Autowired
-	public EditAuthenticationRealmView(UnityMessageSource msg,
-			AuthenticationRealmController controller)
+	EditAuthenticationRealmView(MessageSource msg,
+			AuthenticationRealmsController controller)
 	{
 		this.msg = msg;
 		this.controller = controller;
 	}
 
+	@Override
+	public void enter(ViewChangeEvent event)
+	{
+		realmName = NavigationHelper.getParam(event, CommonViewParam.name.toString());
+		AuthenticationRealmEntry realm;
+		try
+		{
+			realm = controller.getRealm(realmName);
+		} catch (ControllerException e)
+		{
+			NotificationPopup.showError(msg, e);
+			NavigationHelper.goToView(AuthenticationRealmsView.VIEW_NAME);
+			return;
+		}
+
+		editor = new AuthenticationRealmEditor(msg, realm);
+		editor.editMode();
+	
+		VerticalLayout main = new VerticalLayout();
+		main.setMargin(false);
+		main.addComponent(editor);
+		main.addComponent(StandardButtonsHelper.buildConfirmEditButtonsBar(msg,
+				() -> onConfirm(), () -> onCancel()));
+		setCompositionRoot(main);
+	}
+	
 	private void onConfirm()
 	{
 		if (editor.hasErrors())
@@ -60,12 +85,15 @@ public class EditAuthenticationRealmView extends CustomComponent implements Unit
 
 		try
 		{
-			if (!controller.updateRealm(editor.getAuthenticationRealm()))
-				return;
-		} catch (ControllerException e)
+
+			controller.updateRealm(editor.getAuthenticationRealm());
+
+		} catch (
+
+		ControllerException e)
 		{
 
-			NotificationPopup.showError(e);
+			NotificationPopup.showError(msg, e);
 			return;
 		}
 
@@ -80,34 +108,6 @@ public class EditAuthenticationRealmView extends CustomComponent implements Unit
 	}
 
 	@Override
-	public void enter(ViewChangeEvent event)
-	{
-		realmName = NavigationHelper.getParam(event, CommonViewParam.name.toString());
-		AuthenticationRealmEntry realm;
-		try
-		{
-			realm = controller.getRealm(realmName);
-		} catch (ControllerException e)
-		{
-			NotificationPopup.showError(e);
-			NavigationHelper.goToView(AuthenticationRealmsView.VIEW_NAME);
-			return;
-		}
-
-		editor = new AuthenticationRealmEditor(msg, realm);
-		editor.editMode();
-		VerticalLayout main = new VerticalLayout();
-		main.setMargin(false);
-		main.addComponent(editor);
-		main.setWidth(44, Unit.EM);
-		Layout hl = ConfirmViewHelper.getConfirmButtonsBar(msg.getMessage("save"),
-				msg.getMessage("close"), () -> onConfirm(), () -> onCancel());
-		main.addComponent(hl);
-		main.setComponentAlignment(hl, Alignment.BOTTOM_CENTER);
-		setCompositionRoot(main);
-	}
-
-	@Override
 	public String getDisplayedName()
 	{
 		return realmName;
@@ -119,17 +119,16 @@ public class EditAuthenticationRealmView extends CustomComponent implements Unit
 		return VIEW_NAME;
 	}
 
-	@org.springframework.stereotype.Component
+	@Component
 	public static class EditRealmViewInfoProvider extends WebConsoleNavigationInfoProviderBase
 	{
 
 		@Autowired
-		public EditRealmViewInfoProvider(RealmsNavigationInfoProvider parent,
-				ObjectFactory<EditAuthenticationRealmView> factory)
+		public EditRealmViewInfoProvider(ObjectFactory<EditAuthenticationRealmView> factory)
 		{
 			super(new NavigationInfo.NavigationInfoBuilder(VIEW_NAME,
 					Type.ParameterizedView)
-							.withParent(parent.getNavigationInfo())
+							.withParent(RealmsNavigationInfoProvider.ID)
 							.withObjectFactory(factory).build());
 
 		}

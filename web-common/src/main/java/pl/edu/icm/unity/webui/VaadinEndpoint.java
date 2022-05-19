@@ -31,13 +31,16 @@ import com.vaadin.server.Constants;
 import com.vaadin.server.VaadinServlet;
 
 import eu.unicore.util.configuration.ConfigurationException;
+import pl.edu.icm.unity.MessageSource;
 import pl.edu.icm.unity.base.utils.Log;
 import pl.edu.icm.unity.engine.api.authn.AuthenticationFlow;
+import pl.edu.icm.unity.engine.api.authn.RememberMeProcessor;
+import pl.edu.icm.unity.engine.api.authn.sandbox.SandboxAuthnRouter;
 import pl.edu.icm.unity.engine.api.config.UnityServerConfiguration;
 import pl.edu.icm.unity.engine.api.endpoint.AbstractWebEndpoint;
 import pl.edu.icm.unity.engine.api.endpoint.EndpointFactory;
 import pl.edu.icm.unity.engine.api.endpoint.WebAppEndpointInstance;
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
+import pl.edu.icm.unity.engine.api.server.AdvertisedAddressProvider;
 import pl.edu.icm.unity.engine.api.server.NetworkServer;
 import pl.edu.icm.unity.engine.api.session.LoginToHttpSessionBinder;
 import pl.edu.icm.unity.engine.api.session.SessionManagement;
@@ -45,9 +48,8 @@ import pl.edu.icm.unity.engine.api.utils.HiddenResourcesFilter;
 import pl.edu.icm.unity.webui.authn.AuthenticationFilter;
 import pl.edu.icm.unity.webui.authn.InvocationContextSetupFilter;
 import pl.edu.icm.unity.webui.authn.ProxyAuthenticationFilter;
-import pl.edu.icm.unity.webui.authn.RememberMeProcessor;
+import pl.edu.icm.unity.webui.authn.remote.RemoteRedirectedAuthnResponseProcessingFilter;
 import pl.edu.icm.unity.webui.sandbox.AccountAssociationSandboxUI;
-import pl.edu.icm.unity.webui.sandbox.SandboxAuthnRouter;
 import pl.edu.icm.unity.webui.sandbox.SandboxAuthnRouterImpl;
 import pl.edu.icm.unity.webui.sandbox.TranslationProfileSandboxUI;
 
@@ -61,7 +63,7 @@ public class VaadinEndpoint extends AbstractWebEndpoint implements WebAppEndpoin
 {
 	private static final Logger log = Log.getLogger(Log.U_SERVER_WEB, VaadinEndpoint.class);
 	public static final String DEFAULT_THEME = "unityThemeValo";
-	public static final int DEFAULT_HEARTBEAT = 10;
+	public static final int DEFAULT_HEARTBEAT = 120;
 	public static final int LONG_SESSION = 3600;
 	public static final int LONG_HEARTBEAT = 300;
 	public static final String AUTHENTICATION_PATH = "/authentication";
@@ -82,16 +84,23 @@ public class VaadinEndpoint extends AbstractWebEndpoint implements WebAppEndpoin
 	protected ProxyAuthenticationFilter proxyAuthnFilter;
 	protected InvocationContextSetupFilter contextSetupFilter;
 	protected UnityServerConfiguration serverConfig;
-	protected UnityMessageSource msg;
+	protected MessageSource msg;
+	protected final RemoteRedirectedAuthnResponseProcessingFilter remoteAuthnResponseProcessingFilter;
 	
-	public VaadinEndpoint(NetworkServer server, UnityMessageSource msg, ApplicationContext applicationContext,
-			String uiBeanName, String servletPath)
+	public VaadinEndpoint(NetworkServer server,
+			AdvertisedAddressProvider advertisedAddrProvider, 
+			MessageSource msg,
+			ApplicationContext applicationContext,
+			String uiBeanName,
+			String servletPath,
+			RemoteRedirectedAuthnResponseProcessingFilter remoteAuthnResponseProcessingFilter)
 	{
-		super(server);
+		super(server, advertisedAddrProvider);
 		this.msg = msg;
 		this.applicationContext = applicationContext;
 		this.uiBeanName = uiBeanName;
 		this.uiServletPath = servletPath;
+		this.remoteAuthnResponseProcessingFilter = remoteAuthnResponseProcessingFilter;
 		serverConfig = applicationContext.getBean(UnityServerConfiguration.class);		
 
 	}
@@ -129,7 +138,8 @@ public class VaadinEndpoint extends AbstractWebEndpoint implements WebAppEndpoin
 		LoginToHttpSessionBinder sessionBinder = applicationContext.getBean(LoginToHttpSessionBinder.class);
 		RememberMeProcessor remeberMeProcessor = applicationContext.getBean(RememberMeProcessor.class);
 		
-		
+		context.addFilter(new FilterHolder(remoteAuthnResponseProcessingFilter), "/*", 
+				EnumSet.of(DispatcherType.REQUEST));
 		context.addFilter(new FilterHolder(new HiddenResourcesFilter(
 				Collections.unmodifiableList(Arrays.asList(AUTHENTICATION_PATH)))), 
 				"/*", EnumSet.of(DispatcherType.REQUEST));
@@ -141,7 +151,8 @@ public class VaadinEndpoint extends AbstractWebEndpoint implements WebAppEndpoin
 		
 		proxyAuthnFilter = new ProxyAuthenticationFilter(authenticationFlows, 
 				description.getEndpoint().getContextAddress(),
-				genericEndpointProperties.getBooleanValue(VaadinEndpointProperties.AUTO_LOGIN));
+				genericEndpointProperties.getBooleanValue(VaadinEndpointProperties.AUTO_LOGIN),
+				description.getRealm());
 		context.addFilter(new FilterHolder(proxyAuthnFilter), AUTHENTICATION_PATH + "/*", 
 				EnumSet.of(DispatcherType.REQUEST, DispatcherType.FORWARD));
 		
@@ -165,7 +176,7 @@ public class VaadinEndpoint extends AbstractWebEndpoint implements WebAppEndpoin
 				description, authenticationFlows, registrationConfiguration, properties,
 				handler4Main);
 		context.addServlet(createVaadinServletHolder(theServlet, false), uiServletPath + "/*");
-		context.addServlet(new ServletHolder(new ForwadSerlvet()), "/");
+		context.addServlet(new ServletHolder(new ForwadSerlvet()), "/*");
 		
 		return context;
 	}
@@ -174,32 +185,26 @@ public class VaadinEndpoint extends AbstractWebEndpoint implements WebAppEndpoin
 	{
 		int sessionTimeout = description.getRealm().getMaxInactivity();
 		return getBootstrapHandlerGeneric(uiPath, getHeartbeatInterval(sessionTimeout),
-				VaadinEndpointProperties.THEME);
+				genericEndpointProperties.getEffectiveMainTheme());
 	}
 
 	protected UnityBootstrapHandler getBootstrapHandler4Authn(String uiPath)
 	{
-		return getBootstrapHandlerGeneric(uiPath, LONG_HEARTBEAT, VaadinEndpointProperties.AUTHN_THEME);
+		return getBootstrapHandlerGeneric(uiPath, LONG_HEARTBEAT, genericEndpointProperties.getEffectiveAuthenticationTheme());
 	}
 
-	private UnityBootstrapHandler getBootstrapHandlerGeneric(String uiPath, int heartBeat, String themeKey)
+	protected UnityBootstrapHandler getBootstrapHandlerGeneric(String uiPath, int heartBeat, String theme)
 	{
 		String template = genericEndpointProperties.getValue(VaadinEndpointProperties.TEMPLATE);
 		boolean productionMode = genericEndpointProperties.getBooleanValue(
 				VaadinEndpointProperties.PRODUCTION_MODE);
 		return new UnityBootstrapHandler(getWebContentsDir(), template, msg, 
-				getConfiguredTheme(themeKey), !productionMode, 
+				theme, !productionMode, 
 				heartBeat, uiPath);
 	}
 	
-	private String getConfiguredTheme(String themeKey)
-	{
-		String theme = genericEndpointProperties.getConfiguredTheme(themeKey);
-		return theme == null ? DEFAULT_THEME : theme;
-	}
-	
 	@Override
-	public final synchronized ServletContextHandler getServletContextHandler()
+	public synchronized ServletContextHandler getServletContextHandler()
 	{
 		context = getServletContextHandlerOverridable();
 		
@@ -267,8 +272,8 @@ public class VaadinEndpoint extends AbstractWebEndpoint implements WebAppEndpoin
 	protected ServletHolder createVaadinServletHolder(VaadinServlet servlet, boolean unrestrictedSessionTime)
 	{
 		ServletHolder holder = createServletHolder(servlet, unrestrictedSessionTime);
-		int sessionTimeout = description.getRealm().getMaxInactivity();
-		int heartBeat = unrestrictedSessionTime ? LONG_HEARTBEAT : getHeartbeatInterval(sessionTimeout);
+		
+		int heartBeat = unrestrictedSessionTime ? LONG_HEARTBEAT : getHeartbeatInterval(description.getRealm().getMaxInactivity());
 		log.debug("Servlet " + servlet.toString() + " - heartBeat=" +heartBeat);
 			
 		boolean productionMode = genericEndpointProperties.getBooleanValue(VaadinEndpointProperties.PRODUCTION_MODE);
@@ -300,7 +305,7 @@ public class VaadinEndpoint extends AbstractWebEndpoint implements WebAppEndpoin
 	}
 	
 	@Override
-	public final synchronized void updateAuthenticationFlows(List<AuthenticationFlow> authenticators)
+	public synchronized void updateAuthenticationFlows(List<AuthenticationFlow> authenticators)
 	{
 		setAuthenticators(authenticators);
 		if (authenticationServlet != null)
@@ -311,7 +316,7 @@ public class VaadinEndpoint extends AbstractWebEndpoint implements WebAppEndpoin
 		}
 	}
 	
-	private class ForwadSerlvet extends HttpServlet
+	class ForwadSerlvet extends HttpServlet
 	{
 		@Override
 		protected void service(HttpServletRequest req, HttpServletResponse res)

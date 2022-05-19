@@ -5,15 +5,16 @@
 package pl.edu.icm.unity.oauth.as;
 
 import static org.junit.Assert.assertEquals;
+import static org.mockito.Mockito.mock;
 
 import java.net.URI;
 import java.util.Collections;
-import java.util.Date;
 import java.util.Locale;
 
 import javax.ws.rs.core.Response;
 
 import org.junit.Test;
+import org.springframework.context.ApplicationEventPublisher;
 
 import com.google.common.collect.Lists;
 import com.nimbusds.oauth2.sdk.AuthorizationSuccessResponse;
@@ -29,9 +30,8 @@ import com.nimbusds.openid.connect.sdk.AuthenticationRequest;
 import com.nimbusds.openid.connect.sdk.Nonce;
 
 import pl.edu.icm.unity.engine.api.authn.InvocationContext;
-import pl.edu.icm.unity.engine.api.authn.LoginSession;
+import pl.edu.icm.unity.engine.api.token.SecuredTokensManagement;
 import pl.edu.icm.unity.engine.api.token.TokensManagement;
-import pl.edu.icm.unity.oauth.as.OAuthAuthzContext.ScopeInfo;
 import pl.edu.icm.unity.oauth.as.OAuthSystemAttributesProvider.GrantFlow;
 import pl.edu.icm.unity.oauth.as.token.AccessTokenResource;
 import pl.edu.icm.unity.store.api.tx.TransactionalRunner;
@@ -48,63 +48,66 @@ public class PKCETest
 	{
 		TokensManagement tokensManagement = new MockTokensMan();
 		OAuthASProperties config = OAuthTestUtils.getConfig();
-		AccessTokenResource tested = new AccessTokenResource(tokensManagement, config, null, null, null, tx);
-		setupInvocationContext(111);
+		AccessTokenResource tested = createAccessTokenResource(tokensManagement, config, tx);
+		setupInvocationContext();
 		OAuthAuthzContext ctx = createContextWithoutPKCE(config, new ResponseType(ResponseType.Value.CODE),
 				GrantFlow.authorizationCode, 100);
 		ctx.setClientType(ClientType.PUBLIC);
-		AuthorizationSuccessResponse step1Resp = OAuthTestUtils.initOAuthFlowAccessCode(tokensManagement, ctx);
+		AuthorizationSuccessResponse step1Resp = OAuthTestUtils.initOAuthFlowAccessCode(
+				OAuthTestUtils.getOAuthProcessor(tokensManagement), ctx);
 		
 		Response r = tested.getToken(GrantType.AUTHORIZATION_CODE.getValue(), 
 				step1Resp.getAuthorizationCode().getValue(), 
 				null,
 				"https://return.host.com/foo",
-				null, null, null, null, null, null);
+				null, null, null, null, null, null, null);
 		assertEquals(HTTPResponse.SC_BAD_REQUEST, r.getStatus());
 	}
 	
 
 	
 	@Test
-	public void shouldFailToGetAccessTokenWithoutVodeVerifierWhenChallengeSet() throws Exception
+	public void shouldFailToGetAccessTokenWithoutCodeVerifierWhenChallengeSet() throws Exception
 	{
 		TokensManagement tokensManagement = new MockTokensMan();
 		OAuthASProperties config = OAuthTestUtils.getConfig();
-		AccessTokenResource tested = new AccessTokenResource(tokensManagement, config, null, null, null, tx);
-		setupInvocationContext(111);
+		AccessTokenResource tested = createAccessTokenResource(tokensManagement, config, tx);
+		setupInvocationContext();
 		OAuthAuthzContext ctx = createContext(config, new ResponseType(ResponseType.Value.CODE),
 				GrantFlow.authorizationCode, 100,
 				"verifier__123456789012345678901234567890123", 
 				CodeChallengeMethod.S256);
-		AuthorizationSuccessResponse step1Resp = OAuthTestUtils.initOAuthFlowAccessCode(tokensManagement, ctx);
+		AuthorizationSuccessResponse step1Resp = OAuthTestUtils.initOAuthFlowAccessCode(
+				OAuthTestUtils.getOAuthProcessor(tokensManagement), ctx);
 		
 		Response r = tested.getToken(GrantType.AUTHORIZATION_CODE.getValue(), 
 				step1Resp.getAuthorizationCode().getValue(), 
 				null,
 				"https://return.host.com/foo",
-				null, null, null, null, null, null);
+				null, null, null, null, null, null, null);
 		assertEquals(HTTPResponse.SC_BAD_REQUEST, r.getStatus());
 	}
 	
 	@Test
-	public void shouldFailToGetAccessTokenWithWrongVodeVerifierWhenChallengeSet() throws Exception
+	public void shouldFailToGetAccessTokenWithWrongCodeVerifierWhenChallengeSet() throws Exception
 	{
 		TokensManagement tokensManagement = new MockTokensMan();
 		OAuthASProperties config = OAuthTestUtils.getConfig();
-		AccessTokenResource tested = new AccessTokenResource(tokensManagement, config, null, null, null, tx);
-		setupInvocationContext(111);
+		AccessTokenResource tested = createAccessTokenResource(tokensManagement, config, tx);
+		setupInvocationContext();
 		OAuthAuthzContext ctx = createContext(config, new ResponseType(ResponseType.Value.CODE),
 				GrantFlow.authorizationCode, 100,
 				"verifier__123456789012345678901234567890123", 
 				CodeChallengeMethod.S256);
-		AuthorizationSuccessResponse step1Resp = OAuthTestUtils.initOAuthFlowAccessCode(tokensManagement, ctx);
+		AuthorizationSuccessResponse step1Resp = OAuthTestUtils.initOAuthFlowAccessCode(
+				OAuthTestUtils.getOAuthProcessor(tokensManagement), ctx);
 		
 		Response r = tested.getToken(GrantType.AUTHORIZATION_CODE.getValue(), 
 				step1Resp.getAuthorizationCode().getValue(), 
 				null,
 				"https://return.host.com/foo",
 				null, null, null, null, null, 
-				"WRONG-VERIFIER");
+				"WRONG_____123456789012345678901234567890123", null);
 		assertEquals(HTTPResponse.SC_BAD_REQUEST, r.getStatus());
 	}
 
@@ -112,7 +115,7 @@ public class PKCETest
 	public void shouldFailToAcceptTooShortChallenge() throws Exception
 	{
 		OAuthASProperties config = OAuthTestUtils.getConfig();
-		setupInvocationContext(111);
+		setupInvocationContext();
 		String verifier = "TOOSHORT";
 		createContext(config, new ResponseType(ResponseType.Value.CODE),
 				GrantFlow.authorizationCode, 100,
@@ -123,7 +126,7 @@ public class PKCETest
 	public void shouldFailToAcceptTooLongChallenge() throws Exception
 	{
 		OAuthASProperties config = OAuthTestUtils.getConfig();
-		setupInvocationContext(111);
+		setupInvocationContext();
 		String verifier = "TOOLONG________________________________________________________________________"
 				+ "__________________________________________________";
 		createContext(config, new ResponseType(ResponseType.Value.CODE),
@@ -136,21 +139,22 @@ public class PKCETest
 	{
 		TokensManagement tokensManagement = new MockTokensMan();
 		OAuthASProperties config = OAuthTestUtils.getConfig();
-		AccessTokenResource tested = new AccessTokenResource(tokensManagement, config, null, null, null, tx);
-		setupInvocationContext(111);
+		AccessTokenResource tested = createAccessTokenResource(tokensManagement, config, tx);
+		setupInvocationContext();
 		String verifier = "verifier__123456789012345678901234567890123";
 		OAuthAuthzContext ctx = createContext(config, new ResponseType(ResponseType.Value.CODE),
 				GrantFlow.authorizationCode, 100,
 				verifier, CodeChallengeMethod.PLAIN);
-		AuthorizationSuccessResponse step1Resp = OAuthTestUtils.initOAuthFlowAccessCode(tokensManagement, ctx);
+		AuthorizationSuccessResponse step1Resp = OAuthTestUtils.initOAuthFlowAccessCode(
+				OAuthTestUtils.getOAuthProcessor(tokensManagement), ctx);
 		
 		Response r = tested.getToken(GrantType.AUTHORIZATION_CODE.getValue(), 
 				step1Resp.getAuthorizationCode().getValue(), 
 				null,
 				"https://return.host.com/foo",
 				null, null, null, null, null, 
-				verifier);
-		assertEquals(HTTPResponse.SC_BAD_REQUEST, r.getStatus());
+				verifier, null);
+		assertEquals(HTTPResponse.SC_OK, r.getStatus());
 	}
 
 	@Test
@@ -158,30 +162,35 @@ public class PKCETest
 	{
 		TokensManagement tokensManagement = new MockTokensMan();
 		OAuthASProperties config = OAuthTestUtils.getConfig();
-		AccessTokenResource tested = new AccessTokenResource(tokensManagement, config, null, null, null, tx);
-		setupInvocationContext(111);
+		AccessTokenResource tested = createAccessTokenResource(tokensManagement, config, tx);
+		setupInvocationContext();
 		String verifier = "verifier__123456789012345678901234567890123";
 		OAuthAuthzContext ctx = createContext(config, new ResponseType(ResponseType.Value.CODE),
 				GrantFlow.authorizationCode, 100,
 				verifier, CodeChallengeMethod.S256);
-		AuthorizationSuccessResponse step1Resp = OAuthTestUtils.initOAuthFlowAccessCode(tokensManagement, ctx);
+		AuthorizationSuccessResponse step1Resp = OAuthTestUtils.initOAuthFlowAccessCode(
+				OAuthTestUtils.getOAuthProcessor(tokensManagement), ctx);
 		
 		Response r = tested.getToken(GrantType.AUTHORIZATION_CODE.getValue(), 
 				step1Resp.getAuthorizationCode().getValue(), 
 				null,
 				"https://return.host.com/foo",
 				null, null, null, null, null, 
-				verifier);
-		assertEquals(HTTPResponse.SC_BAD_REQUEST, r.getStatus());
+				verifier, null);
+		assertEquals(HTTPResponse.SC_OK, r.getStatus());
 	}
 
+	private AccessTokenResource createAccessTokenResource(TokensManagement tokensManagement, OAuthASProperties config,
+			TransactionalRunner tx)
+	{
+		return new AccessTokenResource(tokensManagement, new OAuthTokenRepository(tokensManagement, 
+				mock(SecuredTokensManagement.class)), config, null, null, null, tx, mock(ApplicationEventPublisher.class), null, null, OAuthTestUtils.getEndpoint());
+	}
 	
-	private void setupInvocationContext(long entityId)
+	private void setupInvocationContext()
 	{
 		AuthenticationRealm realm = new AuthenticationRealm("foo", "", 5, 10, RememberMePolicy.disallow ,1, 1000);
 		InvocationContext virtualAdmin = new InvocationContext(null, realm, Collections.emptyList());
-		LoginSession loginSession = new LoginSession("sid", new Date(), 1000, entityId, "foo", null, null, null);
-		virtualAdmin.setLoginSession(loginSession);
 		virtualAdmin.setLocale(Locale.ENGLISH);
 		InvocationContext.setCurrent(virtualAdmin);
 	}
@@ -221,7 +230,8 @@ public class PKCETest
 		ctx.setFlow(grant);
 		ctx.setOpenIdMode(false);
 		ctx.setReturnURI(new URI("https://return.host.com/foo"));
-		ctx.addEffectiveScopeInfo(new ScopeInfo("sc1", "scope 1", Lists.newArrayList("email")));
+		ctx.addEffectiveScopeInfo(OAuthScope.builder().withName("sc1").withDescription("scope 1")
+				.withAttributes(Lists.newArrayList("email")).withEnabled(true).build());
 		return ctx;
 	}
 }

@@ -15,11 +15,11 @@ import org.springframework.stereotype.Component;
 import com.google.common.collect.Sets;
 import com.nimbusds.oauth2.sdk.client.ClientType;
 
+import pl.edu.icm.unity.MessageSource;
 import pl.edu.icm.unity.engine.api.attributes.SystemAttributesProvider;
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
 import pl.edu.icm.unity.exceptions.WrongArgumentException;
 import pl.edu.icm.unity.stdext.attr.EnumAttributeSyntax;
-import pl.edu.icm.unity.stdext.attr.JpegImageAttributeSyntax;
+import pl.edu.icm.unity.stdext.attr.ImageAttributeSyntax;
 import pl.edu.icm.unity.stdext.attr.StringAttributeSyntax;
 import pl.edu.icm.unity.types.basic.AttributeType;
 
@@ -33,6 +33,7 @@ public class OAuthSystemAttributesProvider implements SystemAttributesProvider
 	private List<AttributeType> oauthAttributes = new ArrayList<AttributeType>();
 	
 	public static final String ALLOWED_FLOWS = "sys:oauth:allowedGrantFlows";
+	public static final String ALLOWED_SCOPES = "sys:oauth:allowedScopes";
 	public static final String ALLOWED_RETURN_URI = "sys:oauth:allowedReturnURI";
 	public static final String PER_CLIENT_GROUP = "sys:oauth:groupForClient";
 	public static final String CLIENT_NAME = "sys:oauth:clientName";
@@ -40,16 +41,18 @@ public class OAuthSystemAttributesProvider implements SystemAttributesProvider
 	public static final String CLIENT_TYPE = "sys:oauth:clientType";
 	
 	public static final int MAXIMUM_ALLOWED_URIS = 512;
+	public static final int MAXIMUM_ALLOWED_SCOPES = 512;
 	
 	public enum GrantFlow {authorizationCode, implicit, openidHybrid, client};
 	
-	private UnityMessageSource msg;
+	private MessageSource msg;
 	
 	@Autowired
-	public OAuthSystemAttributesProvider(UnityMessageSource msg)
+	public OAuthSystemAttributesProvider(MessageSource msg)
 	{
 		this.msg = msg;
 		oauthAttributes.add(getAllowedGrantFlowsAT());
+		oauthAttributes.add(getAllowedScopesAT());
 		oauthAttributes.add(getClientTypeAT());
 		oauthAttributes.add(getAllowedURIsAT());
 		oauthAttributes.add(getLogoAT());
@@ -71,6 +74,16 @@ public class OAuthSystemAttributesProvider implements SystemAttributesProvider
 		allowedGrantsAt.setUniqueValues(true);
 		allowedGrantsAt.setValueSyntaxConfiguration(syntax.getSerializedConfiguration());
 		return allowedGrantsAt;
+	}
+	
+	private AttributeType getAllowedScopesAT()
+	{
+		AttributeType allowedScopesAt = new AttributeType(ALLOWED_SCOPES, StringAttributeSyntax.ID, msg);
+		allowedScopesAt.setFlags(AttributeType.TYPE_IMMUTABLE_FLAG);
+		allowedScopesAt.setMinElements(0);
+		allowedScopesAt.setMaxElements(MAXIMUM_ALLOWED_SCOPES);
+		allowedScopesAt.setUniqueValues(false);
+		return allowedScopesAt;
 	}
 	
 	private AttributeType getClientTypeAT()
@@ -98,12 +111,12 @@ public class OAuthSystemAttributesProvider implements SystemAttributesProvider
 	
 	private AttributeType getLogoAT()
 	{
-		JpegImageAttributeSyntax syntax = new JpegImageAttributeSyntax();
+		ImageAttributeSyntax syntax = new ImageAttributeSyntax();
 		try
 		{
-			syntax.setMaxHeight(200);
-			syntax.setMaxWidth(400);
-			syntax.setMaxSize(4000000);
+			syntax.getConfig().setMaxHeight(200);
+			syntax.getConfig().setMaxWidth(400);
+			syntax.getConfig().setMaxSize(4000000);
 		} catch (WrongArgumentException e)
 		{
 			throw new IllegalArgumentException(e);

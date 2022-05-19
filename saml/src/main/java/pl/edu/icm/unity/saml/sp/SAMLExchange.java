@@ -5,10 +5,14 @@
 package pl.edu.icm.unity.saml.sp;
 
 import java.util.Locale;
+import java.util.Set;
 
-import pl.edu.icm.unity.engine.api.authn.AuthenticationException;
-import pl.edu.icm.unity.engine.api.authn.AuthenticationResult;
+import pl.edu.icm.unity.engine.api.authn.AuthenticationStepContext;
 import pl.edu.icm.unity.engine.api.authn.CredentialExchange;
+import pl.edu.icm.unity.engine.api.authn.RememberMeToken.LoginMachineDetails;
+import pl.edu.icm.unity.engine.api.authn.remote.AuthenticationTriggeringContext;
+import pl.edu.icm.unity.saml.sp.config.TrustedIdPKey;
+import pl.edu.icm.unity.saml.sp.config.TrustedIdPs;
 import pl.edu.icm.unity.saml.sp.web.IdPVisalSettings;
 
 /**
@@ -22,9 +26,12 @@ public interface SAMLExchange extends CredentialExchange
 {
 	public static final String ID = "SAML2 exchange";
 	
-	RemoteAuthnContext createSAMLRequest(String idpKey, String servletPAth);
-	SAMLSPProperties getSamlValidatorSettings();
-	IdPVisalSettings getVisualSettings(String configKey, Locale locale);
-	AuthenticationResult verifySAMLResponse(RemoteAuthnContext authnContext) throws AuthenticationException;
+	RemoteAuthnContext createSAMLRequest(TrustedIdPKey idpConfigKey, String servletPath, AuthenticationStepContext authnContext,
+			LoginMachineDetails initialLoginMachine, 
+			String ultimateReturnURL,
+			AuthenticationTriggeringContext triggeringContext);
+	Set<TrustedIdPKey> getTrustedIdpKeysWithWebBindings();
+	TrustedIdPs getTrustedIdPs();
+	IdPVisalSettings getVisualSettings(TrustedIdPKey configKey, Locale locale);
 	void destroy();
 }

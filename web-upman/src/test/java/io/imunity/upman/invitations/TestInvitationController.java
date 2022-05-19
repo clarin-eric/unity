@@ -6,12 +6,15 @@
 package io.imunity.upman.invitations;
 
 import static org.hamcrest.CoreMatchers.is;
+import static org.hamcrest.CoreMatchers.hasItems;
 import static org.junit.Assert.assertThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.times;
 
 import java.time.Instant;
 import java.util.Arrays;
+import java.util.List;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -23,7 +26,7 @@ import org.mockito.junit.MockitoJUnitRunner;
 import com.google.common.collect.Sets;
 
 import io.imunity.upman.utils.DelegatedGroupsHelper;
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
+import pl.edu.icm.unity.MessageSource;
 import pl.edu.icm.unity.engine.api.project.ProjectInvitationParam;
 import pl.edu.icm.unity.engine.api.project.ProjectInvitationsManagement;
 import pl.edu.icm.unity.exceptions.EngineException;
@@ -38,7 +41,7 @@ import pl.edu.icm.unity.webui.exceptions.ControllerException;
 public class TestInvitationController
 {
 	@Mock
-	private UnityMessageSource mockMsg;
+	private MessageSource mockMsg;
 
 	@Mock
 	private ProjectInvitationsManagement mockInvitationMan;
@@ -46,34 +49,43 @@ public class TestInvitationController
 	@Mock
 	private DelegatedGroupsHelper mockDelGroupHelper;
 
-	private InvitationsController controller;
+	private ProjectInvitationsController controller;
 
 	@Before
 	public void initController()
 	{
-		controller = new InvitationsController(mockMsg, mockInvitationMan, mockDelGroupHelper);
+		controller = new ProjectInvitationsController(mockMsg, mockInvitationMan, mockDelGroupHelper);
 	}
 
 	@Test
 	public void shouldForwardAddToCoreManager() throws ControllerException, EngineException
 	{
 		Instant expiration = Instant.now();
-		controller.addInvitation(new ProjectInvitationParam("/project", "demo@demo.com", Arrays.asList("/"),
-				expiration));
+		controller.addInvitations(Arrays.asList(
+				new ProjectInvitationParam("/project", "demo@demo.com", Arrays.asList("/"), false,
+						expiration),
+				new ProjectInvitationParam("/project", "demo2@demo.com", Arrays.asList("/", "/A"),
+						false, expiration)));
 
 		ArgumentCaptor<ProjectInvitationParam> argument = ArgumentCaptor.forClass(ProjectInvitationParam.class);
-		verify(mockInvitationMan).addInvitation(argument.capture());
-		assertThat(argument.getValue().project, is("/project"));
-		assertThat(argument.getValue().contactAddress, is("demo@demo.com"));
-		assertThat(argument.getValue().allowedGroup.iterator().next(), is("/"));
-		assertThat(argument.getValue().expiration, is(expiration));
+		verify(mockInvitationMan, times(2)).addInvitation(argument.capture());
+
+		List<ProjectInvitationParam> arguments = argument.getAllValues();
+		assertThat(arguments.get(0).project, is("/project"));
+		assertThat(arguments.get(0).contactAddress, is("demo@demo.com"));
+		assertThat(arguments.get(0).groups.iterator().next(), is("/"));
+		assertThat(arguments.get(0).expiration, is(expiration));
+		assertThat(arguments.get(1).project, is("/project"));
+		assertThat(arguments.get(1).contactAddress, is("demo2@demo.com"));
+		assertThat(arguments.get(1).groups, hasItems("/","/A"));
+		assertThat(arguments.get(1).expiration, is(expiration));
 	}
 
 	@Test
 	public void shouldForwardRemoveToCoreManager() throws ControllerException, EngineException
 	{
 		controller.removeInvitations("/project",
-				Sets.newHashSet(new InvitationEntry("code", null, null, null, null, null)));
+				Sets.newHashSet(new ProjectInvitationEntry("code", null, null, null, null, null)));
 
 		verify(mockInvitationMan).removeInvitation(eq("/project"), eq("code"));
 
@@ -83,7 +95,7 @@ public class TestInvitationController
 	public void shouldForwardSendToCoreManager() throws ControllerException, EngineException
 	{
 		controller.resendInvitations("/project",
-				Sets.newHashSet(new InvitationEntry("code", null, null, null, null, null)));
+				Sets.newHashSet(new ProjectInvitationEntry("code", null, null, null, null, null)));
 		verify(mockInvitationMan).sendInvitation(eq("/project"), eq("code"));
 	}
 

@@ -4,10 +4,6 @@
  */
 package pl.edu.icm.unity.stdext.identity;
 
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 
 import org.apache.logging.log4j.Logger;
@@ -16,9 +12,6 @@ import org.springframework.stereotype.Component;
 import pl.edu.icm.unity.MessageSource;
 import pl.edu.icm.unity.base.utils.Escaper;
 import pl.edu.icm.unity.base.utils.Log;
-import pl.edu.icm.unity.exceptions.IllegalIdentityValueException;
-import pl.edu.icm.unity.types.basic.Attribute;
-import pl.edu.icm.unity.types.basic.AttributeType;
 import pl.edu.icm.unity.types.basic.Identity;
 import pl.edu.icm.unity.types.basic.IdentityParam;
 
@@ -30,56 +23,26 @@ import pl.edu.icm.unity.types.basic.IdentityParam;
 @Component
 public class TargetedPersistentIdentity extends AbstractIdentityTypeProvider
 {
-	static final Logger log = Log.getLogger(Log.U_SERVER, TargetedPersistentIdentity.class);
+	static final Logger log = Log.getLogger(Log.U_SERVER_CORE, TargetedPersistentIdentity.class);
 	public static final String ID = "targetedPersistent";
 	
-	/**
-	 * {@inheritDoc}
-	 */
 	@Override
 	public String getId()
 	{
 		return ID;
 	}
 
-	/**
-	 * {@inheritDoc}
-	 */
 	@Override
-	public String getDefaultDescription()
+	public String getDefaultDescriptionKey()
 	{
-		return "Targeted persistent id";
+		return "TargetedPersistentIdentity.description";
 	}
 
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public Set<AttributeType> getAttributesSupportedForExtraction()
-	{
-		return Collections.emptySet();
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
 	@Override
 	public void validate(String value)
 	{
 	}
 
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public List<Attribute> extractAttributes(String from, Map<String, String> toExtract)
-	{
-		return EMPTY_ATTRS; 
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
 	@Override
 	public String toPrettyStringNoPrefix(IdentityParam from)
 	{
@@ -114,7 +77,6 @@ public class TargetedPersistentIdentity extends AbstractIdentityTypeProvider
 
 	@Override
 	public String getComparableValue(String from, String realm, String target)
-			throws IllegalIdentityValueException
 	{
 		return Escaper.encode(realm, target, from);
 	}

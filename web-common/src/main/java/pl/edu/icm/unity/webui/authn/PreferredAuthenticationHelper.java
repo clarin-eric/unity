@@ -4,12 +4,11 @@
  */
 package pl.edu.icm.unity.webui.authn;
 
-import javax.servlet.http.Cookie;
-
 import com.vaadin.server.VaadinRequest;
 import com.vaadin.server.VaadinService;
 
-import pl.edu.icm.unity.webui.CookieHelper;
+import pl.edu.icm.unity.engine.api.authn.LastAuthenticationCookie;
+import pl.edu.icm.unity.engine.api.utils.CookieHelper;
 
 /**
  * Provides access to the last used IDP or the one requested with request parameter
@@ -17,7 +16,6 @@ import pl.edu.icm.unity.webui.CookieHelper;
  */
 public class PreferredAuthenticationHelper
 {
-	private static final String LAST_AUTHN_COOKIE = "lastAuthnUsed";
 	/**
 	 * Query param allowing for selecting IdP in request to the endpoint
 	 */
@@ -27,16 +25,6 @@ public class PreferredAuthenticationHelper
 	{
 		String requestedIdp = getIdpFromRequestParam(); 
 		return requestedIdp == null ? getLastIdpFromCookie() : requestedIdp;
-	}
-	
-	
-	public static Cookie createLastIdpCookie(String endpointPath, String idpKey)
-	{
-		Cookie selectedIdp = new Cookie(LAST_AUTHN_COOKIE, idpKey);
-		selectedIdp.setMaxAge(3600*24*30);
-		selectedIdp.setPath(endpointPath);
-		selectedIdp.setHttpOnly(true);
-		return selectedIdp;
 	}
 	
 	private static String getIdpFromRequestParam()
@@ -52,6 +40,6 @@ public class PreferredAuthenticationHelper
 		VaadinRequest req = VaadinService.getCurrentRequest();
 		if (req == null)
 			return null;
-		return CookieHelper.getCookie(req.getCookies(), LAST_AUTHN_COOKIE);
+		return CookieHelper.getCookie(req.getCookies(), LastAuthenticationCookie.LAST_AUTHN_COOKIE);
 	}
 }

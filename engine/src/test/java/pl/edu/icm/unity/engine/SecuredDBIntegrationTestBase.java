@@ -12,10 +12,12 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+import org.assertj.core.api.Assertions;
 import org.junit.Before;
 import org.junit.runner.RunWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 
 import pl.edu.icm.unity.engine.api.AttributeClassManagement;
@@ -35,6 +37,7 @@ import pl.edu.icm.unity.engine.api.RealmsManagement;
 import pl.edu.icm.unity.engine.api.RegistrationsManagement;
 import pl.edu.icm.unity.engine.api.ServerManagement;
 import pl.edu.icm.unity.engine.api.identity.IdentityResolver;
+import pl.edu.icm.unity.engine.capacityLimits.InternalCapacityLimitVerificator;
 import pl.edu.icm.unity.engine.endpoint.InternalEndpointManagement;
 import pl.edu.icm.unity.engine.mock.MockPasswordVerificatorFactory;
 import pl.edu.icm.unity.engine.server.JettyServer;
@@ -47,6 +50,7 @@ import pl.edu.icm.unity.types.basic.Identity;
 import pl.edu.icm.unity.types.basic.IdentityType;
 
 @RunWith(SpringJUnit4ClassRunner.class)
+@TestPropertySource(properties = { "unityConfig: src/test/resources/unityServer.conf" })
 @UnityIntegrationTest
 public abstract class SecuredDBIntegrationTestBase
 {
@@ -104,13 +108,20 @@ public abstract class SecuredDBIntegrationTestBase
 	protected RealmsManagement realmsMan;
 	@Autowired
 	protected MessageTemplateManagement messageTemplateMan;
+	@Autowired
+	protected InternalCapacityLimitVerificator capacityLimit;
 	
 	@Before
 	public void clear() throws Exception
 	{
 		insecureServerMan.resetDatabase();
+		clearCapacityCache();
 	}
 	
+	protected void clearCapacityCache()
+	{
+		capacityLimit.clearCache();
+	}
 	protected void checkArray(Object[] toBeChecked, Object... shouldBeIn)
 	{
 		for (Object o: shouldBeIn)
@@ -187,5 +198,10 @@ public abstract class SecuredDBIntegrationTestBase
 		CredentialRequirements cr = new CredentialRequirements(CR_MOCK, "mock cred req", 
 				Collections.singleton(credDef.getName()));
 		insecureCredReqMan.addCredentialRequirement(cr);
+	}
+	
+	protected void assertExceptionType(Throwable exception, Class<?> type)
+	{
+		Assertions.assertThat(exception).isNotNull().isInstanceOf(type);
 	}
 }

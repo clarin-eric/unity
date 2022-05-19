@@ -89,7 +89,6 @@ public class EntityCredentialsHelper
 	public void setEntityCredentialRequirements(long entityId, String credReqId) 
 			throws EngineException
 	{
-		
 		credentialReqRepository.assertExist(credReqId);
 		setEntityCredentialRequirementsNoCheck(entityId, credReqId);
 	}
@@ -104,11 +103,6 @@ public class EntityCredentialsHelper
 	
 	/**
 	 * Sets a credential which was previously prepared (i.e. hashed etc). Absolutely no checking is performed.
-	 * @param entityId
-	 * @param newCred
-	 * @param credentialId
-	 * @param sqlMap
-	 * @throws EngineException
 	 */
 	public void setPreviouslyPreparedEntityCredential(long entityId, String newCred, String credentialId)
 	{
@@ -120,11 +114,6 @@ public class EntityCredentialsHelper
 	
 	/**
 	 * Prepares and sets credential
-	 * @param entityId
-	 * @param credentialId
-	 * @param rawCredential
-	 * @param currentRawCredential
-	 * @throws EngineException
 	 */
 	public void setEntityCredential(long entityId, String credentialId, String rawCredential) throws EngineException
 	{
@@ -134,11 +123,6 @@ public class EntityCredentialsHelper
 	
 	/**
 	 * Prepares and sets credential without verify it
-	 * @param entityId
-	 * @param credentialId
-	 * @param rawCredential
-	 * @param currentRawCredential
-	 * @throws EngineException
 	 */
 	public void setEntityCredentialInternalWithoutVerify(long entityId, String credentialId, 
 			String rawCredential)  throws EngineException

@@ -11,10 +11,12 @@ import java.util.List;
  * @author K. Benedyczak
  */
 public interface BasicCRUDDAO<T>
-{	
+{
 	long create(T obj);
 	
 	void createWithId(long id, T obj);
+	
+	List<Long> createList(List<T> objs);
 	
 	void updateByKey(long id, T obj);
 
@@ -25,4 +27,6 @@ public interface BasicCRUDDAO<T>
 	T getByKey(long id);
 
 	List<T> getAll();
+	
+	long getCount();
 }

@@ -16,17 +16,19 @@ import com.vaadin.ui.HorizontalLayout;
 import com.vaadin.ui.Label;
 import com.vaadin.ui.VerticalLayout;
 
+import io.imunity.upman.ProjectController;
 import io.imunity.upman.UpManNavigationInfoProviderBase;
 import io.imunity.upman.UpManRootNavigationInfoProvider;
 import io.imunity.upman.UpManUI;
 import io.imunity.upman.common.UpManView;
 import io.imunity.webelements.navigation.NavigationInfo;
 import io.imunity.webelements.navigation.NavigationInfo.Type;
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
+import pl.edu.icm.unity.MessageSource;
+import pl.edu.icm.unity.engine.api.project.DelegatedGroup;
 import pl.edu.icm.unity.engine.api.utils.PrototypeComponent;
 import pl.edu.icm.unity.webui.common.Images;
 import pl.edu.icm.unity.webui.common.NotificationPopup;
-import pl.edu.icm.unity.webui.common.SidebarStyles;
+import pl.edu.icm.unity.webui.common.Styles;
 import pl.edu.icm.unity.webui.exceptions.ControllerException;
 
 /**
@@ -40,28 +42,40 @@ public class GroupsView extends CustomComponent implements UpManView
 {
 	public static final String VIEW_NAME = "Groups";
 
-	private UnityMessageSource msg;
+	private MessageSource msg;
 	private GroupsController controller;
+	private ProjectController projectController;
 
 	@Autowired
-	public GroupsView(UnityMessageSource msg, GroupsController controller)
+	public GroupsView(MessageSource msg, GroupsController controller, ProjectController projectController)
 	{
 		this.msg = msg;
 		this.controller = controller;
+		this.projectController = projectController;
 	}
 
 	@Override
 	public void enter(ViewChangeEvent event)
 	{
-		String project = UpManUI.getProjectGroup();
+		DelegatedGroup project;
+		try
+		{
+			project = UpManUI.getProjectGroup();
+		} catch (ControllerException e)
+		{
+			NotificationPopup.showError(e);
+			return;
+		}
 		VerticalLayout main = new VerticalLayout();
 		main.setMargin(false);
 		setCompositionRoot(main);
+		main.setSizeFull();
+		setSizeFull();
 
 		GroupsComponent groupsComponent;
 		try
 		{
-			groupsComponent = new GroupsComponent(msg, controller, project);
+			groupsComponent = new GroupsComponent(msg, controller,  projectController.getProjectRole(project.path), project);
 		} catch (ControllerException e)
 		{
 			NotificationPopup.showError(e);
@@ -88,7 +102,7 @@ public class GroupsView extends CustomComponent implements UpManView
 		HorizontalLayout header = new HorizontalLayout();
 		header.setMargin(false);
 		Label name = new Label(getDisplayedName());
-		name.addStyleName(SidebarStyles.viewHeader.toString());
+		name.addStyleName(Styles.viewHeader.toString());
 		header.addComponents(name);
 		header.setComponentAlignment(name, Alignment.MIDDLE_CENTER);
 		return header;
@@ -98,12 +112,11 @@ public class GroupsView extends CustomComponent implements UpManView
 	public class GroupsNavigationInfoProvider extends UpManNavigationInfoProviderBase
 	{
 		@Autowired
-		public GroupsNavigationInfoProvider(UnityMessageSource msg,
-				UpManRootNavigationInfoProvider parent,
+		public GroupsNavigationInfoProvider(MessageSource msg,
 				ObjectFactory<GroupsView> factory)
 		{
 			super(new NavigationInfo.NavigationInfoBuilder(VIEW_NAME, Type.View)
-					.withParent(parent.getNavigationInfo())
+					.withParent(UpManRootNavigationInfoProvider.ID)
 					.withObjectFactory(factory)
 					.withCaption(msg.getMessage("UpManMenu.groups"))
 					.withIcon(Images.file_tree.getResource()).withPosition(1)

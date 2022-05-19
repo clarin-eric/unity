@@ -6,17 +6,20 @@ package pl.edu.icm.unity.webui.forms.reg;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.apache.logging.log4j.Logger;
 
 import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 import com.vaadin.server.Resource;
 import com.vaadin.server.UserError;
+import com.vaadin.server.VaadinRequest;
+import com.vaadin.server.VaadinServletRequest;
 import com.vaadin.ui.AbstractOrderedLayout;
 import com.vaadin.ui.Alignment;
 import com.vaadin.ui.Button;
@@ -27,6 +30,8 @@ import com.vaadin.ui.Layout;
 import com.vaadin.ui.TextField;
 import com.vaadin.ui.VerticalLayout;
 
+import pl.edu.icm.unity.MessageSource;
+import pl.edu.icm.unity.base.msgtemplates.MessageTemplateDefinition;
 import pl.edu.icm.unity.base.utils.Log;
 import pl.edu.icm.unity.engine.api.AttributeTypeManagement;
 import pl.edu.icm.unity.engine.api.CredentialManagement;
@@ -34,24 +39,29 @@ import pl.edu.icm.unity.engine.api.GroupsManagement;
 import pl.edu.icm.unity.engine.api.authn.AuthenticationException;
 import pl.edu.icm.unity.engine.api.authn.AuthenticationFlow;
 import pl.edu.icm.unity.engine.api.authn.AuthenticatorInstance;
+import pl.edu.icm.unity.engine.api.authn.AuthenticatorStepContext;
+import pl.edu.icm.unity.engine.api.authn.AuthenticatorStepContext.FactorOrder;
 import pl.edu.icm.unity.engine.api.authn.AuthenticatorSupportService;
-import pl.edu.icm.unity.engine.api.authn.remote.RemotelyAuthenticatedContext;
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
+import pl.edu.icm.unity.engine.api.authn.InvocationContext;
+import pl.edu.icm.unity.engine.api.authn.remote.RemotelyAuthenticatedPrincipal;
 import pl.edu.icm.unity.exceptions.WrongArgumentException;
 import pl.edu.icm.unity.types.I18nString;
 import pl.edu.icm.unity.types.authn.AuthenticationOptionKey;
-import pl.edu.icm.unity.types.authn.AuthenticationOptionKeyUtils;
+import pl.edu.icm.unity.types.authn.AuthenticationOptionsSelector;
+import pl.edu.icm.unity.types.policyAgreement.PolicyAgreementConfiguration;
 import pl.edu.icm.unity.types.registration.ExternalSignupGridSpec;
 import pl.edu.icm.unity.types.registration.ExternalSignupGridSpec.AuthnGridSettings;
 import pl.edu.icm.unity.types.registration.FormLayoutUtils;
 import pl.edu.icm.unity.types.registration.RegistrationForm;
 import pl.edu.icm.unity.types.registration.RegistrationRequest;
+import pl.edu.icm.unity.types.registration.invite.FormPrefill;
 import pl.edu.icm.unity.types.registration.invite.RegistrationInvitationParam;
-import pl.edu.icm.unity.types.registration.layout.BasicFormElement;
 import pl.edu.icm.unity.types.registration.layout.FormElement;
 import pl.edu.icm.unity.types.registration.layout.FormLayout;
-import pl.edu.icm.unity.types.registration.layout.FormLocalSignupButtonElement;
 import pl.edu.icm.unity.types.registration.layout.FormParameterElement;
+import pl.edu.icm.unity.webui.authn.PreferredAuthenticationHelper;
+import pl.edu.icm.unity.webui.authn.ProxyAuthenticationCapable;
+import pl.edu.icm.unity.webui.authn.ProxyAuthenticationFilter;
 import pl.edu.icm.unity.webui.authn.VaadinAuthentication;
 import pl.edu.icm.unity.webui.authn.VaadinAuthentication.Context;
 import pl.edu.icm.unity.webui.authn.VaadinAuthentication.VaadinAuthenticationUI;
@@ -62,16 +72,20 @@ import pl.edu.icm.unity.webui.authn.column.FirstFactorAuthNPanel;
 import pl.edu.icm.unity.webui.authn.column.SearchComponent;
 import pl.edu.icm.unity.webui.common.CaptchaComponent;
 import pl.edu.icm.unity.webui.common.FormValidationException;
-import pl.edu.icm.unity.webui.common.ImageUtils;
 import pl.edu.icm.unity.webui.common.Styles;
 import pl.edu.icm.unity.webui.common.attributes.AttributeHandlerRegistry;
 import pl.edu.icm.unity.webui.common.credentials.CredentialEditorRegistry;
+import pl.edu.icm.unity.webui.common.file.ImageAccessService;
 import pl.edu.icm.unity.webui.common.identities.IdentityEditorRegistry;
+import pl.edu.icm.unity.webui.common.policyAgreement.PolicyAgreementRepresentationBuilder;
 import pl.edu.icm.unity.webui.common.safehtml.HtmlConfigurableLabel;
 import pl.edu.icm.unity.webui.common.safehtml.HtmlTag;
 import pl.edu.icm.unity.webui.forms.BaseRequestEditor;
 import pl.edu.icm.unity.webui.forms.PrefilledSet;
 import pl.edu.icm.unity.webui.forms.RegistrationLayoutsContainer;
+import pl.edu.icm.unity.webui.forms.ResolvedInvitationParam;
+import pl.edu.icm.unity.webui.forms.URLQueryPrefillCreator;
+import pl.edu.icm.unity.webui.forms.reg.RequestEditorCreator.InvitationCodeConsumer;
 
 /**
  * Generates a UI based on a given registration form. User can fill the form and a request is returned.
@@ -83,6 +97,8 @@ import pl.edu.icm.unity.webui.forms.RegistrationLayoutsContainer;
  */
 public class RegistrationRequestEditor extends BaseRequestEditor<RegistrationRequest>
 {
+	private static final String INVITATION_EMAIL_VAR = "invitationEmail";
+	
 	enum Stage {FIRST, SECOND}
 	
 	private static final Logger log = Log.getLogger(Log.U_SERVER_WEB, RegistrationRequestEditor.class);
@@ -91,45 +107,57 @@ public class RegistrationRequestEditor extends BaseRequestEditor<RegistrationReq
 	private TextField registrationCode;
 	private CaptchaComponent captcha;
 	private String regCodeProvided;
-	private RegistrationInvitationParam invitation;
+	private ResolvedInvitationParam invitation;
 	private AuthenticatorSupportService authnSupport;
-	private SignUpAuthNController signUpAuthNController;
-	private Map<AuthenticationOptionKey, AuthNOption> signupOptions;
-	private Runnable onLocalSignupHandler;
+	private Map<AuthenticationOptionKey, AuthNOption> externalSignupOptions;
+	private InvitationCodeConsumer onLocalSignupHandler;
 	private FormLayout effectiveLayout;
 	private Stage stage;
 	private RegistrationLayoutsContainer layoutContainer;
+	private URLQueryPrefillCreator urlQueryPrefillCreator;
+	private final boolean enableRemoteRegistration;
+	private final SwitchToEnquiryComponentProvider toEnquirySwitchLabelProvider;
+	private final AuthenticationOptionKey authnOptionKey;
 
 	/**
 	 * Note - the two managers must be insecure, if the form is used in not-authenticated context, 
 	 * what is possible for registration form.
+	 * @param toEnquirySwitchLabelProvider 
 	 */
-	public RegistrationRequestEditor(UnityMessageSource msg, RegistrationForm form,
-			RemotelyAuthenticatedContext remotelyAuthenticated,
+	public RegistrationRequestEditor(MessageSource msg, RegistrationForm form,
+			RemotelyAuthenticatedPrincipal remotelyAuthenticated,
 			IdentityEditorRegistry identityEditorRegistry,
 			CredentialEditorRegistry credentialEditorRegistry,
 			AttributeHandlerRegistry attributeHandlerRegistry,
 			AttributeTypeManagement aTypeMan, CredentialManagement credMan,
-			GroupsManagement groupsMan, 
-			String registrationCode, RegistrationInvitationParam invitation2, 
+			GroupsManagement groupsMan, ImageAccessService imageAccessService,
+			String registrationCode, ResolvedInvitationParam invitation, 
 			AuthenticatorSupportService authnSupport, 
-			SignUpAuthNController signUpAuthNController)
+			URLQueryPrefillCreator urlQueryPrefillCreator, 
+			PolicyAgreementRepresentationBuilder policyAgreementsRepresentationBuilder,
+			SwitchToEnquiryComponentProvider toEnquirySwitchLabelProvider, 
+			boolean enableRemoteRegistration,
+			AuthenticationOptionKey authnOptionKey)
 	{
 		super(msg, form, remotelyAuthenticated, identityEditorRegistry, credentialEditorRegistry, 
-				attributeHandlerRegistry, aTypeMan, credMan, groupsMan);
+				attributeHandlerRegistry, aTypeMan, credMan, groupsMan, imageAccessService,
+				policyAgreementsRepresentationBuilder);
 		this.form = form;
 		this.regCodeProvided = registrationCode;
-		this.invitation = invitation2;
-		this.signUpAuthNController = signUpAuthNController;
+		this.invitation = invitation;
 		this.authnSupport = authnSupport;
+		this.urlQueryPrefillCreator = urlQueryPrefillCreator;
+		this.enableRemoteRegistration = enableRemoteRegistration;
+		this.toEnquirySwitchLabelProvider =  toEnquirySwitchLabelProvider;
+		this.authnOptionKey = authnOptionKey;
 	}
 	
-	public void showFirstStage(Runnable onLocalSignupHandler) throws AuthenticationException
+	public void showFirstStage(InvitationCodeConsumer onLocalSignupHandler) throws AuthenticationException
 	{
 		this.effectiveLayout = form.getEffectivePrimaryFormLayout(msg);
 		this.onLocalSignupHandler = onLocalSignupHandler;
 		this.stage = Stage.FIRST;
-		if (form.isLocalSignupEnabled()) //when we have only remote signup enabled, validation must be defered to 2nd stage
+		if (form.isLocalSignupEnabled()) //when we have only remote signup enabled, validation must be deferred to 2nd stage
 			validateMandatoryRemoteInput(); 
 		initUI();
 	}
@@ -143,6 +171,11 @@ public class RegistrationRequestEditor extends BaseRequestEditor<RegistrationReq
 		initUI();
 	}
 	
+	public AuthenticationOptionKey getAuthnOptionKey()
+	{
+		return authnOptionKey;
+	}
+
 	@Override
 	public RegistrationRequest getRequest(boolean withCredentials) throws FormValidationException
 	{
@@ -213,22 +246,74 @@ public class RegistrationRequestEditor extends BaseRequestEditor<RegistrationReq
 	
 	private void initUI()
 	{
-		layoutContainer = createLayouts();
+		
+		RegistrationInvitationParam regInv = invitation == null ? null : invitation.getAsRegistration();
+		
+		layoutContainer = createLayouts(buildVarsToFreemarkerTemplates(Optional.ofNullable(regInv)));
 
 		resolveRemoteSignupOptions();
 		PrefilledSet prefilled = new PrefilledSet();
-		if (invitation != null)
-		{
-			prefilled = new PrefilledSet(invitation.getIdentities(),
-					invitation.getGroupSelections(),
-					invitation.getAttributes(),
-					invitation.getAllowedGroups());
+		if (regInv != null)
+		{	
+			FormPrefill formPrefill = regInv.getFormPrefill();
+			prefilled = new PrefilledSet(formPrefill.getIdentities(),
+					formPrefill.getGroupSelections(),
+					formPrefill.getAttributes(),
+					formPrefill.getAllowedGroups());
 		}
+		prefilled = prefilled.mergeWith(urlQueryPrefillCreator.create(form));
 		createControls(layoutContainer, effectiveLayout, prefilled);
 	}
 	
+	boolean performAutomaticRemoteSignupIfNeeded()
+	{
+		if (isAutomatedAuthenticationDesired() && externalSignupOptions.size() > 0)
+		{
+			VaadinServletRequest httpRequest = (VaadinServletRequest) VaadinRequest.getCurrent();
+			String requestedAuthnOption = httpRequest.getParameter(PreferredAuthenticationHelper.IDP_SELECT_PARAM);
+			if (externalSignupOptions.size() > 1 && requestedAuthnOption == null)
+			{
+				log.warn("There are more multiple remote signup options are installed, "
+						+ "and automated signup was requested without specifying (with " 
+						+  "{}) which one should be used. Automatic signup is skipped.", 
+						PreferredAuthenticationHelper.IDP_SELECT_PARAM);
+				return false;
+			}
+			AuthNOption authnOption = requestedAuthnOption != null ? 
+					externalSignupOptions.get(AuthenticationOptionKey.valueOf(requestedAuthnOption)) : 
+					externalSignupOptions.values().iterator().next();
+			if (authnOption == null)
+			{
+				log.warn("Remote signup option {} specified for auto signup is invalid. "
+						+ "Automatic signup is skipped.", requestedAuthnOption);
+				return false;
+			}
+			if (authnOption.authenticator instanceof ProxyAuthenticationCapable)
+			{
+				ProxyAuthenticationCapable proxyAuthn = (ProxyAuthenticationCapable) authnOption.authenticator;
+				proxyAuthn.triggerAutomatedUIAuthentication(authnOption.authenticatorUI);
+				return true;
+			} else
+			{
+				log.warn("Automatic signup was requested but the selected remote authenticator "
+						+ "is not capable of automatic triggering");
+				return false;
+			}
+		}
+		return false;
+	}
+	
+	private boolean isAutomatedAuthenticationDesired()
+	{
+		VaadinServletRequest httpRequest = (VaadinServletRequest) VaadinRequest.getCurrent();
+		String autoLogin = httpRequest.getParameter(ProxyAuthenticationFilter.TRIGGERING_PARAM);
+		if (autoLogin != null && Boolean.parseBoolean(autoLogin))
+			return true;
+		return false;
+	}
+
 	@Override
-	protected RegistrationLayoutsContainer createLayouts()
+	protected RegistrationLayoutsContainer createLayouts(Map<String, Object> params)
 	{
 		VerticalLayout main = new VerticalLayout();
 		main.setSpacing(true);
@@ -236,18 +321,18 @@ public class RegistrationRequestEditor extends BaseRequestEditor<RegistrationReq
 		main.setWidth(100, Unit.PERCENTAGE);
 		setCompositionRoot(main);
 		
-		String logoURL = form.getLayoutSettings().getLogoURL();
-		if (logoURL != null && !logoURL.isEmpty())
+		String logoUri = form.getLayoutSettings().getLogoURL();
+		Optional<Resource> logoRes = imageAccessService.getConfiguredImageResourceFromNullableUri(logoUri);
+		if (logoRes.isPresent())
 		{
-			Resource logoResource = ImageUtils.getConfiguredImageResource(logoURL);
-			Image image = new Image(null, logoResource);
+			Image image = new Image(null, logoRes.get());
 			image.addStyleName("u-signup-logo");
 			main.addComponent(image);
-			main.setComponentAlignment(image, Alignment.TOP_CENTER);
+			main.setComponentAlignment(image, Alignment.TOP_CENTER);	
 		}
 		
 		I18nString title = stage == Stage.FIRST ? form.getDisplayedName() : form.getTitle2ndStage();
-		Label formName = new Label(title.getValue(msg));
+		Label formName = new Label(processFreeemarkerTemplate(params, title.getValue(msg)));
 		formName.addStyleName(Styles.vLabelH1.toString());
 		formName.addStyleName("u-reg-title");
 		main.addComponent(formName);
@@ -255,13 +340,22 @@ public class RegistrationRequestEditor extends BaseRequestEditor<RegistrationReq
 		
 		if (stage == Stage.FIRST)
 		{
-			String info = form.getFormInformation() == null ? null : form.getFormInformation().getValue(msg);
+			String info = form.getFormInformation() == null ? null
+					: processFreeemarkerTemplate(params, form.getFormInformation().getValue(msg));
 			if (info != null)
 			{
 				HtmlConfigurableLabel formInformation = new HtmlConfigurableLabel(info);
 				formInformation.addStyleName("u-reg-info");
 				main.addComponent(formInformation);
 				main.setComponentAlignment(formInformation, Alignment.MIDDLE_CENTER);
+			}
+
+			Optional<Label> switchToEnquiryLabel = toEnquirySwitchLabelProvider
+					.getSwitchToEnquiryLabel(form.getSwitchToEnquiryInfoFallbackToDefault(msg), invitation, params);
+			if (switchToEnquiryLabel.isPresent())
+			{
+				main.addComponent(switchToEnquiryLabel.get());
+				main.setComponentAlignment(switchToEnquiryLabel.get(), Alignment.MIDDLE_CENTER);
 			}
 		}
 		
@@ -272,35 +366,37 @@ public class RegistrationRequestEditor extends BaseRequestEditor<RegistrationReq
 	
 	private void resolveRemoteSignupOptions()
 	{
+		externalSignupOptions = new HashMap<>();
 		if (!form.getExternalSignupSpec().isEnabled())
 			return;
 		
-		signupOptions = Maps.newHashMap();
 		Set<String> authnOptions = form.getExternalSignupSpec().getSpecs().stream()
-			.map(AuthenticationOptionKey::getAuthenticatorKey)
+			.map(a -> a.authenticatorKey)
 			.collect(Collectors.toSet());
 		List<AuthenticationFlow> flows = authnSupport.resolveAuthenticationFlows(Lists.newArrayList(authnOptions),
 				VaadinAuthentication.NAME);
-		Set<AuthenticationOptionKey> formSignupSpec = form.getExternalSignupSpec().getSpecs().stream().collect(Collectors.toSet());
-		Set<String> formSignupAuthenticatorAll = form.getExternalSignupSpec().getSpecs().stream()
-				.filter(s -> s.getOptionKey().equals(AuthenticationOptionKey.ALL_OPTS))
-				.map(s -> s.getAuthenticatorKey()).collect(Collectors.toSet());
+		Set<AuthenticationOptionsSelector> formSignupSpec = form.getExternalSignupSpec().getSpecs().stream()
+				.collect(Collectors.toSet());
 		for (AuthenticationFlow flow : flows)
 		{
 			for (AuthenticatorInstance authenticator : flow.getFirstFactorAuthenticators())
 			{
 				VaadinAuthentication vaadinAuthenticator = (VaadinAuthentication) authenticator.getRetrieval();
 				String authenticatorKey = vaadinAuthenticator.getAuthenticatorId();
-				Collection<VaadinAuthenticationUI> optionUIInstances = vaadinAuthenticator.createUIInstance(Context.REGISTRATION);
+				AuthenticatorStepContext context = new AuthenticatorStepContext(
+						InvocationContext.getCurrent().getRealm(), flow, null, FactorOrder.FIRST);
+				Collection<VaadinAuthenticationUI> optionUIInstances = 
+						vaadinAuthenticator.createUIInstance(Context.REGISTRATION, context);
 				for (VaadinAuthenticationUI vaadinAuthenticationUI : optionUIInstances)
 				{
 					String optionKey = vaadinAuthenticationUI.getId();
 					AuthenticationOptionKey authnOption = new AuthenticationOptionKey(authenticatorKey, optionKey);
-					if (formSignupSpec.contains(authnOption) || formSignupAuthenticatorAll.contains(authnOption.getAuthenticatorKey()))
+					if (formSignupSpec.stream().anyMatch(selector -> selector.matchesAuthnOption(authnOption)))
 					{
-						AuthNOption signupAuthNOption = new AuthNOption(flow, vaadinAuthenticator,  vaadinAuthenticationUI);
+						AuthNOption signupAuthNOption = new AuthNOption(flow, 
+								vaadinAuthenticator,  vaadinAuthenticationUI);
 						setupExpectedIdentity(vaadinAuthenticationUI);
-						signupOptions.put(authnOption, signupAuthNOption);
+						externalSignupOptions.put(authnOption, signupAuthNOption);
 					}
 				}
 			}
@@ -311,8 +407,8 @@ public class RegistrationRequestEditor extends BaseRequestEditor<RegistrationReq
 	{
 		if (invitation == null)
 			return;
-		if (invitation.getExpectedIdentity() != null)
-			vaadinAuthenticationUI.setExpectedIdentity(invitation.getExpectedIdentity());
+		if (invitation.getAsRegistration().getExpectedIdentity() != null)
+			vaadinAuthenticationUI.setExpectedIdentity(invitation.getAsRegistration().getExpectedIdentity());
 	}
 	
 	@Override
@@ -322,21 +418,21 @@ public class RegistrationRequestEditor extends BaseRequestEditor<RegistrationReq
 		switch (element.getType())
 		{
 		case CAPTCHA:
-			return createCaptchaControl(layoutContainer.registrationFormLayout, (BasicFormElement) element);
+			return createCaptchaControl(layoutContainer.registrationFormLayout);
 		case REG_CODE:
-			return createRegistrationCodeControl(layoutContainer.registrationFormLayout, (BasicFormElement) element);
+			return createRegistrationCodeControl(layoutContainer.registrationFormLayout);
 		case REMOTE_SIGNUP:
 			return createRemoteSignupButton(layoutContainer.registrationFormLayout, (FormParameterElement) element);
 		case REMOTE_SIGNUP_GRID:
-			return createRemoteSignupGrid(layoutContainer.registrationFormLayout, (FormParameterElement) element);
+			return createRemoteSignupGrid(layoutContainer.registrationFormLayout);
 		case LOCAL_SIGNUP:
-			return createLocalSignupButton(layoutContainer.registrationFormLayout, (FormLocalSignupButtonElement) element);
+			return createLocalSignupButton(layoutContainer.registrationFormLayout);
 		default:
 			return super.createControlFor(layoutContainer, element, previousAdded, next, prefilled);
 		}
 	}
 
-	private boolean createRemoteSignupGrid(VerticalLayout registrationFormLayout, FormParameterElement element)
+	private boolean createRemoteSignupGrid(VerticalLayout registrationFormLayout)
 	{			
 		ExternalSignupGridSpec externalSignupGridSpec = form.getExternalSignupGridSpec();
 		AuthnGridSettings gridSettings = externalSignupGridSpec.getGridSettings();
@@ -346,12 +442,12 @@ public class RegistrationRequestEditor extends BaseRequestEditor<RegistrationReq
 		}
 		
 		List<AuthNOption> options = new ArrayList<>();
-		for (AuthenticationOptionKey spec : externalSignupGridSpec.getSpecs())
+		for (AuthenticationOptionsSelector spec : externalSignupGridSpec.getSpecs())
 		{
 			List<AuthNOption> signupOptions = getSignupOptions(spec);
 			if (signupOptions.isEmpty())
 			{
-				log.debug("Ignoring not available remote sign up options: {}", spec.toGlobalKey());
+				log.debug("Ignoring not available remote sign up options: {}", spec.toStringEncodedSelector());
 			}
 			
 			options.addAll(signupOptions);
@@ -374,10 +470,8 @@ public class RegistrationRequestEditor extends BaseRequestEditor<RegistrationReq
 		
 		registrationFormLayout.addComponent(grid);
 		registrationFormLayout.setComponentAlignment(grid, Alignment.MIDDLE_CENTER);
-		if(signUpAuthNController == null)
-		{
-			grid.setEnabled(false); //for some UIs (admin) we can't really trigger external authN
-		}
+		if (!enableRemoteRegistration)
+			grid.setEnabled(false);
 	
 		return true;		
 	}
@@ -385,12 +479,12 @@ public class RegistrationRequestEditor extends BaseRequestEditor<RegistrationReq
 	private boolean createRemoteSignupButton(AbstractOrderedLayout layout, FormParameterElement element)
 	{
 		int index = element.getIndex();
-		AuthenticationOptionKey spec = form.getExternalSignupSpec().getSpecs().get(index);
+		AuthenticationOptionsSelector spec = form.getExternalSignupSpec().getSpecs().get(index);
 
 		List<AuthNOption> options = getSignupOptions(spec);
 		if (options.isEmpty())
 		{
-			log.debug("Ignoring not available remote sign up option {}", spec.toGlobalKey());
+			log.debug("Ignoring not available remote sign up option {}", spec.toStringEncodedSelector());
 			return false;
 		}
 
@@ -401,46 +495,40 @@ public class RegistrationRequestEditor extends BaseRequestEditor<RegistrationReq
 			layout.addComponent(signupOptionComponent);
 			layout.setComponentAlignment(signupOptionComponent, Alignment.MIDDLE_CENTER);
 
-			if (signUpAuthNController == null)
+			if (!enableRemoteRegistration)
 			{
-				signupOptionComponent.setEnabled(false); //for some UIs (admin) we can't really trigger external authN
+				signupOptionComponent.setEnabled(false);
 			} else
 			{
-				option.authenticatorUI
-						.setAuthenticationCallback(signUpAuthNController.buildCallback(option));
+				option.authenticatorUI.setAuthenticationCallback(new SignUpAuthnCallback(
+						form, regCodeProvided, 
+						new AuthenticationOptionKey(option.authenticator.getAuthenticatorId(), 
+								option.authenticatorUI.getId())));
 			}
 		}
 
 		return true;
 	}
 
-	private List<AuthNOption> getSignupOptions(AuthenticationOptionKey spec)
+	private List<AuthNOption> getSignupOptions(AuthenticationOptionsSelector spec)
 	{
-
-		if (spec.getOptionKey().equals(AuthenticationOptionKey.ALL_OPTS))
-		{
-			return signupOptions.entrySet().stream().filter(
-					e -> e.getKey().getAuthenticatorKey().equals(spec.getAuthenticatorKey()))
+		return externalSignupOptions.entrySet().stream()
+					.filter(e -> spec.matchesAuthnOption(e.getKey()))
 					.map(e -> e.getValue()).collect(Collectors.toList());
-		} else
-		{
-			return signupOptions.entrySet().stream().filter(e -> e.getKey().equals(spec))
-					.map(e -> e.getValue()).collect(Collectors.toList());
-		}
 	}
 	
-	private boolean createLocalSignupButton(AbstractOrderedLayout layout, FormLocalSignupButtonElement element)
+	private boolean createLocalSignupButton(AbstractOrderedLayout layout)
 	{
 		Button localSignup = new Button(msg.getMessage("RegistrationRequest.localSignup"));
 		localSignup.addStyleName("u-localSignUpButton");
-		localSignup.addClickListener(event -> onLocalSignupHandler.run());
+		localSignup.addClickListener(event -> onLocalSignupHandler.accept(regCodeProvided));
 		localSignup.setWidth(formWidth(), formWidthUnit());
 		layout.addComponent(localSignup);
 		layout.setComponentAlignment(localSignup, Alignment.MIDDLE_CENTER);
 		return true;
 	}
 	
-	private boolean createCaptchaControl(Layout layout, BasicFormElement element)
+	private boolean createCaptchaControl(Layout layout)
 	{
 		captcha = new CaptchaComponent(msg, form.getCaptchaLength(), form.getLayoutSettings().isCompactInputs());
 		layout.addComponent(HtmlTag.br());
@@ -448,7 +536,7 @@ public class RegistrationRequestEditor extends BaseRequestEditor<RegistrationReq
 		return true;
 	}
 
-	private boolean createRegistrationCodeControl(Layout layout, BasicFormElement element)
+	private boolean createRegistrationCodeControl(Layout layout)
 	{
 		registrationCode = new TextField(msg.getMessage("RegistrationRequest.registrationCode"));
 		registrationCode.setRequiredIndicatorVisible(true);
@@ -456,12 +544,18 @@ public class RegistrationRequestEditor extends BaseRequestEditor<RegistrationReq
 		return true;
 	}
 	
-	RegistrationForm getForm()
+	@Override
+	protected boolean isPolicyAgreementsIsFiltered(PolicyAgreementConfiguration toCheck)
+	{
+		return false;
+	}
+	
+	public RegistrationForm getForm()
 	{
 		return form;
 	}
 	
-	RemotelyAuthenticatedContext getRemoteAuthnContext()
+	RemotelyAuthenticatedPrincipal getRemoteAuthnContext()
 	{
 		return remotelyAuthenticated;
 	}
@@ -477,20 +571,32 @@ public class RegistrationRequestEditor extends BaseRequestEditor<RegistrationReq
 		@Override
 		public FirstFactorAuthNPanel createGridCompatibleAuthnPanel(AuthNOption authnOption)
 		{
-			String optionId = AuthenticationOptionKeyUtils.encode(
+			AuthenticationOptionKey optionId = new AuthenticationOptionKey(
 					authnOption.authenticator.getAuthenticatorId(),
 					authnOption.authenticatorUI.getId());
 
-			FirstFactorAuthNPanel authNPanel = new FirstFactorAuthNPanel(msg, null, null, null, true,
+			FirstFactorAuthNPanel authNPanel = new FirstFactorAuthNPanel(null, null, true,
 					authnOption.authenticatorUI, optionId);
 
-			if (signUpAuthNController != null)
-			{
+			if (enableRemoteRegistration)
 				authnOption.authenticatorUI.setAuthenticationCallback(
-						signUpAuthNController.buildCallback(authnOption));
-			}
-
+						new SignUpAuthnCallback(form, regCodeProvided, optionId));
 			return authNPanel;
 		}
 	}
+	
+	protected Map<String, Object> buildVarsToFreemarkerTemplates(Optional<RegistrationInvitationParam> invitation)
+	{
+		Map<String, Object> ret = new HashMap<>();
+		if (invitation.isPresent())
+		{
+			ret.putAll(invitation.get().getFormPrefill().getMessageParamsWithCustomVarObject(
+								MessageTemplateDefinition.CUSTOM_VAR_PREFIX));
+			ret.put(INVITATION_EMAIL_VAR, invitation.get().getContactAddress());	
+		}
+		
+		return ret;
+	}
+	
+	
 }

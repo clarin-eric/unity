@@ -23,19 +23,15 @@ import pl.edu.icm.unity.engine.api.utils.ExecutorsService;
 import pl.edu.icm.unity.exceptions.IllegalIdentityValueException;
 import pl.edu.icm.unity.exceptions.IllegalTypeException;
 import pl.edu.icm.unity.store.api.TokenDAO;
+import pl.edu.icm.unity.store.api.TokenDAO.TokenNotFoundException;
 import pl.edu.icm.unity.store.api.tx.Transactional;
 import pl.edu.icm.unity.store.api.tx.TransactionalRunner;
 import pl.edu.icm.unity.types.basic.EntityParam;
 
-/**
- * Implementation of {@link TokensManagement}
- * 
- * @author K. Benedyczak
- */
 @Component
 public class TokensManagementImpl implements TokensManagement
 {
-	private static final Logger log = Log.getLogger(Log.U_SERVER, TokensManagementImpl.class);
+	private static final Logger log = Log.getLogger(Log.U_SERVER_CORE, TokensManagementImpl.class);
 	private EntityResolver idResolver;
 	private TokenDAO dbTokens;
 	private TransactionalRunner tx; 
@@ -115,7 +111,7 @@ public class TokensManagementImpl implements TokensManagement
 	{
 		Token token = dbTokens.get(type, value);
 		if (token.isExpired())
-			throw new IllegalArgumentException("There is no such token");
+			throw new TokenNotFoundException();
 		return token;
 	}
 	

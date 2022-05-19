@@ -4,18 +4,11 @@
  */
 package pl.edu.icm.unity.stdext.identity;
 
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-
 import org.springframework.stereotype.Component;
 
 import pl.edu.icm.unity.MessageSource;
 import pl.edu.icm.unity.exceptions.IllegalIdentityValueException;
 import pl.edu.icm.unity.stdext.utils.EmailUtils;
-import pl.edu.icm.unity.types.basic.Attribute;
-import pl.edu.icm.unity.types.basic.AttributeType;
 import pl.edu.icm.unity.types.basic.IdentityParam;
 import pl.edu.icm.unity.types.basic.VerifiableEmail;
 
@@ -36,15 +29,9 @@ public class EmailIdentity extends AbstractStaticIdentityTypeProvider
 	}
 
 	@Override
-	public String getDefaultDescription()
+	public String getDefaultDescriptionKey()
 	{
-		return "Email";
-	}
-
-	@Override
-	public Set<AttributeType> getAttributesSupportedForExtraction()
-	{
-		return Collections.emptySet();
+		return "EmailIdentity.description";
 	}
 
 	@Override
@@ -82,15 +69,8 @@ public class EmailIdentity extends AbstractStaticIdentityTypeProvider
 	
 	@Override
 	public String getComparableValue(String from, String realm, String target)
-			throws IllegalIdentityValueException
 	{
 		return new VerifiableEmail(from).getComparableValue();
-	}
-
-	@Override
-	public List<Attribute> extractAttributes(String from, Map<String, String> toExtract)
-	{
-		return null;
 	}
 
 	@Override

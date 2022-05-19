@@ -4,6 +4,8 @@
  */
 package pl.edu.icm.unity.engine.identity;
 
+import static pl.edu.icm.unity.types.basic.audit.AuditEventTag.AUTHN;
+
 import java.util.Date;
 import java.util.Map;
 
@@ -11,12 +13,16 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
 
+import com.google.common.collect.ImmutableMap;
+
 import pl.edu.icm.unity.engine.api.EntityCredentialManagement;
 import pl.edu.icm.unity.engine.api.authn.local.LocalCredentialVerificator;
 import pl.edu.icm.unity.engine.api.identity.EntityResolver;
 import pl.edu.icm.unity.engine.attribute.AttributesHelper;
-import pl.edu.icm.unity.engine.authz.AuthorizationManager;
+import pl.edu.icm.unity.engine.audit.AuditEventTrigger;
+import pl.edu.icm.unity.engine.audit.AuditPublisher;
 import pl.edu.icm.unity.engine.authz.AuthzCapability;
+import pl.edu.icm.unity.engine.authz.InternalAuthorizationManager;
 import pl.edu.icm.unity.engine.credential.CredentialAttributeTypeProvider;
 import pl.edu.icm.unity.engine.credential.CredentialRequirementsHolder;
 import pl.edu.icm.unity.engine.credential.EntityCredentialsHelper;
@@ -36,6 +42,8 @@ import pl.edu.icm.unity.types.authn.LocalCredentialState;
 import pl.edu.icm.unity.types.basic.Attribute;
 import pl.edu.icm.unity.types.basic.AttributeExt;
 import pl.edu.icm.unity.types.basic.EntityParam;
+import pl.edu.icm.unity.types.basic.audit.AuditEventAction;
+import pl.edu.icm.unity.types.basic.audit.AuditEventType;
 
 /**
  * Implementation of credential and credential requirement operations on
@@ -50,17 +58,20 @@ public class EntityCredentialsManagementImpl implements EntityCredentialManageme
 {	
 	private EntityResolver idResolver;
 	private AttributeDAO attributeDAO;
-	private AuthorizationManager authz;
+	private InternalAuthorizationManager authz;
 	private AttributesHelper attributesHelper;
 	private EntityCredentialsHelper credHelper;
 	private AdditionalAuthenticationService repeatedAuthnService;
-	
+	private AuditPublisher audit;
+	private final SecondFactorOptInService secondFactorOptInService;
 
 	@Autowired
 	public EntityCredentialsManagementImpl(EntityResolver idResolver, AttributeDAO attributeDAO,
-			AuthorizationManager authz, AttributesHelper attributesHelper,
+			InternalAuthorizationManager authz, AttributesHelper attributesHelper,
 			EntityCredentialsHelper credHelper,
-			AdditionalAuthenticationService repeatedAuthnService)
+			AdditionalAuthenticationService repeatedAuthnService,
+			AuditPublisher audit,
+			SecondFactorOptInService secondFactorOptInService)
 	{
 		this.idResolver = idResolver;
 		this.attributeDAO = attributeDAO;
@@ -68,7 +79,8 @@ public class EntityCredentialsManagementImpl implements EntityCredentialManageme
 		this.attributesHelper = attributesHelper;
 		this.credHelper = credHelper;
 		this.repeatedAuthnService = repeatedAuthnService;
-		
+		this.audit = audit;
+		this.secondFactorOptInService = secondFactorOptInService;
 	}
 
 	@Override
@@ -177,6 +189,12 @@ public class EntityCredentialsManagementImpl implements EntityCredentialManageme
 		{
 			attributeDAO.deleteAttribute(credentialAttributeName, entityId, "/");
 			attributes.remove(credentialAttributeName);
+			audit.log(AuditEventTrigger.builder()
+					.type(AuditEventType.CREDENTIALS)
+					.action(AuditEventAction.REMOVE)
+					.name(credentialAttributeName)
+					.subject(entityId)
+					.tags(AUTHN));
 		} else if (desiredCredentialState == LocalCredentialState.outdated)
 		{
 			if (!handler.isSupportingInvalidation())
@@ -190,6 +208,33 @@ public class EntityCredentialsManagementImpl implements EntityCredentialManageme
 			attributes.put(credentialAttributeName, added);
 			StoredAttribute updatedA = new StoredAttribute(added, entityId);
 			attributeDAO.updateAttribute(updatedA);
+			audit.log(AuditEventTrigger.builder()
+					.type(AuditEventType.CREDENTIALS)
+					.action(AuditEventAction.UPDATE)
+					.name(credentialAttributeName)
+					.subject(entityId)
+					.details(ImmutableMap.of("state", "outdated"))
+					.tags(AUTHN));
 		}
+	}
+	
+	@Override
+	@Transactional
+	public boolean getUserMFAOptIn(EntityParam entity) throws EngineException
+	{
+		entity.validateInitialization();
+		long entityId = idResolver.getEntityId(entity);
+		authz.checkAuthorization(authz.isSelf(entityId), AuthzCapability.read);
+		return secondFactorOptInService.getUserOptin(entityId);
+	}
+
+	@Override
+	@Transactional
+	public void setUserMFAOptIn(EntityParam entity, boolean value) throws EngineException
+	{
+		entity.validateInitialization();
+		long entityId = idResolver.getEntityId(entity);
+		authz.checkAuthorization(authz.isSelf(entityId), AuthzCapability.credentialModify);
+		secondFactorOptInService.setUserMFAOptIn(entityId, value);
 	}
 }

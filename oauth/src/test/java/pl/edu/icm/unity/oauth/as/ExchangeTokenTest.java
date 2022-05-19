@@ -8,6 +8,7 @@ import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.CoreMatchers.notNullValue;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThat;
+import static pl.edu.icm.unity.oauth.client.HttpRequestConfigurer.secureRequest;
 
 import java.net.URI;
 import java.util.Arrays;
@@ -34,8 +35,8 @@ import com.nimbusds.oauth2.sdk.token.AccessToken;
 import eu.unicore.util.httpclient.ServerHostnameCheckingMode;
 import net.minidev.json.JSONArray;
 import net.minidev.json.JSONObject;
+import pl.edu.icm.unity.oauth.as.OAuthASProperties.RefreshTokenIssuePolicy;
 import pl.edu.icm.unity.oauth.as.token.AccessTokenResource;
-import pl.edu.icm.unity.oauth.client.CustomHTTPSRequest;
 
 /**
  * An integration test of token exchange flow
@@ -54,6 +55,7 @@ public class ExchangeTokenTest extends TokenTestBase
 	@Test
 	public void shouldDenyToExchangeTokenWithIncorrectAudience() throws Exception
 	{
+		super.setupPlain(RefreshTokenIssuePolicy.ALWAYS);
 		ClientAuthentication ca = new ClientSecretBasic(new ClientID("client1"),
 				new Secret("clientPass"));
 		ClientAuthentication ca2 = new ClientSecretBasic(new ClientID("client2"),
@@ -70,7 +72,7 @@ public class ExchangeTokenTest extends TokenTestBase
 				new Scope("bar"));
 
 		HTTPRequest bare = exchangeRequest.toHTTPRequest();
-		CustomHTTPSRequest wrapped = new CustomHTTPSRequest(bare,
+		HTTPRequest wrapped = secureRequest(bare,
 				pkiMan.getValidator("MAIN"), ServerHostnameCheckingMode.NONE);
 		HTTPResponse errorResp = wrapped.send();
 		assertThat(errorResp.getStatusCode(), is(HTTPResponse.SC_BAD_REQUEST));
@@ -79,7 +81,7 @@ public class ExchangeTokenTest extends TokenTestBase
 	@Test
 	public void shouldDenyToExchangeTokenWithIncorrectRequestedTokenType() throws Exception
 	{
-
+		super.setupPlain(RefreshTokenIssuePolicy.ALWAYS);
 		ClientAuthentication ca = new ClientSecretBasic(new ClientID("client1"),
 				new Secret("clientPass"));
 		ClientAuthentication ca2 = new ClientSecretBasic(new ClientID("client2"),
@@ -96,7 +98,7 @@ public class ExchangeTokenTest extends TokenTestBase
 				new Scope("bar"));
 
 		HTTPRequest bare = exchangeRequest.toHTTPRequest();
-		CustomHTTPSRequest wrapped = new CustomHTTPSRequest(bare,
+		HTTPRequest wrapped = secureRequest(bare,
 				pkiMan.getValidator("MAIN"), ServerHostnameCheckingMode.NONE);
 		HTTPResponse errorResp = wrapped.send();
 		assertThat(errorResp.getStatusCode(), is(HTTPResponse.SC_BAD_REQUEST));
@@ -106,6 +108,7 @@ public class ExchangeTokenTest extends TokenTestBase
 	@Test
 	public void shouldExchangeTokenWithIdToken() throws Exception
 	{
+		super.setupOIDC(RefreshTokenIssuePolicy.ALWAYS);
 		ClientAuthentication ca = new ClientSecretBasic(new ClientID("client1"),
 				new Secret("clientPass"));
 		ClientAuthentication ca2 = new ClientSecretBasic(new ClientID("client2"),
@@ -121,13 +124,13 @@ public class ExchangeTokenTest extends TokenTestBase
 				new Scope("openid foo bar"));
 
 		HTTPRequest bare = exchangeRequest.toHTTPRequest();
-		HTTPRequest wrapped = new CustomHTTPSRequest(bare, pkiMan.getValidator("MAIN"),
+		HTTPRequest wrapped = secureRequest(bare, pkiMan.getValidator("MAIN"),
 				ServerHostnameCheckingMode.NONE);
 		HTTPResponse exchangeResp = wrapped.send();
 		AccessTokenResponse exchangeParsedResp = AccessTokenResponse.parse(exchangeResp);
 		assertThat(exchangeParsedResp.getTokens().getAccessToken(), notNullValue());
 		assertThat(exchangeParsedResp.getCustomParameters().get("id_token"), notNullValue());
-		assertThat(exchangeParsedResp.getCustomParameters().get("issued_token_type"),
+		assertThat(exchangeParsedResp.getTokens().getAccessToken().getIssuedTokenType().getURI().toASCIIString(),
 				is(AccessTokenResource.ACCESS_TOKEN_TYPE_ID));
 
 		// check new token info
@@ -142,6 +145,7 @@ public class ExchangeTokenTest extends TokenTestBase
 	@Test
 	public void shouldExchangeAccessTokenWithoutIdToken() throws Exception
 	{
+		super.setupPlain(RefreshTokenIssuePolicy.ALWAYS);
 		ClientAuthentication ca = new ClientSecretBasic(new ClientID("client1"),
 				new Secret("clientPass"));
 		ClientAuthentication ca2 = new ClientSecretBasic(new ClientID("client2"),
@@ -157,13 +161,14 @@ public class ExchangeTokenTest extends TokenTestBase
 				new Scope("foo bar"));
 
 		HTTPRequest bare = exchangeRequest.toHTTPRequest();
-		HTTPRequest wrapped = new CustomHTTPSRequest(bare, pkiMan.getValidator("MAIN"),
+		HTTPRequest wrapped = secureRequest(bare, pkiMan.getValidator("MAIN"),
 				ServerHostnameCheckingMode.NONE);
 		HTTPResponse exchangeResp = wrapped.send();
 		AccessTokenResponse exchangeParsedResp = AccessTokenResponse.parse(exchangeResp);
 		
 		assertThat(exchangeParsedResp.getTokens().getAccessToken(), notNullValue());	
-		assertThat(exchangeParsedResp.getCustomParameters().get("issued_token_type"), is(AccessTokenResource.ACCESS_TOKEN_TYPE_ID));
+		assertThat(exchangeParsedResp.getTokens().getAccessToken().getIssuedTokenType().getURI().toASCIIString(), 
+				is(AccessTokenResource.ACCESS_TOKEN_TYPE_ID));
 	
 		// check new token info
 		JSONObject parsed = getTokenInfo(exchangeParsedResp.getTokens().getAccessToken());
@@ -202,7 +207,7 @@ public class ExchangeTokenTest extends TokenTestBase
 		public Map<String, List<String>> toParameters()
 		{
 			Map<String, List<String>> params = new LinkedHashMap<>();
-			params.put("grant_type", Lists.newArrayList(AccessTokenResource.EXCHANGE_GRANT));
+			params.put("grant_type", Lists.newArrayList(GrantType.TOKEN_EXCHANGE.getValue()));
 			params.put("subject_token", Lists.newArrayList(subjectToken));
 			params.put("subject_token_type", Lists.newArrayList(subjectTokenType));
 			params.put("requested_token_type", Lists.newArrayList(requestedType));

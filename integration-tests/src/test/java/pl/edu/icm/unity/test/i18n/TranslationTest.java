@@ -18,7 +18,7 @@ import org.junit.Test;
 
 import com.google.common.collect.Sets;
 
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
+import pl.edu.icm.unity.MessageSource;
 
 
 public class TranslationTest
@@ -29,7 +29,7 @@ public class TranslationTest
 		new MessageBundleSpec("server-engine-api", "/messages/engine-api/messages"),
 		new MessageBundleSpec("server-std-plugins", "/messages/stdext/messages"),
 		new MessageBundleSpec("server-web-common", "/messages/webui/messages"),
-		new MessageBundleSpec("server-web-admin/home", "/messages/webhome/messages"),
+		new MessageBundleSpec("server-user-home/home", "/messages/webhome/messages"),
 		new MessageBundleSpec("server-saml", "/messages/saml/messages"),
 		new MessageBundleSpec("server-unicore", "/messages/unicore/messages"),
 		new MessageBundleSpec("serveroauth", "/messages/oauth/messages"),
@@ -140,7 +140,7 @@ public class TranslationTest
 	{
 		String locSuffix = locale.equals("") ? "" : "_" + locale;
 		String resource = baseLocation + locSuffix + ".properties";
-		InputStream is = UnityMessageSource.class.getResourceAsStream(resource);
+		InputStream is = MessageSource.class.getResourceAsStream(resource);
 		if (is == null)
 			throw new IOException("Resource " + resource + " not found");
 		Reader reader = new InputStreamReader(is, StandardCharsets.UTF_8);

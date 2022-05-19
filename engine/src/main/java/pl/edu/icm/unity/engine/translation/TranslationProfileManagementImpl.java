@@ -12,7 +12,7 @@ import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
 
 import pl.edu.icm.unity.engine.api.TranslationProfileManagement;
-import pl.edu.icm.unity.engine.authz.AuthorizationManager;
+import pl.edu.icm.unity.engine.authz.InternalAuthorizationManager;
 import pl.edu.icm.unity.engine.authz.AuthzCapability;
 import pl.edu.icm.unity.engine.events.InvocationEventProducer;
 import pl.edu.icm.unity.engine.translation.in.InputTranslationProfileRepository;
@@ -37,7 +37,7 @@ import pl.edu.icm.unity.types.translation.TranslationProfile;
 @Transactional
 public class TranslationProfileManagementImpl implements TranslationProfileManagement
 {
-	private AuthorizationManager authz;
+	private InternalAuthorizationManager authz;
 	private InputTranslationProfileDB itpDB;
 	private OutputTranslationProfileDB otpDB;
 	private InputTranslationProfileRepository inputRepo;
@@ -46,7 +46,7 @@ public class TranslationProfileManagementImpl implements TranslationProfileManag
 	
 	
 	@Autowired
-	public TranslationProfileManagementImpl(AuthorizationManager authz,
+	public TranslationProfileManagementImpl(InternalAuthorizationManager authz,
 			InputTranslationProfileDB itpDB, OutputTranslationProfileDB otpDB,
 			InputTranslationProfileRepository inputRepo,
 			OutputTranslationProfileRepository outputRepo,
@@ -160,6 +160,7 @@ public class TranslationProfileManagementImpl implements TranslationProfileManag
 	{
 		Set<String> systemProfiles = getSystemProfiles(type).keySet();
 		if (systemProfiles.contains(name))
-			throw new IllegalArgumentException("Translation profile '" + name + "' is the system profile and cannot be overwrite or remove");
+			throw new IllegalArgumentException("Translation profile '" + name + 
+					"' is the system profile and can not be overwriten or removed");
 	}	
 }

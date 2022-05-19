@@ -20,7 +20,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import pl.edu.icm.unity.base.token.Token;
 import pl.edu.icm.unity.engine.api.token.SecuredTokensManagement;
 import pl.edu.icm.unity.engine.api.token.TokensManagement;
-import pl.edu.icm.unity.engine.authz.AuthorizationManagerImpl;
+import pl.edu.icm.unity.engine.authz.InternalAuthorizationManagerImpl;
 import pl.edu.icm.unity.engine.authz.RoleAttributeTypeProvider;
 import pl.edu.icm.unity.engine.server.EngineInitialization;
 import pl.edu.icm.unity.exceptions.AuthorizationException;
@@ -50,17 +50,17 @@ public class TestSecuredTokens extends DBIntegrationTestBase
 
 		Identity id = idsMan.addEntity(toAdd,
 				EngineInitialization.DEFAULT_CREDENTIAL_REQUIREMENT,
-				EntityState.valid, false);
+				EntityState.valid);
 		toAdd.setValue("u2");
 		Identity id2 = idsMan.addEntity(toAdd,
 				EngineInitialization.DEFAULT_CREDENTIAL_REQUIREMENT,
-				EntityState.valid, false);
+				EntityState.valid);
 		attrsMan.createAttribute(new EntityParam(id),
 				EnumAttribute.of(RoleAttributeTypeProvider.AUTHORIZATION_ROLE, "/",
-						AuthorizationManagerImpl.USER_ROLE));
+						InternalAuthorizationManagerImpl.USER_ROLE));
 		attrsMan.createAttribute(new EntityParam(id2),
 				EnumAttribute.of(RoleAttributeTypeProvider.AUTHORIZATION_ROLE, "/",
-						AuthorizationManagerImpl.USER_ROLE));
+						InternalAuthorizationManagerImpl.USER_ROLE));
 
 	}
 

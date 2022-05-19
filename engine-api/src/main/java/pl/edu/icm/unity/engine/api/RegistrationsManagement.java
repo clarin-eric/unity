@@ -31,7 +31,7 @@ public interface RegistrationsManagement
 	 * Remove an existing registration form.
 	 * @param formId
 	 * @param dropRequests if true then all requests of this form are deleted. If false, the operation
-	 * will throw exception if there are any forms for the form.
+	 * will throw exception if there are any requests for the form.
 	 * @throws EngineException
 	 */
 	void removeForm(String formId, boolean dropRequests) throws EngineException;
@@ -117,4 +117,11 @@ public interface RegistrationsManagement
 	 * @return form automation support for a given form
 	 */
 	FormAutomationSupport getFormAutomationSupport(RegistrationForm form);
+
+	/**
+	 * Remove an existing registration form with no dependency checking
+	 * @param formId
+	 * @throws EngineException
+	 */
+	void removeFormWithoutDependencyChecking(String formId) throws EngineException;
 }

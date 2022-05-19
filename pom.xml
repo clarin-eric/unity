@@ -1,42 +1,37 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
 	<modelVersion>4.0.0</modelVersion>
-	<groupId>pl.edu.icm.unity</groupId>
+	<groupId>io.imunity</groupId>
 	<artifactId>unity-server-parent</artifactId>
 	<packaging>pom</packaging>
-	<version>2.8.0-1.0.0-SNAPSHOT</version>
+	<version>3.9.0-1.0.0-SNAPSHOT</version>
 	<name>UNITY aggregation and parent module</name>
+	<description>UNITY aggregation and parent module</description>
+	<url>https://unity-idm.eu</url>
 	<organization>
 		<name>Unity</name>
-		<url>http://unity-idm.eu</url>
+		<url>https://unity-idm.eu</url>
 	</organization>
-
-	<prerequisites>
-		<maven>3.0.5</maven>
-	</prerequisites>
-
 
 	<properties>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 		<scm.base>scm:git:git@github.com:unity-idm/unity.git</scm.base>
-		<jetty.version>9.4.17.v20190418</jetty.version>
-		<slf4j.version>1.7.25</slf4j.version>
-		<log4j.version>2.11.1</log4j.version>
-		<spring.version>5.1.4.RELEASE</spring.version>
-		<vaadin.version>8.6.4</vaadin.version>
-		<groovy-all.version>2.4.8</groovy-all.version>
-		<cxf.version>3.1.10</cxf.version>
-		<apacheds.version>2.0.0-M24</apacheds.version>
-                <!--apacheds.version>2.0.0.AM25</apacheds.version-->
-                <jackson-databind-version>2.10.1</jackson-databind-version>
-		<bc.version>1.60</bc.version>
-		<selenium.version>3.14.0</selenium.version>
+		<jetty.version>9.4.46.v20220331</jetty.version>
+		<slf4j.version>1.7.32</slf4j.version>
+		<log4j.version>2.17.2</log4j.version>
+		<spring.version>5.3.18</spring.version>
+		<vaadin.version>8.14.3</vaadin.version>
+		<cxf.version>3.4.5</cxf.version>
+		<apacheds.version>2.0.0-M26</apacheds.version>
+		<bc.version>1.69</bc.version>
+		<selenium.version>3.141.59</selenium.version>
+		<jackson.version>2.13.2</jackson.version>
+		<junit5.version>5.8.2</junit5.version>
 
 		<!-- Sonar -->
 		<sonar.java.coveragePlugin>jacoco</sonar.java.coveragePlugin>
-		<sonar.jacoco.reportPaths>${project.basedir}/../target/jacoco.exec</sonar.jacoco.reportPaths>
-		<sonar.jacoco.itReportPath>${project.basedir}/../target/jacoco-it.exec</sonar.jacoco.itReportPath>
 		<sonar.language>java</sonar.language>
+		<sonar.java.source>11</sonar.java.source>
 		<sonar.sources>src/main/java</sonar.sources>
 	</properties>
 
@@ -44,8 +39,15 @@
 		<connection>${scm.base}</connection>
 		<developerConnection>${scm.base}</developerConnection>
 		<url>https://github.com/unity-idm/unity</url>
-		<tag>HEAD</tag>
+		<tag>unity-server-parent-3.9.0</tag>
 	</scm>
+
+	<licenses>
+		<license>
+			<name>BSD</name>
+			<url>https://www.unity-idm.eu/opensource/</url>
+		</license>
+	</licenses>
 
 	<modules>
 		<module>types-api</module>
@@ -55,10 +57,13 @@
 		<module>storage-api</module>
 		<module>storage</module>
 		<module>std-plugins</module>
+		<module>web-vaadin-tooltip</module>
 		<module>web-vaadin-widgetset</module>
 		<module>web-common</module>
 		<module>web-elements</module>
-		<module>web-admin</module>
+		<module>web-console-utils</module>
+		<module>user-home</module>
+		<module>web-console-spi</module>
 		<module>web-console</module>
 		<module>web-upman</module>
 		<module>rest</module>
@@ -67,14 +72,20 @@
 		<module>saml</module>
 		<module>unicore</module>
 		<module>ldap</module>
-                <module>ldap-endpoint</module>
+		<module>ldap-endpoint</module>
 		<module>oauth</module>
 		<module>pam</module>
-		<!--module>integration-tests</module-->
+		<module>otp</module>
+		<module>otp-ldap</module>
+		<module>integration-tests</module>
 		<module>distribution</module>
 		<module>documentation</module>
 		<module>composite-password</module>
-        </modules>
+		<module>fido</module>
+		<module>web-attr-introspection</module>
+		<module>scim</module>
+        <module>unity-rest-api</module>
+    </modules>
 
 	<developers>
 		<developer>
@@ -100,61 +111,60 @@
 
 
 	<repositories>
-                <repository>
-                    <id>clarin</id>
-                    <url>https://nexus.clarin.eu/repository/Clarin/</url>
-                </repository>
 		<repository>
-			<id>unicore.eu</id>
-			<name>UNICORE repository</name>
-			<url>http://unicore-dev.zam.kfa-juelich.de/maven</url>
+			<id>clarin</id>
+			<url>https://nexus.clarin.eu/repository/Clarin/</url>
+		</repository>
+		<repository>
+			<snapshots>
+				<enabled>false</enabled>
+			</snapshots>
+			<id>central</id>
+			<name>Central Repository</name>
+			<url>https://repo.maven.apache.org/maven2</url>
 		</repository>
 		<repository>
 			<id>vaadin-addons</id>
 			<url>http://maven.vaadin.com/vaadin-addons</url>
-		</repository>                
+		</repository>
+		<repository>
+			<id>oss.sonatype.org-snapshot</id>
+			<url>http://oss.sonatype.org/content/repositories/snapshots</url>
+			<releases>
+				<enabled>false</enabled>
+			</releases>
+			<snapshots>
+				<enabled>true</enabled>
+			</snapshots>
+		</repository>
 	</repositories>
 
-	<pluginRepositories>
-		<pluginRepository>
-			<id>unicore.eu</id>
-			<url>http://unicore-dev.zam.kfa-juelich.de/maven</url>
-		</pluginRepository>
-	</pluginRepositories>
-
 	<distributionManagement>
-		<repository>
-			<id>unicore.eu</id>
-			<name>UNICORE repository</name>
-			<url>dav:https://unicore-dev.zam.kfa-juelich.de/maven</url>
-		</repository>
+		<snapshotRepository>
+			<id>sonatype-nexus-snapshots</id>
+			<url>https://oss.sonatype.org/content/repositories/snapshots</url>
+		</snapshotRepository>
 	</distributionManagement>
 
 	<build>
-		<!-- Allows to deploy with dav:// with Maven 3. Note that newer versions 
-			of this extension do not work with Maven 2.2 -->
-		<extensions>
-			<extension>
-				<groupId>org.apache.maven.wagon</groupId>
-				<artifactId>wagon-webdav-jackrabbit</artifactId>
-				<version>1.0</version>
-			</extension>
-		</extensions>
-
 		<pluginManagement>
 			<plugins>
 				<plugin>
 					<groupId>org.sonarsource.scanner.maven</groupId>
 					<artifactId>sonar-maven-plugin</artifactId>
-					<version>3.4.0.905</version>
+					<version>3.7.0.1746</version>
+				</plugin>
+				<plugin>
+					<groupId>org.apache.maven.plugins</groupId>
+					<artifactId>maven-assembly-plugin</artifactId>
+					<version>2.4</version>
 				</plugin>
 				<plugin>
 					<groupId>org.apache.maven.plugins</groupId>
 					<artifactId>maven-compiler-plugin</artifactId>
-					<version>3.5.1</version>
+					<version>3.8.1</version>
 					<configuration>
-						<source>1.8</source>
-						<target>1.8</target>
+						<release>11</release>
 						<maxmem>256M</maxmem>
 						<encoding>UTF-8</encoding>
 						<fork>${compiler.fork}</fork>
@@ -207,15 +217,20 @@
 				<plugin>
 					<groupId>org.jacoco</groupId>
 					<artifactId>jacoco-maven-plugin</artifactId>
-					<version>0.7.9</version>
+					<version>0.8.5</version>
 				</plugin>
 				<plugin>
 					<groupId>org.apache.maven.plugins</groupId>
 					<artifactId>maven-surefire-plugin</artifactId>
-					<version>2.19.1</version>
+					<version>2.22.2</version>
 					<configuration>
 						<forkCount>1</forkCount>
 					</configuration>
+				</plugin>
+				<plugin>
+					<groupId>pl.project13.maven</groupId>
+					<artifactId>git-commit-id-plugin</artifactId>
+					<version>4.9.10</version>
 				</plugin>
 			</plugins>
 		</pluginManagement>
@@ -224,9 +239,66 @@
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-release-plugin</artifactId>
-				<version>2.5.3</version>
 				<configuration>
 					<autoVersionSubmodules>true</autoVersionSubmodules>
+				</configuration>
+			</plugin>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-enforcer-plugin</artifactId>
+				<version>3.0.0-M2</version>
+				<executions>
+					<execution>
+						<id>enforce-versions</id>
+						<goals>
+							<goal>enforce</goal>
+						</goals>
+						<configuration>
+							<rules>
+								<requireMavenVersion>
+									<version>3.0.5</version>
+								</requireMavenVersion>
+							</rules>
+						</configuration>
+					</execution>
+				</executions>
+			</plugin>
+
+			<!-- To be able to sign in local settings.xml a profile (enabled by default) 
+				should be defined with gpg.keyname property defined + passphrase. See end 
+				of http://maven.apache.org/plugins/maven-gpg-plugin/usage.html -->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-gpg-plugin</artifactId>
+				<version>1.6</version>
+				<executions>
+					<execution>
+						<id>sign-artifacts</id>
+						<phase>verify</phase>
+						<goals>
+							<goal>sign</goal>
+						</goals>
+						<configuration>
+							<gpgArguments>
+								<arg>--pinentry-mode</arg>
+								<arg>loopback</arg>
+							</gpgArguments>
+							<keyname>${gpg.keyname}</keyname>
+							<passphraseServerId>${gpg.serverid}</passphraseServerId>
+						</configuration>
+					</execution>
+				</executions>
+			</plugin>
+			<plugin>
+				<groupId>org.sonatype.plugins</groupId>
+				<artifactId>nexus-staging-maven-plugin</artifactId>
+				<version>1.6.8</version>
+				<extensions>true</extensions>
+				<configuration>
+					<serverId>sonatype-nexus-staging</serverId>
+					<nexusUrl>https://oss.sonatype.org/</nexusUrl>
+					<autoReleaseAfterClose>true</autoReleaseAfterClose>
+					<keepStagingRepositoryOnCloseRuleFailure>true</keepStagingRepositoryOnCloseRuleFailure>
 				</configuration>
 			</plugin>
 		</plugins>
@@ -238,6 +310,18 @@
 				<groupId>junit</groupId>
 				<artifactId>junit</artifactId>
 				<version>4.12</version>
+				<scope>test</scope>
+			</dependency>
+			<dependency>
+				<groupId>org.junit.jupiter</groupId>
+				<artifactId>junit-jupiter-engine</artifactId>
+				<version>${junit5.version}</version>
+				<scope>test</scope>
+			</dependency>
+			<dependency>
+				<groupId>org.junit.jupiter</groupId>
+				<artifactId>junit-jupiter-params</artifactId>
+				<version>${junit5.version}</version>
 				<scope>test</scope>
 			</dependency>
 			<dependency>
@@ -255,7 +339,7 @@
 			<dependency>
 				<groupId>org.assertj</groupId>
 				<artifactId>assertj-core</artifactId>
-				<version>3.11.1</version>
+				<version>3.21.0</version>
 				<scope>test</scope>
 			</dependency>
 			<dependency>
@@ -267,13 +351,13 @@
 			<dependency>
 				<groupId>org.mockito</groupId>
 				<artifactId>mockito-core</artifactId>
-				<version>2.23.4</version>
+				<version>2.27.0</version>
 				<scope>test</scope>
 			</dependency>
 			<dependency>
 				<groupId>org.awaitility</groupId>
 				<artifactId>awaitility</artifactId>
-				<version>3.1.5</version>
+				<version>4.1.1</version>
 				<scope>test</scope>
 			</dependency>
 			<dependency>
@@ -299,7 +383,7 @@
 			<dependency>
 				<groupId>org.aspectj</groupId>
 				<artifactId>aspectjweaver</artifactId>
-				<version>1.9.2</version>
+				<version>1.9.7</version>
 			</dependency>
 			<dependency>
 				<groupId>org.eclipse.jetty</groupId>
@@ -332,8 +416,18 @@
 				<version>${slf4j.version}</version>
 			</dependency>
 			<dependency>
+				<groupId>org.slf4j</groupId>
+				<artifactId>jul-to-slf4j</artifactId>
+				<version>${slf4j.version}</version>
+			</dependency>
+			<dependency>
 				<groupId>org.apache.logging.log4j</groupId>
 				<artifactId>log4j-slf4j-impl</artifactId>
+				<version>${log4j.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.apache.logging.log4j</groupId>
+				<artifactId>log4j-api</artifactId>
 				<version>${log4j.version}</version>
 			</dependency>
 			<dependency>
@@ -352,14 +446,39 @@
 				<version>${log4j.version}</version>
 			</dependency>
 			<dependency>
+				<groupId>org.apache.logging.log4j</groupId>
+				<artifactId>log4j-jul</artifactId>
+				<version>${log4j.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.apache.logging.log4j</groupId>
+				<artifactId>log4j-jcl</artifactId>
+				<version>${log4j.version}</version>
+			</dependency>
+			<dependency>
 				<groupId>com.fasterxml.jackson.core</groupId>
 				<artifactId>jackson-databind</artifactId>
-				<version>${jackson-databind-version}</version>
+				<version>2.13.2.2</version>
+			</dependency>
+			<dependency>
+				<groupId>com.fasterxml.jackson.datatype</groupId>
+				<artifactId>jackson-datatype-jdk8</artifactId>
+				<version>${jackson.version}</version>
+			</dependency>
+			<dependency>
+    			<groupId>com.fasterxml.jackson.datatype</groupId>
+  				<artifactId>jackson-datatype-jsr310</artifactId>
+   				<version>${jackson.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>eu.unicore</groupId>
+				<artifactId>jproperties-conf</artifactId>
+				<version>1.1.0</version>
 			</dependency>
 			<dependency>
 				<groupId>eu.unicore.security</groupId>
 				<artifactId>securityLibrary</artifactId>
-				<version>4.5.5</version>
+				<version>5.3.1</version>
 				<exclusions>
 					<exclusion>
 						<groupId>log4j</groupId>
@@ -373,58 +492,73 @@
 						<groupId>org.slf4j</groupId>
 						<artifactId>slf4j-log4j12</artifactId>
 					</exclusion>
+					<exclusion>
+						<groupId>xml-apis</groupId>
+						<artifactId>xml-apis</artifactId>				
+					</exclusion>
 				</exclusions>
 			</dependency>
 			<dependency>
-				<groupId>pl.edu.icm.saml</groupId>
+				<groupId>io.imunity.samly</groupId>
 				<artifactId>samly2</artifactId>
-				<version>2.3.3</version>
-                                <exclusions>
-                                    <exclusion>
-                                        <groupId>org.apache.santuario</groupId>
-                                        <artifactId>xmlsec</artifactId>
-                                    </exclusion>
-                                </exclusions>
+				<version>2.7.1</version>
+				<exclusions>
+					<exclusion>
+						<groupId>xml-apis</groupId>
+						<artifactId>xml-apis</artifactId>				
+					</exclusion>
+					<exclusion>
+						<groupId>stax</groupId>
+						<artifactId>stax-api</artifactId>				
+					</exclusion>
+				</exclusions>
 			</dependency>
-                        <dependency>
-				<groupId>org.apache.santuario</groupId>
-				<artifactId>xmlsec</artifactId>
-                                <version>2.1.4</version>
-                        </dependency>
 			<dependency>
-				<groupId>eu.unicore.security</groupId>
-				<artifactId>SAMLMetadataTypes</artifactId>
-				<version>1.2.0</version>
+				<groupId>io.imunity.samly</groupId>
+				<artifactId>samly2-metadatatypes</artifactId>
+				<version>1.3.0</version>
+				<exclusions>
+					<exclusion>
+						<groupId>stax</groupId>
+						<artifactId>stax-api</artifactId>				
+					</exclusion>
+				</exclusions>
 			</dependency>
 			<dependency>
 				<groupId>eu.unicore.security</groupId>
 				<artifactId>secutils-cxf</artifactId>
-				<version>1.5.4</version>
+				<version>3.2.1</version>
+				<exclusions>
+					<exclusion>
+						<groupId>org.apache.geronimo.javamail</groupId>
+						<artifactId>geronimo-javamail_1.4_mail</artifactId>
+					</exclusion>
+				</exclusions>
 			</dependency>
 			<dependency>
 				<groupId>org.postgresql</groupId>
 				<artifactId>postgresql</artifactId>
-				<version>42.2.5.jre7</version>
+				<version>42.3.3</version>
 			</dependency>
 			<dependency>
-    			<groupId>org.mariadb.jdbc</groupId>
-    			<artifactId>mariadb-java-client</artifactId>
-    			<version>2.3.0</version>
+				<groupId>org.mariadb.jdbc</groupId>
+				<artifactId>mariadb-java-client</artifactId>
+				<version>2.7.4</version>
 			</dependency>
 			<dependency>
 				<groupId>com.h2database</groupId>
 				<artifactId>h2</artifactId>
-				<version>1.4.197</version>
+				<version>1.4.199</version>
 			</dependency>
 			<dependency>
 				<groupId>org.mybatis</groupId>
 				<artifactId>mybatis</artifactId>
-				<version>3.4.6</version>
+				<version>3.5.7</version>
 			</dependency>
 			<dependency>
 				<groupId>org.mybatis</groupId>
 				<artifactId>mybatis-spring</artifactId>
-				<version>1.3.2</version>
+				<version>2.0.6</version>
 			</dependency>
 			<dependency>
 				<groupId>com.vaadin</groupId>
@@ -434,6 +568,11 @@
 			<dependency>
 				<groupId>com.vaadin</groupId>
 				<artifactId>vaadin-themes</artifactId>
+				<version>${vaadin.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>com.vaadin</groupId>
+				<artifactId>vaadin-client</artifactId>
 				<version>${vaadin.version}</version>
 			</dependency>
 			<dependency>
@@ -454,7 +593,7 @@
 			<dependency>
 				<groupId>com.vaadin</groupId>
 				<artifactId>vaadin-context-menu</artifactId>
-				<version>3.0.0</version>
+				<version>3.1.0</version>
 			</dependency>
 			<dependency>
 				<groupId>org.vaadin.addons</groupId>
@@ -462,9 +601,19 @@
 				<version>2.0.2</version>
 			</dependency>
 			<dependency>
+				<groupId>com.github.vaadin4qbanos</groupId>
+				<artifactId>jsclipboard</artifactId>
+				<version>1.0.12</version>
+			</dependency>
+			<dependency>
 				<groupId>com.vaadin</groupId>
 				<artifactId>vaadin-client-compiler</artifactId>
 				<version>${vaadin.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.vaadin.addons</groupId>
+				<artifactId>qrcode</artifactId>
+				<version>2.1</version>
 			</dependency>
 			<dependency>
 				<groupId>edu.vt.middleware</groupId>
@@ -485,7 +634,7 @@
 			<dependency>
 				<groupId>org.freemarker</groupId>
 				<artifactId>freemarker</artifactId>
-				<version>2.3.28</version>
+				<version>2.3.31</version>
 			</dependency>
 			<dependency>
 				<groupId>org.apache.cxf</groupId>
@@ -515,68 +664,57 @@
 			<dependency>
 				<groupId>net.sf.ehcache</groupId>
 				<artifactId>ehcache</artifactId>
-				<version>2.10.6</version>
+				<version>2.10.9.2</version>
 			</dependency>
 			<dependency>
-				<groupId>nl.simplecaptcha</groupId>
+				<groupId>io.imunity.simplecaptcha</groupId>
 				<artifactId>simplecaptcha</artifactId>
-				<version>1.2.1</version>
+				<version>1.3.0</version>
 			</dependency>
 			<dependency>
 				<groupId>com.unboundid</groupId>
 				<artifactId>unboundid-ldapsdk</artifactId>
-				<version>4.0.9</version>
+				<version>6.0.4</version>
 			</dependency>
 			<dependency>
 				<groupId>org.mvel</groupId>
 				<artifactId>mvel2</artifactId>
-				<version>2.4.3.Final</version>
+				<version>2.4.13.Final</version>
 			</dependency>
 			<dependency>
 				<groupId>org.apache.httpcomponents</groupId>
 				<artifactId>httpclient</artifactId>
-				<version>4.5.6</version>
+				<version>4.5.13</version>
 			</dependency>
 			<dependency>
 				<groupId>com.nimbusds</groupId>
 				<artifactId>oauth2-oidc-sdk</artifactId>
-				<version>6.5</version>
+				<version>9.32</version>
 			</dependency>
 			<dependency>
 				<groupId>com.nimbusds</groupId>
 				<artifactId>nimbus-jose-jwt</artifactId>
-				<version>6.5.1</version>
+				<version>9.21</version>
 			</dependency>
 			<dependency>
 				<groupId>com.google.guava</groupId>
 				<artifactId>guava</artifactId>
-				<version>27.0.1-jre</version>
+				<version>31.1-jre</version>
 			</dependency>
 			<dependency>
 				<groupId>commons-validator</groupId>
 				<artifactId>commons-validator</artifactId>
-				<version>1.6</version>                               
-                                <exclusions>
-                                    <exclusion>
-                                        <groupId>commons-beanutils</groupId>
-                                        <artifactId>commons-beanutils</artifactId>                                        
-                                    </exclusion>
-                                </exclusions>                                
+				<version>1.7</version>
 			</dependency>
-                        <dependency>
-                                <groupId>commons-beanutils</groupId>
-                                <artifactId>commons-beanutils</artifactId>
-                                <version>1.9.4</version>
-                        </dependency>
+			<dependency>
+				<groupId>commons-codec</groupId>
+				<artifactId>commons-codec</artifactId>
+				<version>1.15</version>
+			</dependency>
 			<dependency>
 				<groupId>org.quartz-scheduler</groupId>
 				<artifactId>quartz</artifactId>
-				<version>2.3.0</version>
-			</dependency>
-			<dependency>
-				<groupId>com.hazelcast</groupId>
-				<artifactId>hazelcast</artifactId>
-				<version>3.9.2</version>
+				<version>2.3.2</version>
 			</dependency>
 			<dependency>
 				<groupId>org.apache.geronimo.specs</groupId>
@@ -584,14 +722,9 @@
 				<version>1.1.1</version>
 			</dependency>
 			<dependency>
-				<groupId>com.esotericsoftware</groupId>
-				<artifactId>kryo</artifactId>
-				<version>4.0.2</version>
-			</dependency>
-			<dependency>
 				<groupId>net.java.dev.jna</groupId>
 				<artifactId>jna</artifactId>
-				<version>4.5.2</version>
+				<version>5.10.0</version>
 			</dependency>
 			<dependency>
 				<groupId>org.kohsuke</groupId>
@@ -601,14 +734,40 @@
 			<dependency>
 				<groupId>org.codehaus.groovy</groupId>
 				<artifactId>groovy-all</artifactId>
-				<version>${groovy-all.version}</version>
+				<version>2.5.6</version>
+				<type>pom</type>
+				<exclusions>
+					<exclusion>
+						<groupId>org.testng</groupId>
+						<artifactId>testng</artifactId>
+					</exclusion>
+					<exclusion>
+						<groupId>org.codehaus.groovy</groupId>
+						<artifactId>groovy-test-junit5</artifactId>
+					</exclusion>
+				</exclusions>
 			</dependency>
 			<dependency>
 				<groupId>com.nulab-inc</groupId>
 				<artifactId>zxcvbn</artifactId>
-				<version>1.2.5</version>
+				<version>1.6.0</version>
 			</dependency>
-
+			<dependency>
+				<groupId>com.sun.xml.ws</groupId>
+				<artifactId>jaxws-ri</artifactId>
+				<version>2.3.5</version>
+				<type>pom</type>
+			</dependency>
+			<dependency>
+				<groupId>com.yubico</groupId>
+				<artifactId>webauthn-server-core</artifactId>
+				<version>1.5.0</version>
+			</dependency>
+			<dependency>
+				<groupId>com.github.ua-parser</groupId>
+				<artifactId>uap-java</artifactId>
+				<version>1.5.2</version>
+			</dependency>
 			<dependency>
 				<groupId>org.seleniumhq.selenium</groupId>
 				<artifactId>selenium-java</artifactId>
@@ -628,23 +787,23 @@
 				<scope>test</scope>
 			</dependency>
 
+<!-- Ldap server endpoint dependencies -->
 			<dependency>
 				<groupId>org.apache.directory.server</groupId>
 				<artifactId>apacheds-protocol-ldap</artifactId>
 				<version>${apacheds.version}</version>
-                                <exclusions>
-                                    <exclusion>
-                                        <groupId>org.apache.mina</groupId>
-                                        <artifactId>mina-core</artifactId>
-                                    </exclusion>
-                                </exclusions>
+					<exclusions>
+						<exclusion>
+							<groupId>org.apache.mina</groupId>
+							<artifactId>mina-core</artifactId>
+						</exclusion>
+					</exclusions>
 			</dependency>
-                        <dependency>
+			<dependency>
 				<groupId>org.apache.mina</groupId>
 				<artifactId>mina-core</artifactId>
 				<version>2.0.21</version>
 			</dependency>
-                        
 			<dependency>
 				<groupId>org.apache.directory.api</groupId>
 				<artifactId>api-all</artifactId>
@@ -665,24 +824,31 @@
 				<artifactId>apacheds-interceptors-logger</artifactId>
 				<version>${apacheds.version}</version>
 			</dependency>
-                        <!-- implementation of javax.javax.annotation.* -->
-                        <dependency>
-                            <groupId>javax.annotation</groupId>
-                            <artifactId>javax.annotation-api</artifactId>
-                            <version>1.3.2</version>
-                        </dependency>
-                        <!-- implementation of javax.jws.* -->
-                        <dependency>
-                            <groupId>org.glassfish.main.javaee-api</groupId>
-                            <artifactId>javax.jws</artifactId>
-                            <version>3.1.2.2</version>
-                        </dependency>
-                        <!-- implementation of javax.xml.ws.soap.* -->
-                        <dependency>
-                            <groupId>jakarta.xml.ws</groupId>
-                            <artifactId>jakarta.xml.ws-api</artifactId>
-                            <version>2.3.2</version>
-                        </dependency>
+			<!-- implementation of javax.javax.annotation.* -->
+			<dependency>
+				<groupId>javax.annotation</groupId>
+				<artifactId>javax.annotation-api</artifactId>
+				<version>1.3.2</version>
+			</dependency>
+			<!-- implementation of javax.jws.* -->
+			<dependency>
+				<groupId>org.glassfish.main.javaee-api</groupId>
+				<artifactId>javax.jws</artifactId>
+				<version>3.1.2.2</version>
+			</dependency>
+			<!-- implementation of javax.xml.ws.soap.* -->
+			<dependency>
+				<groupId>jakarta.xml.ws</groupId>
+				<artifactId>jakarta.xml.ws-api</artifactId>
+				<version>2.3.2</version>
+			</dependency>
+<!-- End of ldap server endpoint dependencies -->
+
+			<dependency>
+				<groupId>com.googlecode.owasp-java-html-sanitizer</groupId>
+				<artifactId>owasp-java-html-sanitizer</artifactId>
+				<version>20211018.2</version>
+			</dependency>
 		</dependencies>
 	</dependencyManagement>
 
@@ -720,12 +886,21 @@
 								<goals>
 									<goal>prepare-agent</goal>
 								</goals>
-								<configuration>
-									<append>true</append>
-									<destFile>${sonar.jacoco.reportPaths}</destFile>
-								</configuration>
+							</execution>
+							<execution>
+								<id>report</id>
+								<goals>
+									<goal>report</goal>
+								</goals>
 							</execution>
 						</executions>
+					</plugin>
+					<plugin>
+						<groupId>org.apache.maven.plugins</groupId>
+						<artifactId>maven-surefire-plugin</artifactId>
+						<configuration>
+							<argLine>@{argLine}</argLine>
+						</configuration>
 					</plugin>
 				</plugins>
 			</build>

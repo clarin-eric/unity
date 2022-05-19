@@ -6,11 +6,11 @@
 package pl.edu.icm.unity.engine.forms.enquiry;
 
 import static org.assertj.core.api.Assertions.catchThrowable;
+import static org.hamcrest.CoreMatchers.hasItems;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.CoreMatchers.not;
 import static org.hamcrest.CoreMatchers.notNullValue;
 import static org.junit.Assert.assertThat;
-import static org.hamcrest.CoreMatchers.hasItems;
 
 import java.util.Arrays;
 import java.util.Collection;
@@ -19,7 +19,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import org.assertj.core.api.Assertions;
 import org.junit.Before;
 import org.junit.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -126,7 +125,7 @@ public class TestStickyEnquiries extends DBIntegrationTestBase
 	public void byInvitationStickyEnquiryIsNotReturned() throws Exception
 	{
 		Identity identity = idsMan.addEntity(new IdentityParam(UsernameIdentity.ID, "tuser"), 
-				CRED_REQ_PASS, EntityState.valid, false);
+				CRED_REQ_PASS, EntityState.valid);
 		EntityParam entityParam = new EntityParam(identity);
 		groupsMan.addMemberFromParent("/A", entityParam);
 		EnquiryForm form = new EnquiryFormBuilder()
@@ -170,7 +169,7 @@ public class TestStickyEnquiries extends DBIntegrationTestBase
 			.build();
 		
 		idsMan.addEntity(new IdentityParam(UsernameIdentity.ID, "tuser"), 
-				CRED_REQ_PASS, EntityState.valid, false);
+				CRED_REQ_PASS, EntityState.valid);
 		
 		setupUserContext("tuser", null);
 
@@ -210,6 +209,46 @@ public class TestStickyEnquiries extends DBIntegrationTestBase
 	}
 	
 	@Test
+	public void shouldRemovePendingRequestOnlyForGivenEntity() throws Exception
+	{
+		
+		initAndCreateEnquiry("false");
+		EnquiryResponse response = new EnquiryResponseBuilder()
+			.withFormId("sticky")
+			.withAddedGroupSelection()
+			.withGroup("/")
+			.withGroup("/A")
+			.endGroupSelection()
+			.withAddedGroupSelection()
+			.withGroup("/B")
+			.endGroupSelection()
+			.withAddedAttribute(null)
+			.build();
+		
+		Identity addEntity1 = idsMan.addEntity(new IdentityParam(UsernameIdentity.ID, "tuser"), 
+				CRED_REQ_PASS, EntityState.valid);
+		Identity addEntity2 = idsMan.addEntity(new IdentityParam(UsernameIdentity.ID, "tuser2"), 
+				CRED_REQ_PASS, EntityState.valid);
+		
+		
+		setupUserContext("tuser", null);
+
+		enquiryManagement.submitEnquiryResponse(response,
+				new RegistrationContext(false, TriggeringMode.manualStandalone));
+		
+		setupUserContext("tuser2", null);
+
+		enquiryManagement.submitEnquiryResponse(response,
+				new RegistrationContext(false, TriggeringMode.manualStandalone));
+
+		setupAdmin();
+		enquiryManagement.removePendingStickyRequest("sticky", new EntityParam(addEntity1.getEntityId()));
+
+		assertThat(enquiryManagement.getEnquiryResponses().stream().filter(e -> e.getEntityId() == addEntity1.getEntityId()).count(), is(0L));
+		assertThat(enquiryManagement.getEnquiryResponses().stream().filter(e -> e.getEntityId() == addEntity2.getEntityId()).count(), is(1L));
+	}
+	
+	@Test
 	public void shouldBlockMultiSelectGroupInSingleSelectGroupParam() throws Exception
 	{
 		initAndCreateEnquiry("true");
@@ -225,8 +264,7 @@ public class TestStickyEnquiries extends DBIntegrationTestBase
 				.withAddedAttribute(null)
 				.build();
 
-		idsMan.addEntity(new IdentityParam(UsernameIdentity.ID, "tuser"), CRED_REQ_PASS, EntityState.valid,
-				false);
+		idsMan.addEntity(new IdentityParam(UsernameIdentity.ID, "tuser"), CRED_REQ_PASS, EntityState.valid);
 		setupUserContext("tuser", null);
 		Throwable exception = catchThrowable(() -> enquiryManagement.submitEnquiryResponse(response,
 				new RegistrationContext(false, TriggeringMode.manualStandalone)));
@@ -253,7 +291,7 @@ public class TestStickyEnquiries extends DBIntegrationTestBase
 		
 		
 		Identity identity = idsMan.addEntity(new IdentityParam(UsernameIdentity.ID, "tuser"), 
-				CRED_REQ_PASS, EntityState.valid, false);
+				CRED_REQ_PASS, EntityState.valid);
 
 		groupsMan.addMemberFromParent("/B", new EntityParam(identity));
 		groupsMan.addMemberFromParent("/B/C", new EntityParam(identity));
@@ -292,7 +330,7 @@ public class TestStickyEnquiries extends DBIntegrationTestBase
 			.build();
 		
 		Identity identity = idsMan.addEntity(new IdentityParam(UsernameIdentity.ID, "tuser"), CRED_REQ_PASS,
-				EntityState.valid, false);
+				EntityState.valid);
 
 		groupsMan.addMemberFromParent("/B", new EntityParam(identity));
 		groupsMan.addMemberFromParent("/B/C", new EntityParam(identity));
@@ -327,7 +365,7 @@ public class TestStickyEnquiries extends DBIntegrationTestBase
 			.build();
 
 		Identity identity = idsMan.addEntity(new IdentityParam(UsernameIdentity.ID, "tuser"), CRED_REQ_PASS,
-				EntityState.valid, false);
+				EntityState.valid);
 
 		groupsMan.addMemberFromParent("/A", new EntityParam(identity));
 		groupsMan.addMemberFromParent("/B", new EntityParam(identity));
@@ -369,7 +407,7 @@ public class TestStickyEnquiries extends DBIntegrationTestBase
 			.build();
 
 		Identity identity = idsMan.addEntity(new IdentityParam(UsernameIdentity.ID, "tuser"), CRED_REQ_PASS,
-				EntityState.valid, false);
+				EntityState.valid);
 
 		groupsMan.addMemberFromParent("/A", new EntityParam(identity));
 
@@ -423,10 +461,5 @@ public class TestStickyEnquiries extends DBIntegrationTestBase
 		EnquiryForm form = getFormBuilder(autoAcceptCondition).build();
 		enquiryManagement.addEnquiry(form);
 		return form;
-	}
-	
-	private void assertExceptionType(Throwable exception, Class<?> type)
-	{
-		Assertions.assertThat(exception).isNotNull().isInstanceOf(type);
 	}
 }

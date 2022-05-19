@@ -8,6 +8,7 @@ import java.util.Calendar;
 import java.util.Collection;
 import java.util.stream.Collectors;
 
+import org.springframework.beans.factory.ObjectFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.config.ConfigurableBeanFactory;
 import org.springframework.context.annotation.Scope;
@@ -17,26 +18,32 @@ import com.vaadin.annotations.Theme;
 import com.vaadin.server.VaadinRequest;
 
 import eu.unicore.security.etd.DelegationRestrictions;
+import pl.edu.icm.unity.MessageSource;
 import pl.edu.icm.unity.engine.api.AttributeTypeManagement;
 import pl.edu.icm.unity.engine.api.PreferencesManagement;
 import pl.edu.icm.unity.engine.api.attributes.AttributeTypeSupport;
 import pl.edu.icm.unity.engine.api.identity.IdentityTypeSupport;
 import pl.edu.icm.unity.engine.api.idp.CommonIdPProperties;
 import pl.edu.icm.unity.engine.api.idp.IdPEngine;
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
+import pl.edu.icm.unity.engine.api.policyAgreement.PolicyAgreementManagement;
 import pl.edu.icm.unity.engine.api.session.SessionManagement;
 import pl.edu.icm.unity.engine.api.utils.FreemarkerAppHandler;
+import pl.edu.icm.unity.saml.idp.SamlIdpStatisticReporter.SamlIdpStatisticReporterFactory;
 import pl.edu.icm.unity.saml.idp.ctx.SAMLAuthnContext;
-import pl.edu.icm.unity.saml.idp.web.SAMLContextSupport;
 import pl.edu.icm.unity.saml.idp.web.SamlIdPWebUI;
+import pl.edu.icm.unity.saml.idp.web.SamlSessionService;
+import pl.edu.icm.unity.saml.slo.SamlRoutableSignableMessage;
 import pl.edu.icm.unity.types.basic.Attribute;
 import pl.edu.icm.unity.types.basic.DynamicAttribute;
 import pl.edu.icm.unity.types.basic.IdentityParam;
+import pl.edu.icm.unity.types.basic.idpStatistic.IdpStatistic.Status;
 import pl.edu.icm.unity.unicore.samlidp.preferences.SamlPreferencesWithETD;
 import pl.edu.icm.unity.unicore.samlidp.saml.AuthnWithETDResponseProcessor;
 import pl.edu.icm.unity.webui.UnityWebUI;
-import pl.edu.icm.unity.webui.authn.StandardWebAuthenticationProcessor;
+import pl.edu.icm.unity.webui.authn.StandardWebLogoutHandler;
 import pl.edu.icm.unity.webui.common.attributes.AttributeHandlerRegistry;
+import pl.edu.icm.unity.webui.common.file.ImageAccessService;
+import pl.edu.icm.unity.webui.common.policyAgreement.PolicyAgreementScreen;
 import pl.edu.icm.unity.webui.forms.enquiry.EnquiresDialogLauncher;
 import xmlbeans.org.oasis.saml2.protocol.ResponseDocument;
 
@@ -55,23 +62,24 @@ public class SamlUnicoreIdPWebUI extends SamlIdPWebUI implements UnityWebUI
 	private AuthnWithETDResponseProcessor samlWithEtdProcessor;
 
 	@Autowired
-	public SamlUnicoreIdPWebUI(UnityMessageSource msg, FreemarkerAppHandler freemarkerHandler,
-			AttributeHandlerRegistry handlersRegistry, PreferencesManagement preferencesMan,
-			StandardWebAuthenticationProcessor authnProcessor, IdPEngine idpEngine, 
-			IdentityTypeSupport idTypeSupport, SessionManagement sessionMan, 
-			AttributeTypeManagement attrMan, 
-			EnquiresDialogLauncher enquiryDialogLauncher,
-			AttributeTypeSupport aTypeSupport)
+	public SamlUnicoreIdPWebUI(MessageSource msg, ImageAccessService imageAccessService,
+			FreemarkerAppHandler freemarkerHandler, AttributeHandlerRegistry handlersRegistry,
+			PreferencesManagement preferencesMan, StandardWebLogoutHandler authnProcessor,
+			IdPEngine idpEngine, IdentityTypeSupport idTypeSupport, SessionManagement sessionMan,
+			AttributeTypeManagement attrMan, EnquiresDialogLauncher enquiryDialogLauncher,
+			AttributeTypeSupport aTypeSupport, PolicyAgreementManagement policyAgreementsMan,
+			ObjectFactory<PolicyAgreementScreen> policyAgreementScreenObjectFactory,
+			SamlIdpStatisticReporterFactory idpStatisticReporterFactory)
 	{
-		super(msg, freemarkerHandler, handlersRegistry, preferencesMan,	authnProcessor, idpEngine,
-				idTypeSupport, sessionMan, attrMan,  
-				enquiryDialogLauncher, aTypeSupport);
+		super(msg, imageAccessService, freemarkerHandler, handlersRegistry, preferencesMan, authnProcessor,
+				idpEngine, idTypeSupport, sessionMan, attrMan, enquiryDialogLauncher, aTypeSupport,
+				policyAgreementsMan, policyAgreementScreenObjectFactory, idpStatisticReporterFactory);
 	}
 
 	@Override
 	protected void enter(VaadinRequest request)
 	{
-		SAMLAuthnContext samlCtx = SAMLContextSupport.getContext();
+		SAMLAuthnContext samlCtx = SamlSessionService.getVaadinContext();
 		samlWithEtdProcessor = new AuthnWithETDResponseProcessor(aTypeSupport, samlCtx, 
 				Calendar.getInstance());
 		super.enter(request);
@@ -80,7 +88,7 @@ public class SamlUnicoreIdPWebUI extends SamlIdPWebUI implements UnityWebUI
 	@Override
 	protected void gotoConsentStage(Collection<DynamicAttribute> attributes)
 	{
-		if (SAMLContextSupport.getContext().getSamlConfiguration().getBooleanValue(CommonIdPProperties.SKIP_CONSENT))
+		if (SamlSessionService.getVaadinContext().getSamlConfiguration().getBooleanValue(CommonIdPProperties.SKIP_CONSENT))
 		{
 			onAccepted(validIdentities.get(0), attributes.stream()
 					.map(da -> da.getAttribute())
@@ -89,7 +97,7 @@ public class SamlUnicoreIdPWebUI extends SamlIdPWebUI implements UnityWebUI
 			return;
 		}
 		
-		UnicoreConsentScreen consentScreen = new UnicoreConsentScreen(msg, 
+		UnicoreConsentScreen consentScreen = new UnicoreConsentScreen(msg, imageAccessService, 
 				handlersRegistry, 
 				preferencesMan, 
 				authnProcessor, 
@@ -106,13 +114,14 @@ public class SamlUnicoreIdPWebUI extends SamlIdPWebUI implements UnityWebUI
 	private void onAccepted(IdentityParam selectedIdentity, Collection<Attribute> attributes, 
 			DelegationRestrictions restrictions)
 	{
-		SAMLAuthnContext samlCtx = SAMLContextSupport.getContext();
+		SAMLAuthnContext samlCtx = SamlSessionService.getVaadinContext();
 		ResponseDocument respDoc;
 		try
 		{
-			respDoc = samlWithEtdProcessor.processAuthnRequest(selectedIdentity, 
+			SamlRoutableSignableMessage<ResponseDocument> response = samlWithEtdProcessor.processAuthnRequest(selectedIdentity, 
 					attributes, samlCtx.getResponseDestination(),
-					restrictions);
+					restrictions, samlCtx.getRelayState());
+			respDoc = response.getSignedMessage();
 		} catch (Exception e)
 		{
 			samlResponseHandler.handleExceptionNotThrowing(e, false);
@@ -120,6 +129,6 @@ public class SamlUnicoreIdPWebUI extends SamlIdPWebUI implements UnityWebUI
 		}
 		addSessionParticipant(samlCtx, samlWithEtdProcessor.getAuthenticatedSubject().getNameID(), 
 				samlWithEtdProcessor.getSessionId());
-		samlResponseHandler.returnSamlResponse(respDoc);
+		samlResponseHandler.returnSamlResponse(respDoc, Status.SUCCESSFUL);
 	}
 }

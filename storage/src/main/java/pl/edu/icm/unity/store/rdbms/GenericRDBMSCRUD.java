@@ -5,13 +5,17 @@
 package pl.edu.icm.unity.store.rdbms;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import pl.edu.icm.unity.store.ReferenceAwareDAO;
 import pl.edu.icm.unity.store.ReferenceRemovalHandler;
 import pl.edu.icm.unity.store.ReferenceUpdateHandler;
+import pl.edu.icm.unity.store.ReferenceUpdateHandler.PlannedUpdateEvent;
 import pl.edu.icm.unity.store.api.BasicCRUDDAO;
 import pl.edu.icm.unity.store.impl.StorageLimits;
 import pl.edu.icm.unity.store.rdbms.tx.SQLTransactionTL;
@@ -23,18 +27,29 @@ import pl.edu.icm.unity.store.rdbms.tx.SQLTransactionTL;
 public abstract class GenericRDBMSCRUD<T, DBT extends GenericDBBean> 
 		implements BasicCRUDDAO<T>, RDBMSDAO, ReferenceAwareDAO<T>
 {
-	private Class<? extends BasicCRUDMapper<DBT>> mapperClass;
+	private final Class<? extends BasicCRUDMapper<DBT>> mapperClass;
 	protected final RDBMSObjectSerializer<T, DBT> jsonSerializer;
 	protected final String elementName;
-	private Set<ReferenceRemovalHandler> deleteHandlers = new HashSet<>();
-	private Set<ReferenceUpdateHandler<T>> updateHandlers = new HashSet<>();
-	
+	private final Set<ReferenceRemovalHandler> deleteHandlers = new HashSet<>();
+	private final Set<ReferenceUpdateHandler<T>> updateHandlers = new HashSet<>();
+	private final Function<Long, RuntimeException> missingElementExceptionProvider;
+
 	public GenericRDBMSCRUD(Class<? extends BasicCRUDMapper<DBT>> mapperClass,
 			RDBMSObjectSerializer<T, DBT> jsonSerializer, String elementName)
+	{
+		this(mapperClass, jsonSerializer, elementName, 
+				id -> new IllegalArgumentException(elementName + " with key [" + id + 
+						"] does not exist"));
+	}
+	
+	public GenericRDBMSCRUD(Class<? extends BasicCRUDMapper<DBT>> mapperClass,
+			RDBMSObjectSerializer<T, DBT> jsonSerializer, String elementName,
+			Function<Long, RuntimeException> missingElementExceptionProvider)
 	{
 		this.mapperClass = mapperClass;
 		this.jsonSerializer = jsonSerializer;
 		this.elementName = elementName;
+		this.missingElementExceptionProvider = missingElementExceptionProvider;
 	}
 
 	@Override
@@ -47,6 +62,27 @@ public abstract class GenericRDBMSCRUD<T, DBT extends GenericDBBean>
 		return toAdd.getId();
 	}
 
+
+	@Override
+	public List<Long> createList(List<T> objs)
+	{
+		if (objs.isEmpty())
+			return Collections.emptyList();
+		BasicCRUDMapper<DBT> mapper = SQLTransactionTL.getSql().getMapper(mapperClass);
+		List<DBT> converted = new ArrayList<>(objs.size());
+		for (T obj: objs)
+		{
+			DBT toAdd = jsonSerializer.toDB(obj);
+			assertContentsLimit(toAdd.getContents());
+			converted.add(toAdd);
+		}
+		mapper.createList(converted);
+		
+		return converted.stream()
+				.map(GenericDBBean::getId)
+				.collect(Collectors.toList());
+	}
+	
 	@Override
 	public void createWithId(long key, T obj)
 	{
@@ -61,10 +97,10 @@ public abstract class GenericRDBMSCRUD<T, DBT extends GenericDBBean>
 	public void updateByKey(long key, T obj)
 	{
 		BasicCRUDMapper<DBT> mapper = SQLTransactionTL.getSql().getMapper(mapperClass);
-		DBT old = mapper.getByKey(key);
-		if (old == null)
-			throw new IllegalArgumentException(elementName + " with key [" + key + 
-					"] does not exist");
+		DBT oldBean = mapper.getByKey(key);
+		if (oldBean == null)
+			throw missingElementExceptionProvider.apply(key);
+		T old = jsonSerializer.fromDB(oldBean);
 		preUpdateCheck(old, obj);
 		firePreUpdate(key, null, obj, old);
 		DBT toUpdate = jsonSerializer.toDB(obj);
@@ -80,10 +116,8 @@ public abstract class GenericRDBMSCRUD<T, DBT extends GenericDBBean>
 	
 	/**
 	 * For extensions
-	 * @param old
-	 * @param updated
 	 */
-	protected void preUpdateCheck(DBT old, T updated)
+	protected void preUpdateCheck(T old, T updated)
 	{
 	}
 	
@@ -93,8 +127,7 @@ public abstract class GenericRDBMSCRUD<T, DBT extends GenericDBBean>
 		BasicCRUDMapper<DBT> mapper = SQLTransactionTL.getSql().getMapper(mapperClass);
 		DBT toRemove = mapper.getByKey(id);
 		if (toRemove == null)
-			throw new IllegalArgumentException(elementName + " with key [" + id + 
-					"] does not exist");
+			throw missingElementExceptionProvider.apply(id);
 		firePreRemove(id, null, toRemove);
 		mapper.deleteByKey(id);
 	}
@@ -109,8 +142,7 @@ public abstract class GenericRDBMSCRUD<T, DBT extends GenericDBBean>
 	protected void assertExists(long id, BasicCRUDMapper<DBT> mapper)
 	{
 		if (mapper.getByKey(id) == null)
-			throw new IllegalArgumentException(elementName + " with key [" + id + 
-					"] does not exist");
+			throw missingElementExceptionProvider.apply(id);
 	}
 
 	@Override
@@ -119,8 +151,7 @@ public abstract class GenericRDBMSCRUD<T, DBT extends GenericDBBean>
 		BasicCRUDMapper<DBT> mapper = SQLTransactionTL.getSql().getMapper(mapperClass);
 		DBT byName = mapper.getByKey(id);
 		if (byName == null)
-			throw new IllegalArgumentException(elementName + " with key [" + id + 
-					"] does not exist");
+			throw missingElementExceptionProvider.apply(id);
 		return jsonSerializer.fromDB(byName);
 	}
 
@@ -130,6 +161,13 @@ public abstract class GenericRDBMSCRUD<T, DBT extends GenericDBBean>
 		BasicCRUDMapper<DBT> mapper = SQLTransactionTL.getSql().getMapper(mapperClass);
 		List<DBT> allInDB = mapper.getAll();
 		return convertList(allInDB);
+	}
+	
+	@Override
+	public long getCount()
+	{
+		BasicCRUDMapper<DBT> mapper = SQLTransactionTL.getSql().getMapper(mapperClass);
+		return mapper.getCount();
 	}
 	
 	protected List<T> convertList(List<DBT> fromDB)
@@ -161,9 +199,9 @@ public abstract class GenericRDBMSCRUD<T, DBT extends GenericDBBean>
 			handler.preRemoveCheck(modifiedId, modifiedName);
 	}
 
-	protected void firePreUpdate(long modifiedId, String modifiedName, T newVal, DBT old)
+	protected void firePreUpdate(long modifiedId, String modifiedName, T newVal, T old)
 	{
 		for (ReferenceUpdateHandler<T> handler: updateHandlers)
-			handler.preUpdateCheck(modifiedId, modifiedName, newVal);
+			handler.preUpdateCheck(new PlannedUpdateEvent<>(modifiedId, modifiedName, newVal, old));
 	}
 }

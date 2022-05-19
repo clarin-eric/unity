@@ -5,7 +5,6 @@
 package pl.edu.icm.unity.oauth.as;
 
 import java.net.URI;
-import java.util.Collection;
 import java.util.Date;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -13,10 +12,11 @@ import java.util.Set;
 
 import com.nimbusds.oauth2.sdk.AuthorizationRequest;
 import com.nimbusds.oauth2.sdk.client.ClientType;
+import com.nimbusds.openid.connect.sdk.OIDCScopeValue;
 
-import pl.edu.icm.unity.oauth.as.OAuthASProperties;
 import pl.edu.icm.unity.oauth.as.OAuthSystemAttributesProvider.GrantFlow;
 import pl.edu.icm.unity.types.basic.Attribute;
+import pl.edu.icm.unity.types.translation.TranslationProfile;
 
 /**
  * Context stored in HTTP session maintaining authorization token.
@@ -25,6 +25,8 @@ import pl.edu.icm.unity.types.basic.Attribute;
  */
 public class OAuthAuthzContext
 {
+	public enum Prompt { NONE, LOGIN, CONSENT}
+	
 	public static final long AUTHN_TIMEOUT = 900000;
 	private AuthorizationRequest request;
 	private OAuthASProperties config;
@@ -35,16 +37,18 @@ public class OAuthAuthzContext
 	private String clientUsername;
 	private long clientEntityId;
 	private Attribute clientLogo;
-	private String translationProfile;
+	private TranslationProfile translationProfile;
 	private String usersGroup;
-	private Set<ScopeInfo> effectiveRequestedScopes = new HashSet<>();
+	private Set<OAuthScope> effectiveRequestedScopes = new HashSet<>();
 	private Set<String> requestedScopes = new HashSet<>();
 	private Set<String> effectiveRequestedAttrs = new HashSet<>();
+	private Set<Prompt> prompts= new HashSet<>();
 	private GrantFlow flow;
 	private ClientType clientType;
 	private boolean openIdMode;
 	
-
+	
+	
 	public OAuthAuthzContext(AuthorizationRequest request, OAuthASProperties properties)
 	{
 		this.config = properties;
@@ -117,20 +121,20 @@ public class OAuthAuthzContext
 		this.usersGroup = usersGroup;
 	}
 
-	public String getTranslationProfile()
+	public TranslationProfile getTranslationProfile()
 	{
 		return translationProfile;
 	}
 
-	public void setTranslationProfile(String translationProfile)
+	public void setTranslationProfile(TranslationProfile translationProfile)
 	{
 		this.translationProfile = translationProfile;
 	}
 	
-	public void addEffectiveScopeInfo(ScopeInfo scopeInfo)
+	public void addEffectiveScopeInfo(OAuthScope scopeInfo)
 	{
 		effectiveRequestedScopes.add(scopeInfo);
-		effectiveRequestedAttrs.addAll(scopeInfo.getAttributes());
+		effectiveRequestedAttrs.addAll(scopeInfo.attributes);
 	}
 	
 	public Set<String> getEffectiveRequestedAttrs()
@@ -138,7 +142,7 @@ public class OAuthAuthzContext
 		return effectiveRequestedAttrs;
 	}
 
-	public Set<ScopeInfo> getEffectiveRequestedScopes()
+	public Set<OAuthScope> getEffectiveRequestedScopes()
 	{
 		return effectiveRequestedScopes;
 	}
@@ -146,12 +150,22 @@ public class OAuthAuthzContext
 	public String[] getEffectiveRequestedScopesList()
 	{
 		String[] ret = new String[effectiveRequestedScopes.size()];
-		Iterator<ScopeInfo> sIt = effectiveRequestedScopes.iterator();
+		Iterator<OAuthScope> sIt = effectiveRequestedScopes.iterator();
 		for (int i=0; i<ret.length; i++)
 			ret[i] = sIt.next().name;
 		return ret;
 	}
 
+	public Set<Prompt> getPrompts()
+	{
+		return prompts;
+	}
+	
+	public void addPrompt(Prompt prompt)
+	{
+		prompts.add(prompt);
+	}
+	
 	public GrantFlow getFlow()
 	{
 		return flow;
@@ -172,6 +186,12 @@ public class OAuthAuthzContext
 		this.openIdMode = openIdMode;
 	}
 
+	public boolean hasOfflineAccessScope()
+	{
+		return !getEffectiveRequestedScopes().stream()
+				.filter(a -> a.name.equals(OIDCScopeValue.OFFLINE_ACCESS.getValue())).findAny().isEmpty();
+	}
+	
 	public long getClientEntityId()
 	{
 		return clientEntityId;
@@ -210,37 +230,5 @@ public class OAuthAuthzContext
 	public void setClientType(ClientType clientType)
 	{
 		this.clientType = clientType;
-	}
-
-
-
-	public static class ScopeInfo
-	{
-		private String name;
-		private String description;
-		private Set<String> attributes;
-		
-		public ScopeInfo(String name, String description, Collection<String> attributes)
-		{
-			super();
-			this.name = name;
-			this.description = description;
-			this.attributes = new HashSet<String>(attributes);
-		}
-
-		public String getName()
-		{
-			return name;
-		}
-
-		public String getDescription()
-		{
-			return description;
-		}
-
-		public Set<String> getAttributes()
-		{
-			return attributes;
-		}
 	}
 }

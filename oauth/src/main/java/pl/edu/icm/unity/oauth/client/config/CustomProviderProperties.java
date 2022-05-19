@@ -12,7 +12,7 @@ import java.util.Properties;
 
 import org.apache.http.NameValuePair;
 import org.apache.http.message.BasicNameValuePair;
-import org.apache.log4j.Logger;
+import org.apache.logging.log4j.Logger;
 
 import com.nimbusds.oauth2.sdk.http.HTTPRequest.Method;
 
@@ -39,7 +39,7 @@ import pl.edu.icm.unity.webui.authn.CommonWebAuthnProperties;
  */
 public class CustomProviderProperties extends UnityPropertiesHelper implements BaseRemoteASProperties
 {
-	private static final Logger log = Log.getLegacyLogger(Log.U_SERVER_CFG, CustomProviderProperties.class);
+	private static final Logger log = Log.getLogger(Log.U_SERVER_CFG, CustomProviderProperties.class);
 	
 	public enum AccessTokenFormat {standard, httpParams};
 	public enum ClientAuthnMode {secretPost, secretBasic};
@@ -78,13 +78,15 @@ public class CustomProviderProperties extends UnityPropertiesHelper implements B
 		META.put(ACCESS_TOKEN_ENDPOINT, new PropertyMD().
 				setDescription("Location (URL) of OAuth2 provider's access token endpoint. "
 						+ "In case of OpenID Connect mode can be discovered, otherwise mandatory."));
-		META.put(PROFILE_ENDPOINT, new PropertyMD().
+		META.put(PROFILE_ENDPOINT, new PropertyMD().setCanHaveSubkeys().
 				setDescription("Location (URL) of OAuth2 provider's user's profile endpoint. "
 						+ "It is used to obtain additional user's attributes. "
 						+ "It can be autodiscovered for OpenID Connect mode. Otherwise it should be"
 						+ " set as otherwise there is bearly no information about the user identity."
 						+ " If not set then the only information about the user is the one "
-						+ "extracted from the access token (if any)."));
+						+ "extracted from the access token (if any). "
+						+ "Additionally a subkeys can be added (.1, .2, ...) if user attributes"
+						+ " should be fetched from more then a single endpoint."));
 		META.put(PROVIDER_NAME, new PropertyMD().setMandatory().setCanHaveSubkeys().
 				setDescription("Name of the OAuth provider to be displayed. Can be localized with locale subkeys."));
 		META.put(ICON_URL, new PropertyMD().setCanHaveSubkeys().
@@ -97,7 +99,7 @@ public class CustomProviderProperties extends UnityPropertiesHelper implements B
 				+ "registration at the provider"));
 		META.put(CLIENT_AUTHN_MODE, new PropertyMD(ClientAuthnMode.secretBasic).
 				setDescription("Defines how the client secret and id should be passed to the provider."));
-		META.put(CLIENT_AUTHN_MODE_FOR_PROFILE_ACCESS, new PropertyMD().setDescription(
+		META.put(CLIENT_AUTHN_MODE_FOR_PROFILE_ACCESS, new PropertyMD().setEnum(ClientAuthnMode.secretBasic).setDescription(
 				"Defines how the client secret and id should be passed to the provider's user's profile endpoint. If not set the "
 						+ CLIENT_AUTHN_MODE + " is used"));		
 		META.put(CLIENT_HTTP_METHOD_FOR_PROFILE_ACCESS, new PropertyMD(ClientHttpMethod.get)
@@ -121,10 +123,13 @@ public class CustomProviderProperties extends UnityPropertiesHelper implements B
 		META.put(CommonWebAuthnProperties.REGISTRATION_FORM, new PropertyMD().
 				setDescription("Registration form to be shown for the locally unknown users which "
 						+ "were successfuly authenticated remotely."));
-		META.put(CommonWebAuthnProperties.TRANSLATION_PROFILE, new PropertyMD().setMandatory().
-				setDescription("Translation profile which will be used to map received user "
+		META.put(CommonWebAuthnProperties.TRANSLATION_PROFILE, new PropertyMD().
+				setDescription("Name of translation profile which will be used to map received user "
 						+ "information to a local representation."));
-		META.put(CommonWebAuthnProperties.ENABLE_ASSOCIATION, new PropertyMD().
+		META.put(CommonWebAuthnProperties.EMBEDDED_TRANSLATION_PROFILE, new PropertyMD().setHidden().
+				setDescription("Translation profile in json which will be used to map received user "
+						+ "information to a local representation."));
+		META.put(CommonWebAuthnProperties.ENABLE_ASSOCIATION, new PropertyMD().setBoolean().
 				setDescription("If true then unknown remote user gets an option to associate "
 						+ "the remote identity with an another local "
 						+ "(already existing) account. Overrides the global setting."));
@@ -170,19 +175,26 @@ public class CustomProviderProperties extends UnityPropertiesHelper implements B
 			throw new ConfigurationException(getKeyDescription(PROVIDER_NAME) + 
 					" is mandatory");
 		
+		if (!isSet(CommonWebAuthnProperties.EMBEDDED_TRANSLATION_PROFILE)
+				&& !isSet(CommonWebAuthnProperties.TRANSLATION_PROFILE))
+		{
+			throw new ConfigurationException(getKeyDescription(CommonWebAuthnProperties.TRANSLATION_PROFILE)
+					+ " is mandatory");
+		}
+		
 		String validatorName = getValue(CLIENT_TRUSTSTORE);
 		if (validatorName != null)
 		{
 			try
 			{
 				if (!pkiManagement.getValidatorNames().contains(validatorName))
-					throw new ConfigurationException("The validator " + 
+					throw new ConfigurationException("The http client truststore " + 
 							validatorName + 
 							" for the OAuth verification client does not exist");
 				validator = pkiManagement.getValidator(validatorName);
 			} catch (EngineException e)
 			{
-				throw new ConfigurationException("Can not establish the validator " + 
+				throw new ConfigurationException("Can not establish the http client truststore " + 
 						validatorName + " for the OAuth verification client", e);
 			}
 		}
@@ -207,6 +219,17 @@ public class CustomProviderProperties extends UnityPropertiesHelper implements B
 				ClientHttpMethod.class) == ClientHttpMethod.get) ? Method.GET
 						: Method.POST;
 	}	
+	
+	public List<String> getUserInfoEndpoints()
+	{
+		List<String> userInfoEndpoints = new ArrayList<>();
+
+		String mainUserInfoEndpoint = getValue(CustomProviderProperties.PROFILE_ENDPOINT);
+		if (mainUserInfoEndpoint != null)
+			userInfoEndpoints.add(mainUserInfoEndpoint);
+		userInfoEndpoints.addAll(getListOfValues(CustomProviderProperties.PROFILE_ENDPOINT + "."));
+		return userInfoEndpoints;
+	}
 	
 	public Properties getProperties()
 	{
@@ -249,4 +272,12 @@ public class CustomProviderProperties extends UnityPropertiesHelper implements B
 		if (!properties.containsKey(property))
 			properties.setProperty(property, value);
 	}
+	
+	public static void setDefaultProfileIfUnset(Properties properties, String prefix, String defaultProfile)
+	{
+		if (!properties.containsKey(prefix + CommonWebAuthnProperties.EMBEDDED_TRANSLATION_PROFILE) &&
+				!properties.containsKey(prefix + CommonWebAuthnProperties.TRANSLATION_PROFILE))
+			properties.setProperty(prefix + CommonWebAuthnProperties.TRANSLATION_PROFILE, defaultProfile);
+	}
+	
 }

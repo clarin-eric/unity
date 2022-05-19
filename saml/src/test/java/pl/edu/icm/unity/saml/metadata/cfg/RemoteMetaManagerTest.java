@@ -19,19 +19,20 @@ import static pl.edu.icm.unity.saml.idp.SamlIdpProperties.SPMETA_PREFIX;
 
 import java.io.File;
 import java.io.IOException;
+import java.time.Duration;
 import java.util.Properties;
 import java.util.function.BiConsumer;
 
 import org.apache.commons.io.FileUtils;
 import org.awaitility.Awaitility;
-import org.awaitility.Duration;
+import org.awaitility.Durations;
 import org.junit.Ignore;
 import org.junit.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
+import pl.edu.icm.unity.MessageSource;
 import pl.edu.icm.unity.engine.DBIntegrationTestBase;
 import pl.edu.icm.unity.engine.api.PKIManagement;
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
 import pl.edu.icm.unity.exceptions.EngineException;
 import pl.edu.icm.unity.saml.idp.SamlIdpProperties;
 import pl.edu.icm.unity.saml.metadata.srv.RemoteMetadataService;
@@ -46,7 +47,7 @@ public class RemoteMetaManagerTest extends DBIntegrationTestBase
 	private PKIManagement pkiManagement;
 
 	@Autowired
-	private UnityMessageSource msg;
+	private MessageSource msg;
 
 	@Test
 	public void shouldUpdateStaticConfigurationAfterReload() throws Exception
@@ -133,7 +134,7 @@ public class RemoteMetaManagerTest extends DBIntegrationTestBase
 		private BiConsumer<EntitiesDescriptorDocument, String> consumer;
 
 		@Override
-		public void registerConsumer(String key, long refreshIntervalMs,
+		public void registerConsumer(String key, Duration refreshInterval,
 				String customTruststore,
 				BiConsumer<EntitiesDescriptorDocument, String> consumer)
 		{
@@ -184,7 +185,7 @@ public class RemoteMetaManagerTest extends DBIntegrationTestBase
 					new MetaToIDPConfigConverter(pkiManagement, msg),
 					metadataService, SamlIdpProperties.SPMETA_PREFIX);
 		
-		Awaitility.await().atMost(Duration.TEN_SECONDS).untilAsserted(() -> 
+		Awaitility.await().atMost(Durations.TEN_SECONDS).untilAsserted(() -> 
 		{
 			SamlIdpProperties config = (SamlIdpProperties) manager.getVirtualConfiguration();
 			String ret = config.getPrefixOfSP("https://eu01.alma.exlibrisgroup.com/mng/login");

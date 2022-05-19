@@ -10,6 +10,7 @@ import java.util.List;
 
 import org.apache.logging.log4j.Logger;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
 
@@ -40,7 +41,7 @@ import pl.edu.icm.unity.types.authn.AuthenticatorInfo;
 @Component
 public class AuthenticatorSupportServiceImpl implements AuthenticatorSupportService
 {
-	private static final Logger log = Log.getLogger(Log.U_SERVER, AuthenticatorSupportServiceImpl.class);
+	private static final Logger log = Log.getLogger(Log.U_SERVER_AUTHN, AuthenticatorSupportServiceImpl.class);
 	private AuthenticatorLoader authnLoader;
 	private AuthenticatorsRegistry authnRegistry;
 	private AuthenticatorManagement authenticationManagement;
@@ -50,7 +51,7 @@ public class AuthenticatorSupportServiceImpl implements AuthenticatorSupportServ
 	
 	@Autowired
 	public AuthenticatorSupportServiceImpl(AuthenticatorLoader authnLoader, 
-			AuthenticatorsRegistry authnRegistry, AuthenticatorManagement authenticationManagement,
+			AuthenticatorsRegistry authnRegistry, @Qualifier("insecure") AuthenticatorManagement authenticationManagement,
 			AuthenticatorConfigurationDB authenticatorDB,
 			EndpointsUpdater endpointsUpdater, TransactionalRunner tx)
 	{
@@ -110,8 +111,7 @@ public class AuthenticatorSupportServiceImpl implements AuthenticatorSupportServ
 		}
 		return ret;
 	}
-
-
+	
 	@Override
 	public void refreshAuthenticatorsOfCredential(String credential) throws EngineException
 	{

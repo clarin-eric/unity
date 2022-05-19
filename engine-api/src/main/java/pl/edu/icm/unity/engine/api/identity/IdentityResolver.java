@@ -4,11 +4,17 @@
  */
 package pl.edu.icm.unity.engine.api.identity;
 
+import pl.edu.icm.unity.engine.api.authn.AuthenticationSubject;
 import pl.edu.icm.unity.engine.api.authn.EntityWithCredential;
 import pl.edu.icm.unity.exceptions.EngineException;
 import pl.edu.icm.unity.exceptions.IllegalGroupValueException;
 import pl.edu.icm.unity.exceptions.IllegalIdentityValueException;
 import pl.edu.icm.unity.exceptions.IllegalTypeException;
+import pl.edu.icm.unity.types.basic.EntityParam;
+import pl.edu.icm.unity.types.basic.Identity;
+import pl.edu.icm.unity.types.basic.IdentityParam;
+
+import java.util.List;
 
 /**
  * Allows for resolving an identity into entity, returning also its credential.
@@ -29,24 +35,56 @@ public interface IdentityResolver
 	 * credential is set in the returned object.
 	 * @return the entity info with the credential value
 	 * @throws IllegalIdentityValueException if the given identity is not present in the db
-	 * @throws IllegalGroupValueException 
-	 * @throws IllegalTypeException 
-	 * @throws EngineException 
 	 */
 	EntityWithCredential resolveIdentity(String identity, String[] identityTypes, String credentialName)
-		throws IllegalIdentityValueException, IllegalTypeException, IllegalGroupValueException, EngineException;
+		throws EngineException;
 
+	/**
+	 * Provides information about entity including its credential 
+	 */
+	EntityWithCredential resolveEntity(long entityId, String credentialName)
+			throws EngineException;
+	
+	/**
+	 * Provides information about subject including its credential 
+	 */
+	EntityWithCredential resolveSubject(AuthenticationSubject subject, String[] identityTypes, String credentialName)
+			throws IllegalIdentityValueException, IllegalTypeException, IllegalGroupValueException, EngineException;
+
+	/**
+	 * Provides information about subject including its credential 
+	 */
+	Identity resolveSubject(AuthenticationSubject subject, String identityType)
+			throws IllegalIdentityValueException, IllegalTypeException, IllegalGroupValueException, EngineException;
+	
+	
 	/**
 	 * Simple version that only resolves, but doesn't establish any local credential. Useful for remote 
 	 * verificators.
-	 * @param identity
-	 * @param identityTypes
-	 * @return
-	 * @throws EngineException
 	 */
 	long resolveIdentity(String identity, String[] identityTypes, String target, String realm) 
 			throws EngineException;
 	
 	
 	boolean isEntityEnabled(long entity);
+	
+	String getDisplayedUserName(EntityParam entity) throws EngineException;
+
+	/**
+	 * Resolves {@link EntityParam} to list of all Identities, if missing throws exception
+	 * @param entity Describes search criteria
+	 * @return List of {@link Identity}
+	 * @throws IllegalIdentityValueException for missing entity
+	 */
+	List<Identity> getIdentitiesForEntity(EntityParam entity) throws IllegalIdentityValueException;
+
+	/**
+	 * Insert identity in DB.
+	 *
+	 * @param toAdd Describes {@link Identity} details
+	 * @param entity {@link EntityParam} describing search criteria
+	 * @return Created {@link Identity}
+	 * @throws IllegalIdentityValueException In case of basic rules check failure.
+	 */
+	Identity insertIdentity(IdentityParam toAdd, EntityParam entity) throws IllegalIdentityValueException;
 }

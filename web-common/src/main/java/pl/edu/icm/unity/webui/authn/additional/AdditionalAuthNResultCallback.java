@@ -4,7 +4,6 @@
  */
 package pl.edu.icm.unity.webui.authn.additional;
 
-import java.util.Optional;
 import java.util.function.Consumer;
 
 import org.apache.logging.log4j.Logger;
@@ -16,10 +15,11 @@ import pl.edu.icm.unity.engine.api.authn.AuthenticationResult;
 import pl.edu.icm.unity.engine.api.authn.AuthenticationResult.Status;
 import pl.edu.icm.unity.engine.api.authn.InvocationContext;
 import pl.edu.icm.unity.engine.api.authn.LoginSession;
+import pl.edu.icm.unity.engine.api.authn.remote.AuthenticationTriggeringContext;
 import pl.edu.icm.unity.engine.api.session.LoginToHttpSessionBinder;
 import pl.edu.icm.unity.engine.api.session.SessionManagement;
+import pl.edu.icm.unity.types.authn.AuthenticationOptionKey;
 import pl.edu.icm.unity.webui.authn.VaadinAuthentication.AuthenticationCallback;
-import pl.edu.icm.unity.webui.authn.VaadinAuthentication.AuthenticationStyle;
 import pl.edu.icm.unity.webui.authn.additional.AdditionalAuthnHandler.AuthnResult;
 
 /**
@@ -33,9 +33,9 @@ class AdditionalAuthNResultCallback implements AuthenticationCallback
 	private static final Logger log = Log.getLogger(Log.U_SERVER_WEB, AdditionalAuthNResultCallback.class);
 	private final Consumer<AuthnResult> resultConsumer;
 	private final SessionManagement sessionMan;
-	private final String authenticatorId;
+	private final AuthenticationOptionKey authenticatorId;
 
-	public AdditionalAuthNResultCallback(SessionManagement sessionMan, String authenticatorId, 
+	public AdditionalAuthNResultCallback(SessionManagement sessionMan, AuthenticationOptionKey authenticatorId, 
 			Consumer<AuthnResult> resultConsumer)
 	{
 		this.sessionMan = sessionMan;
@@ -54,7 +54,7 @@ class AdditionalAuthNResultCallback implements AuthenticationCallback
 			updateLoginSessionInHttpSession();
 		}
 		
-		resultConsumer.accept(result.getStatus() == Status.success? AuthnResult.SUCCESS : AuthnResult.ERROR);
+		resultConsumer.accept(result.getStatus() == Status.success ? AuthnResult.SUCCESS : AuthnResult.ERROR);
 	}
 
 	private void updateLoginSessionInHttpSession()
@@ -66,15 +66,7 @@ class AdditionalAuthNResultCallback implements AuthenticationCallback
 	}
 	
 	@Override
-	public void onFailedAuthentication(AuthenticationResult result, String error,
-			Optional<String> errorDetail)
-	{
-		log.trace("Received authentication result of the additional authentication {}", result);
-		resultConsumer.accept(AuthnResult.ERROR);
-	}
-	
-	@Override
-	public void onStartedAuthentication(AuthenticationStyle style)
+	public void onStartedAuthentication()
 	{
 	}
 
@@ -82,5 +74,11 @@ class AdditionalAuthNResultCallback implements AuthenticationCallback
 	public void onCancelledAuthentication()
 	{
 		resultConsumer.accept(AuthnResult.CANCEL);
+	}
+
+	@Override
+	public AuthenticationTriggeringContext getTriggeringContext()
+	{
+		return AuthenticationTriggeringContext.authenticationTriggeredFirstFactor();
 	}
 }

@@ -19,23 +19,29 @@ import static pl.edu.icm.unity.webui.VaadinEndpointProperties.AUTHN_SHOW_LAST_OP
 import static pl.edu.icm.unity.webui.VaadinEndpointProperties.AUTHN_SHOW_LAST_OPTION_ONLY_LAYOUT;
 import static pl.edu.icm.unity.webui.VaadinEndpointProperties.AUTHN_SHOW_SEARCH;
 import static pl.edu.icm.unity.webui.VaadinEndpointProperties.DEFAULT_AUTHN_COLUMN_WIDTH;
+import static pl.edu.icm.unity.webui.authn.column.AuthnOptionsColumn.ComponentWithId.createNonLoginComponent;
+import static pl.edu.icm.unity.webui.authn.column.AuthnOptionsColumn.ComponentWithId.createSimpleLoginComponent;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Set;
 
-import com.vaadin.server.VaadinRequest;
+import org.apache.logging.log4j.Logger;
+
 import com.vaadin.ui.Alignment;
 import com.vaadin.ui.Button;
 import com.vaadin.ui.Component;
+import com.vaadin.ui.CssLayout;
 import com.vaadin.ui.CustomComponent;
 import com.vaadin.ui.HorizontalLayout;
 import com.vaadin.ui.Label;
 import com.vaadin.ui.VerticalLayout;
 
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
+import pl.edu.icm.unity.MessageSource;
+import pl.edu.icm.unity.base.utils.Log;
 import pl.edu.icm.unity.types.authn.AuthenticationOptionKeyUtils;
 import pl.edu.icm.unity.webui.VaadinEndpointProperties;
 import pl.edu.icm.unity.webui.authn.AuthNGridTextWrapper;
@@ -51,15 +57,16 @@ import pl.edu.icm.unity.webui.common.Styles;
  */
 public class AuthnOptionsColumns extends CustomComponent
 {
-	private static final String SPECIAL_ENTRY_LAST_USED = "_LAST_USED";
-	private static final String SPECIAL_ENTRY_REGISTER = "_REGISTER";
-	private static final String SPECIAL_ENTRY_SEPARATOR = "_SEPARATOR";
-	private static final String SPECIAL_ENTRY_HEADER = "_HEADER";
-	private static final String SPECIAL_ENTRY_GRID = "_GRID_";
-	private static final String SPECIAL_ENTRY_EXPAND = "_EXPAND"; //note that this one is not documented, for internal use
+	private static final Logger log = Log.getLogger(Log.U_SERVER_WEB, AuthnOptionsColumns.class);
+	public static final String SPECIAL_ENTRY_LAST_USED = "_LAST_USED";
+	public static final String SPECIAL_ENTRY_REGISTER = "_REGISTER";
+	public static final String SPECIAL_ENTRY_SEPARATOR = "_SEPARATOR";
+	public static final String SPECIAL_ENTRY_HEADER = "_HEADER";
+	public static final String SPECIAL_ENTRY_GRID = "_GRID_";
+	public static final String SPECIAL_ENTRY_EXPAND = "_EXPAND"; //note that this one is not documented, for internal use
 	
 	private final VaadinEndpointProperties config;
-	private final UnityMessageSource msg;
+	private final MessageSource msg;
 	private final AuthenticationOptionsHandler authnOptionsHandler;
 	private final boolean enableRegistration;
 	private final AuthNPanelFactory authNPanelFactory;
@@ -67,7 +74,7 @@ public class AuthnOptionsColumns extends CustomComponent
 	
 	private List<AuthnOptionsColumn> columns;
 	
-	AuthnOptionsColumns(VaadinEndpointProperties config, UnityMessageSource msg,
+	AuthnOptionsColumns(VaadinEndpointProperties config, MessageSource msg,
 			AuthenticationOptionsHandler authnOptionsHandler, boolean enableRegistration,
 			AuthNPanelFactory authNPanelFactory,
 			Runnable registrationLayoutLauncher)
@@ -85,16 +92,6 @@ public class AuthnOptionsColumns extends CustomComponent
 		focusFirst();
 	}
 
-	void refreshAuthenticatorWithId(String id, VaadinRequest request)
-	{
-		for (AuthnOptionsColumn column: columns)
-		{
-			FirstFactorAuthNPanel ffAuthnPanel = column.getAuthnOptionById(id);
-			if (ffAuthnPanel != null)
-				ffAuthnPanel.refresh(request);
-		}
-	}
-	
 	void disableAllExcept(String exception)
 	{
 		for (AuthnOptionsColumn column: columns)
@@ -145,7 +142,12 @@ public class AuthnOptionsColumns extends CustomComponent
 
 	private Component getAuthnColumnsComponent()
 	{
-		Component authNColumns = getFullAuthnColumnsComponent();
+		Component fullAuthnColumnsComponent = getFullAuthnColumnsComponent();
+		if (log.isDebugEnabled())
+			log.debug("Returning user UI decision: (config: {} preferredIdp: {} multipleOptionsConfigured: {})",
+					config.getBooleanValue(AUTHN_SHOW_LAST_OPTION_ONLY),
+					PreferredAuthenticationHelper.getPreferredIdp(),
+					hasMoreThenOneOptionConfigured());
 		if (config.getBooleanValue(AUTHN_SHOW_LAST_OPTION_ONLY) && 
 				PreferredAuthenticationHelper.getPreferredIdp() != null &&
 				hasMoreThenOneOptionConfigured())
@@ -155,20 +157,27 @@ public class AuthnOptionsColumns extends CustomComponent
 			if (lastSelectionComponent != null)
 			{
 				return lastSelectionComponent;
+			} else
+			{
+				log.debug("UI for the returning user was not created, falling back to default screen");
 			}
 		}
-		return authNColumns;
+		return fullAuthnColumnsComponent;
 	}
 
 	private Component getFullAuthnColumnsComponent()
 	{
 		authnOptionsHandler.clear();
-		Iterator<String> columnKeys = config.getStructuredListKeys(AUTHN_COLUMNS_PFX).iterator();
+		Set<String> columnsKeys = config.getStructuredListKeys(AUTHN_COLUMNS_PFX);
+		log.trace("Columns prefixes: {}", columnsKeys);
+		Iterator<String> columnKeys = columnsKeys.iterator();
 		if (!columnKeys.hasNext())
 		{
+			log.trace("Creating default layout");
 			return createDefaultLayout();
 		} else
 		{
+			log.trace("Creating standard expanded layout");
 			return createStandardExpandedLayout(columnKeys);
 		}
 	}
@@ -227,8 +236,7 @@ public class AuthnOptionsColumns extends CustomComponent
 	
 	private Component createStandardExpandedLayout(Iterator<String> columnKeys)
 	{
-		HorizontalLayout columnsLayout = new HorizontalLayout();
-		columnsLayout.setMargin(false);
+		CssLayout columnsLayout = new CssLayout();
 		boolean showAll = config.getBooleanValue(AUTHN_ADD_ALL);
 		boolean focussed = false;
 		columns.clear();
@@ -246,6 +254,7 @@ public class AuthnOptionsColumns extends CustomComponent
 				continue;
 			
 			AuthnOptionsColumn columnComponent = new AuthnOptionsColumn(title, width);
+			columnComponent.addStyleName("u-auto-width");
 			columnsLayout.addComponent(columnComponent);
 			columns.add(columnComponent);
 			columnComponent.addOptions(columnAuthnComponents);
@@ -257,15 +266,16 @@ public class AuthnOptionsColumns extends CustomComponent
 			{
 				Component separator = getColumnsSeparator(columnKey);
 				columnsLayout.addComponent(separator);
-				columnsLayout.setComponentAlignment(separator, Alignment.MIDDLE_CENTER);
 			}
 		}
+		log.trace("Created {} columns", columns.size());
 		return columnsLayout;
 	}
 
 	
 	private List<ComponentWithId> getColumnAuthnComponents(String columnContents, boolean addRemaining)
 	{
+		log.trace("Generating column for spec: {} (add remaining: {})", columnContents, addRemaining);
 		String[] specSplit = columnContents.trim().split("[ ]+");
 		List<ComponentWithId> ret = new ArrayList<>();
 		Deque<String> lastAdded = new ArrayDeque<>();
@@ -295,7 +305,7 @@ public class AuthnOptionsColumns extends CustomComponent
 				Button registrationButton = buildRegistrationButton();
 				if (registrationButton != null)
 				{
-					ret.add(new ComponentWithId(specEntry, registrationButton));
+					ret.add(createNonLoginComponent(specEntry, registrationButton));
 					lastAdded.push(specEntry);
 				}
 			} else if (specEntry.equals(SPECIAL_ENTRY_LAST_USED))
@@ -307,7 +317,8 @@ public class AuthnOptionsColumns extends CustomComponent
 					if (authnOption != null)
 					{
 						FirstFactorAuthNPanel authNPanel = authNPanelFactory.createRegularAuthnPanel(authnOption);
-						ret.add(new ComponentWithId(authNPanel.getAuthenticationOptionId(), authNPanel));
+						ret.add(createSimpleLoginComponent(
+								authNPanel.getAuthenticationOptionId().toStringEncodedKey(), authNPanel));
 						lastAdded.push(specEntry);
 					}
 				}
@@ -332,7 +343,7 @@ public class AuthnOptionsColumns extends CustomComponent
 				for (AuthNOption authnOption : matchingOptions)
 				{
 					FirstFactorAuthNPanel authNPanel = authNPanelFactory.createRegularAuthnPanel(authnOption);
-					ret.add(new ComponentWithId(authNPanel.getAuthenticationOptionId(), authNPanel));
+					ret.add(createSimpleLoginComponent(authNPanel.getAuthenticationOptionId().toStringEncodedKey(), authNPanel));
 					lastAdded.push(specEntry);
 				}
 			}
@@ -343,7 +354,7 @@ public class AuthnOptionsColumns extends CustomComponent
 			for (AuthNOption entry: remainingRetrievals)
 			{
 				FirstFactorAuthNPanel authNPanel = authNPanelFactory.createRegularAuthnPanel(entry);
-				ret.add(new ComponentWithId(authNPanel.getAuthenticationOptionId(), authNPanel));
+				ret.add(createSimpleLoginComponent(authNPanel.getAuthenticationOptionId().toStringEncodedKey(), authNPanel));
 				lastAdded.push(AuthenticationOptionKeyUtils.encode(entry.authenticator.getAuthenticatorId(), 
 						entry.authenticatorUI.getId()));
 			}
@@ -355,7 +366,7 @@ public class AuthnOptionsColumns extends CustomComponent
 			ret.remove(ret.size()-1);
 			lastAdded.pop();
 		}
-		
+		log.trace("Generated column with {} elements", ret.size());
 		return ret;
 	}
 	
@@ -364,7 +375,7 @@ public class AuthnOptionsColumns extends CustomComponent
 		Button expand = new Button(msg.getMessage("AuthenticationUI.showAllOptions"));
 		expand.addStyleName(Styles.vButtonLink.toString());
 		expand.addClickListener(event -> showAllOptions());
-		return new ComponentWithId(SPECIAL_ENTRY_EXPAND, expand);
+		return createNonLoginComponent(SPECIAL_ENTRY_EXPAND, expand);
 	}
 
 	private void showAllOptions()
@@ -380,7 +391,7 @@ public class AuthnOptionsColumns extends CustomComponent
 		String message = key.isEmpty() ? "" : resolveSeparatorMessage(key.substring(1));
 		AuthNGridTextWrapper ret = new AuthNGridTextWrapper(new Label(message), Alignment.MIDDLE_CENTER);
 		ret.setStyleName("u-authn-entriesSeparator");
-		return new ComponentWithId(specEntry, ret);
+		return createNonLoginComponent(specEntry, ret);
 	}
 
 	private ComponentWithId getOptionHeader(String specEntry)
@@ -390,7 +401,7 @@ public class AuthnOptionsColumns extends CustomComponent
 		String message = key.isEmpty() ? "" : resolveSeparatorMessage(key.substring(1));
 		AuthNGridTextWrapper ret = new AuthNGridTextWrapper(new Label(message), Alignment.MIDDLE_CENTER);
 		ret.setStyleName("u-authn-entryHeader");
-		return new ComponentWithId(specEntry, ret);
+		return createNonLoginComponent(specEntry, ret);
 	}
 
 	private String resolveSeparatorMessage(String key)
@@ -412,7 +423,7 @@ public class AuthnOptionsColumns extends CustomComponent
 		
 		List<AuthNOption> options = getGridContents(contents);
 		AuthnsGridWidget grid = new AuthnsGridWidget(options, msg, authNPanelFactory, height);
-		return new ComponentWithId(specEntry, grid);
+		return new ComponentWithId(specEntry, grid, options.size(), grid::getAuthnOptionById);
 	}
 	
 	private List<AuthNOption> getGridContents(String contents)

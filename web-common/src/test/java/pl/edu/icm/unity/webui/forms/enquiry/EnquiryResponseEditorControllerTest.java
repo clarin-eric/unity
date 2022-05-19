@@ -38,7 +38,10 @@ import pl.edu.icm.unity.types.basic.GroupMembership;
 import pl.edu.icm.unity.types.registration.EnquiryForm;
 import pl.edu.icm.unity.types.registration.EnquiryForm.EnquiryType;
 import pl.edu.icm.unity.types.registration.EnquiryFormBuilder;
+import pl.edu.icm.unity.types.registration.EnquiryResponse;
+import pl.edu.icm.unity.types.registration.EnquiryResponseState;
 import pl.edu.icm.unity.types.registration.ParameterRetrievalSettings;
+import pl.edu.icm.unity.types.registration.RegistrationRequestStatus;
 import pl.edu.icm.unity.webui.forms.PrefilledSet;
 
 /**
@@ -62,7 +65,7 @@ public class EnquiryResponseEditorControllerTest
 	EnquiryManagement mockEnquiryMan;
 	
 	@Test
-	public void shouldGetCorrectPreffiledSet() throws EngineException
+	public void shouldGetCorrectPreffiledSet() throws Exception
 	{
 		Map<String, GroupMembership> userGroups = new HashMap<>();
 		userGroups.put("/", null);
@@ -77,10 +80,10 @@ public class EnquiryResponseEditorControllerTest
 		
 		initContext();
 		EnquiryResponseEditorController controller = new EnquiryResponseEditorController(null, null, null, null,
-				null, null, null, mockGroupMan, mockIdMan, mockAttrMan, null);
+				null, null, null, mockGroupMan, mockIdMan, mockAttrMan, null, null, null, null, null);
 
 		
-		PrefilledSet prefilledForSticky = controller.getPrefilledForSticky(getForm());
+		PrefilledSet prefilledForSticky = controller.getPrefilledSetForSticky(getForm());
 		
 		assertThat(prefilledForSticky.groupSelections.keySet().size(), is(1));
 		assertThat(prefilledForSticky.groupSelections.get(0).getEntry().getSelectedGroups().size(), is(2));
@@ -94,7 +97,7 @@ public class EnquiryResponseEditorControllerTest
 	{
 
 		EnquiryResponseEditorController controller = new EnquiryResponseEditorController(null, mockEnquiryMan,
-				null, null, null, null, null, null, null, null, null);
+				null, null, null, null, null, null, null, null, null, null, null, null, null);
 		initContext();
 		controller.getStickyForms();
 		verify(mockEnquiryMan).getAvailableStickyEnquires(any());
@@ -105,13 +108,35 @@ public class EnquiryResponseEditorControllerTest
 	{
 
 		EnquiryResponseEditorController controller = new EnquiryResponseEditorController(null, mockEnquiryMan,
-				null, null, null, null, null, null, null, null, null);
+				null, null, null, null, null, null, null, null, null, null, null, null, null);
 
 		when(mockEnquiryMan.getAvailableStickyEnquires(any())).thenReturn(Arrays.asList(getForm()));
 		initContext();
 		assertThat(controller.isStickyFormApplicable("sticky"), is(true));
 	}
 	
+	@Test
+	public void shouldCheckIfRequestExistsOnlyForLoggedUser() throws EngineException
+	{
+		EnquiryResponseEditorController controller = new EnquiryResponseEditorController(null, mockEnquiryMan, null,
+				null, null, null, null, null, null, null, null, null, null, null, null);
+		EnquiryResponse res = new EnquiryResponse();
+		res.setFormId("form1");
+		EnquiryResponseState state1 = new EnquiryResponseState();
+		state1.setEntityId(1L);
+		state1.setRequest(res);
+		state1.setStatus(RegistrationRequestStatus.pending);
+		EnquiryResponseState state2 = new EnquiryResponseState();
+		state2.setEntityId(1L);
+		state2.setRequest(res);
+		state2.setStatus(RegistrationRequestStatus.pending);
+
+		when(mockEnquiryMan.getEnquiryResponses()).thenReturn(Arrays.asList(state1, state2));
+
+		assertThat(controller.checkIfRequestExists("form1", 1L), is(true));
+		assertThat(controller.checkIfRequestExists("form1", 2L), is(false));
+	}
+
 	private EnquiryForm getForm()
 	{
 		return new EnquiryFormBuilder().withName("sticky")

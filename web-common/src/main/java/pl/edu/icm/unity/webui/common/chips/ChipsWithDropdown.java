@@ -4,6 +4,8 @@
  */
 package pl.edu.icm.unity.webui.common.chips;
 
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
@@ -15,6 +17,7 @@ import java.util.stream.Collectors;
 
 import com.vaadin.event.selection.SingleSelectionEvent;
 import com.vaadin.event.selection.SingleSelectionListener;
+import com.vaadin.server.ErrorMessage;
 import com.vaadin.ui.Button.ClickEvent;
 import com.vaadin.ui.Button.ClickListener;
 import com.vaadin.ui.ComboBox;
@@ -31,7 +34,7 @@ import com.vaadin.ui.VerticalLayout;
 public class ChipsWithDropdown<T> extends CustomField<List<T>>
 {
 	private ChipsRow<T> chipsRow;
-	private ComboBox<T> combo;
+	protected ComboBox<T> combo;
 	private Function<T, String> comboRenderer;
 	private Function<T, String> chipRenderer;
 	private boolean multiSelectable;
@@ -39,7 +42,10 @@ public class ChipsWithDropdown<T> extends CustomField<List<T>>
 	private boolean readOnly;
 	private int maxSelection = 0;
 	private VerticalLayout main;
-	
+	private final boolean chipsOnTop;
+	private boolean skipRemoveInvalidSelections = false;
+
+
 	public ChipsWithDropdown()
 	{
 		this(Object::toString, true);
@@ -47,10 +53,15 @@ public class ChipsWithDropdown<T> extends CustomField<List<T>>
 	
 	public ChipsWithDropdown(Function<T, String> comboRenderer, boolean multiSelectable)
 	{
-		this(comboRenderer, comboRenderer, multiSelectable);
+		this(comboRenderer, comboRenderer, multiSelectable, true);
 	}
-	
+
 	public ChipsWithDropdown(Function<T, String> comboRenderer, Function<T, String> chipRenderer, boolean multiSelectable)
+	{
+		this(comboRenderer, chipRenderer, multiSelectable, true);
+	}
+
+	public ChipsWithDropdown(Function<T, String> comboRenderer, Function<T, String> chipRenderer, boolean multiSelectable, boolean chipsOnTop)
 	{
 		this.comboRenderer = comboRenderer;
 		this.chipRenderer = chipRenderer;
@@ -68,7 +79,14 @@ public class ChipsWithDropdown<T> extends CustomField<List<T>>
 		main = new VerticalLayout();
 		main.setMargin(false);
 		main.setSpacing(false);
-		main.addComponents(chipsRow, combo);		
+		this.chipsOnTop = chipsOnTop;
+		if (chipsOnTop)
+		{
+			main.addComponents(chipsRow, combo);
+		} else
+		{
+			main.addComponents(combo, chipsRow);
+		}
 	}
 	
 	@Override
@@ -104,7 +122,7 @@ public class ChipsWithDropdown<T> extends CustomField<List<T>>
 		updateItemsAvailableToSelect();
 	}
 	
-	public void setItems(List<T> items)
+	public void setItems(Collection<T> items)
 	{
 		allItems = new LinkedHashSet<>(items);
 		updateItemsAvailableToSelect();
@@ -114,6 +132,15 @@ public class ChipsWithDropdown<T> extends CustomField<List<T>>
 	{
 		return allItems;
 	}
+	
+	public List<T> getAllItemsSorted()
+	{
+		List<T> items = new ArrayList<>();
+		items.addAll(allItems);
+		sortItems(items);
+		return items;
+	}
+	
 	
 	public void setSelectedItems(List<T> items)
 	{
@@ -165,22 +192,33 @@ public class ChipsWithDropdown<T> extends CustomField<List<T>>
 		Set<T> selected = new HashSet<>(chipsRow.getChipsData());
 		
 		//remove not available which were previously selected
-		selected.stream()
-			.filter(item -> !allItems.contains(item))
-			.forEach(item -> chipsRow.removeItem(item));
+		if (combo.getNewItemProvider() == null && !skipRemoveInvalidSelections)
+			selected.stream().filter(item -> !allItems.contains(item))
+					.forEach(item -> chipsRow.removeItem(item));
 		
 		List<T> available = checkAvailableItems(allItems, selected);
 		
 		sortItems(available);
 		
 		combo.setItems(available);
-		if (selected.isEmpty())
-			combo.removeStyleName("u-chipsCombo");
-		else
-			combo.addStyleName("u-chipsCombo");
+		if (chipsOnTop)
+		{
+			if (selected.isEmpty())
+			{
+				combo.removeStyleName("u-chipsCombo");
+			} else
+			{
+				combo.addStyleName("u-chipsCombo");
+			}
+		}
 		updateComboVisibility(selected, available);
 	}
 	
+	public void setSkipRemoveInvalidSelections(boolean skipRemoveInvalidSelections)
+	{
+		this.skipRemoveInvalidSelections = skipRemoveInvalidSelections;
+	}
+
 	protected void sortItems(List<T> items)
 	{
 		Collections.sort(items, this::compareItems);
@@ -200,7 +238,7 @@ public class ChipsWithDropdown<T> extends CustomField<List<T>>
 		.collect(Collectors.toList());
 	}
 		
-	private void updateComboVisibility(Set<T> selected, List<T> available)
+	protected void updateComboVisibility(Set<T> selected, List<T> available)
 	{
 		if (!readOnly)
 		{
@@ -229,7 +267,9 @@ public class ChipsWithDropdown<T> extends CustomField<List<T>>
 	{
 		super.setWidth(width, unit);
 		if (combo != null)
+		{
 			combo.setWidth(width, unit);
+		}
 	}
 	
 	public void setMaxSelection(int maxSelection)
@@ -249,5 +289,15 @@ public class ChipsWithDropdown<T> extends CustomField<List<T>>
 	{
 		setSelectedItems(value);
 		
+	}
+
+	@Override
+	public void setComponentError(ErrorMessage componentError)
+	{
+		super.setComponentError(componentError);
+		if (componentError != null)
+			combo.addStyleName("error");
+		else
+			combo.removeStyleName("error");
 	}
 }

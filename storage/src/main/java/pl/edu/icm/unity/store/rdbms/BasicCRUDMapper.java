@@ -13,6 +13,8 @@ import java.util.List;
  */
 public interface BasicCRUDMapper<BEAN>
 {
+	void createList(List<BEAN> objs);
+	
 	long create(BEAN obj);
 	
 	void createWithKey(BEAN obj);
@@ -26,4 +28,6 @@ public interface BasicCRUDMapper<BEAN>
 	List<BEAN> getAll();
 	
 	BEAN getByKey(long key);
+	
+	long getCount();
 }

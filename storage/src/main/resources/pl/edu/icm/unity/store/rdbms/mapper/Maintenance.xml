@@ -17,11 +17,14 @@
 	<update id="cleardb-03">
 		DROP TABLE IF EXISTS GROUP_ENTITIES;
 	</update>
-	<update id="cleardb-04">
+	<update id="cleardb-04-1">
+		DROP TABLE IF EXISTS ATTRIBUTES_LOOKUP;
+	</update>
+	<update id="cleardb-04-2">
 		DROP TABLE IF EXISTS ATTRIBUTES;
 	</update>
 	<update id="cleardb-05">
-		DROP TABLE IF EXISTS GROUPS;
+		DROP TABLE IF EXISTS <include refid="io.imunity.sql.groups"/>;
 	</update>
 	<update id="cleardb-06">
 		DROP TABLE IF EXISTS IDENTITIES;
@@ -38,6 +41,30 @@
 	<update id="cleardb-10">
 		DROP TABLE IF EXISTS EVENTS_QUEUE;
 	</update>
+	<update id="cleardb-11">
+		DROP TABLE IF EXISTS FILES;
+	</update>
+	<update id="cleardb-12">
+		DROP TABLE IF EXISTS AUDIT_EVENTS_TAGS;
+	</update>
+	<update id="cleardb-13">
+		DROP TABLE IF EXISTS AUDIT_EVENTS;
+	</update>
+	<update id="cleardb-14">
+		DROP TABLE IF EXISTS AUDIT_ENTITIES;
+	</update>
+	<update id="cleardb-15">
+		DROP TABLE IF EXISTS AUDIT_TAGS;
+	</update>
+	<update id="cleardb-16">
+		DROP TABLE IF EXISTS POLICY_DOCUMENTS;
+	</update>
+	<update id="cleardb-17">
+		DROP TABLE IF EXISTS MESSAGES;
+	</update>
+	<update id="cleardb-18">
+		DROP TABLE IF EXISTS IDP_STATISTICS;
+	</update>
 	<update id="cleardb-99">
 		DROP TABLE IF EXISTS UVOS_FLAG;
 	</update>
@@ -47,34 +74,70 @@
 	</select>
 	
 	
-	<delete id="deletedb-00">
+	<delete id="deletedb-common-tokens">
 		DELETE FROM TOKENS;
 	</delete>
-	<delete id="deletedb-01">
+	<delete id="deletedb-var">
 		DELETE FROM VAR_OBJECTS;
 	</delete>
-	<delete id="deletedb-02">
+	<delete id="deletedb-groupMembers">
 		DELETE FROM GROUP_ENTITIES;
 	</delete>
-	<delete id="deletedb-03">
+	<delete id="deletedb-attributes">
 		DELETE FROM ATTRIBUTES;
 	</delete>
-	<delete id="deletedb-04">
-		DELETE FROM GROUPS;
+	<delete id="deletedb-groups">
+		DELETE FROM <include refid="io.imunity.sql.groups"/>;
 	</delete>
-	<delete id="deletedb-05">
+	<delete id="deletedb-identities">
 		DELETE FROM IDENTITIES;
 	</delete>
-	<delete id="deletedb-06">
+	<delete id="deletedb-entities">
 		DELETE FROM ENTITIES;
 	</delete>
-	<delete id="deletedb-07">
+	<delete id="deletedb-identityTypes">
 		DELETE FROM IDENTITY_TYPES;
 	</delete>
-	<delete id="deletedb-08">
+	<delete id="deletedb-attributeTypes">
 		DELETE FROM ATTRIBUTE_TYPES;
 	</delete>
-	<delete id="deletedb-09">
+	<delete id="deletedb-common-events">
 		DELETE FROM EVENTS_QUEUE;
 	</delete>
+	<delete id="deletedb-files">
+		DELETE FROM FILES;
+	</delete>
+	<delete id="deletedb-auditEvents-00">
+		DELETE FROM AUDIT_EVENTS_TAGS;
+	</delete>
+	<delete id="deletedb-auditEvents-01">
+		DELETE FROM AUDIT_ENTITIES;
+	</delete>
+	<delete id="deletedb-auditEvents-02">
+		DELETE FROM AUDIT_EVENTS;
+	</delete>
+	<delete id="deletedb-auditEvents-03">
+		DELETE FROM AUDIT_TAGS;
+	</delete>
+	<delete id="deletedb-attributesLookup">
+		DELETE FROM ATTRIBUTES_LOOKUP;
+	</delete>
+	<delete id="deletedb-policyDocuments">
+		DELETE FROM POLICY_DOCUMENTS;
+	</delete>
+	<delete id="deletedb-messages">
+		DELETE FROM MESSAGES;
+	</delete>
+	<delete id="deletedb-capacityLimit">
+		DELETE FROM VAR_OBJECTS WHERE TYPE = 'capacityLimit'
+	</delete>
+	<delete id="deletedb-idpStatistics">
+		DELETE FROM IDP_STATISTICS
+	</delete>
+
+	<delete id="deletedbvar" parameterType="string">
+		DELETE FROM VAR_OBJECTS WHERE TYPE = #{value}
+	</delete>
+	
+	
 </mapper>

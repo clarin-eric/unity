@@ -4,12 +4,14 @@
  */
 package pl.edu.icm.unity.stdext.credential.pass;
 
+import java.time.Duration;
 import java.util.List;
 
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import pl.edu.icm.unity.Constants;
 import pl.edu.icm.unity.JsonUtil;
+import pl.edu.icm.unity.engine.api.authn.AuthenticationSubject;
 import pl.edu.icm.unity.engine.api.authn.CredentialReset;
 import pl.edu.icm.unity.engine.api.authn.local.CredentialHelper;
 import pl.edu.icm.unity.engine.api.authn.local.LocalCredentialVerificator;
@@ -19,7 +21,6 @@ import pl.edu.icm.unity.exceptions.IllegalIdentityValueException;
 import pl.edu.icm.unity.exceptions.TooManyAttempts;
 import pl.edu.icm.unity.exceptions.WrongArgumentException;
 import pl.edu.icm.unity.stdext.credential.CredentialResetBase;
-import pl.edu.icm.unity.types.basic.IdentityTaV;
 
 /**
  * Password reset implementation of {@link CredentialReset}. This implementation is stateful, i.e. from creation it
@@ -29,7 +30,7 @@ import pl.edu.icm.unity.types.basic.IdentityTaV;
 public class PasswordCredentialResetImpl extends CredentialResetBase
 {	
 	private PasswordCredentialResetSettings settings;
-	private PasswordEngine passwordEngine = new PasswordEngine();
+	private PasswordEngine passwordEngine;
 	private int answerAttempts = 0;
 
 	public PasswordCredentialResetImpl(NotificationProducer notificationProducer,
@@ -37,11 +38,27 @@ public class PasswordCredentialResetImpl extends CredentialResetBase
 			LocalCredentialVerificator localVerificator,
 			CredentialHelper credentialHelper, String credentialId,
 			ObjectNode completeCredentialConfiguration,
-			PasswordCredentialResetSettings settings)
+			PasswordCredentialResetSettings settings,
+			PasswordEngine passwordEngine,
+			Duration maxCodeValidity)
 	{
 		super(notificationProducer, identityResolver, localVerificator, credentialHelper,
-				credentialId, completeCredentialConfiguration);
+				credentialId, completeCredentialConfiguration, maxCodeValidity);
 		this.settings = settings;
+		this.passwordEngine = passwordEngine;
+	}
+	
+	public PasswordCredentialResetImpl(NotificationProducer notificationProducer,
+			IdentityResolver identityResolver,
+			LocalCredentialVerificator localVerificator,
+			CredentialHelper credentialHelper, String credentialId,
+			ObjectNode completeCredentialConfiguration,
+			PasswordCredentialResetSettings settings,
+			PasswordEngine passwordEngine)
+	{
+		this(notificationProducer, identityResolver, localVerificator, credentialHelper, credentialId, 
+				completeCredentialConfiguration, settings, passwordEngine, 
+				CredentialResetBase.DEFAULT_MAX_CODE_VALIDITY);
 	}
 
 	@Override
@@ -74,7 +91,7 @@ public class PasswordCredentialResetImpl extends CredentialResetBase
 	private String getFakeQuestion()
 	{
 		List<String> questions = settings.getQuestions();
-		int hash = requestedSubject.getValue().hashCode();
+		int hash = getRequestedSubject().hashCode();
 		int num = (hash < 0 ? -hash : hash) % questions.size();
 		return questions.get(num);
 	}
@@ -101,7 +118,7 @@ public class PasswordCredentialResetImpl extends CredentialResetBase
 	}
 
 	@Override
-	public void setSubject(IdentityTaV subject)
+	public void setSubject(AuthenticationSubject subject)
 	{
 		super.setSubject(subject, PasswordVerificator.IDENTITY_TYPES);
 		

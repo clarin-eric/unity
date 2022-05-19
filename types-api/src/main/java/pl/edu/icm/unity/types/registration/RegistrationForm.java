@@ -21,7 +21,7 @@ import pl.edu.icm.unity.MessageSource;
 import pl.edu.icm.unity.exceptions.InternalException;
 import pl.edu.icm.unity.types.I18nString;
 import pl.edu.icm.unity.types.I18nStringJsonUtil;
-import pl.edu.icm.unity.types.authn.AuthenticationOptionKey;
+import pl.edu.icm.unity.types.authn.AuthenticationOptionsSelector;
 import pl.edu.icm.unity.types.registration.layout.BasicFormElement;
 import pl.edu.icm.unity.types.registration.layout.FormCaptionElement;
 import pl.edu.icm.unity.types.registration.layout.FormElement;
@@ -60,6 +60,8 @@ public class RegistrationForm extends BaseForm
 	private RegistrationFormLayouts formLayouts = new RegistrationFormLayouts();
 	private boolean showSignInLink;
 	private String signInLink;
+	private I18nString switchToEnquiryInfo;
+
 	/**
 	 * @implNote: if the realm name is provided, then after the registration is
 	 *            completed from standalone view, and the request meets various
@@ -143,6 +145,11 @@ public class RegistrationForm extends BaseForm
 		return externalSignupSpec;
 	}
 
+	public boolean isLocalSignupEnabled()
+	{
+		return hasAnyLocalCredential() || !getExternalSignupSpec().isEnabled();
+	}
+	
 	public void setExternalSignupSpec(ExternalSignupSpec externalSignupSpec)
 	{
 		this.externalSignupSpec = externalSignupSpec;
@@ -206,6 +213,25 @@ public class RegistrationForm extends BaseForm
 	public void setAutoLoginToRealm(String autoLoginToRealm)
 	{
 		this.autoLoginToRealm = autoLoginToRealm;
+	}
+	
+	public I18nString getSwitchToEnquiryInfo()
+	{
+		return switchToEnquiryInfo;
+	}
+	
+	public I18nString getSwitchToEnquiryInfoFallbackToDefault(MessageSource msg)
+	{
+		return switchToEnquiryInfo != null ? switchToEnquiryInfo : getDefaultSwitchToEnquiryInfo(msg);
+	}
+	
+	public static I18nString getDefaultSwitchToEnquiryInfo(MessageSource msg)
+	{
+		return new I18nString(msg.getLocaleCode(), msg.getMessage("RegistrationForm.defaultSwitchToEnquiryInfo"));
+	}
+	public void setSwitchToEnquiryInfo(I18nString switchToEnquiryInfo)
+	{
+		this.switchToEnquiryInfo = switchToEnquiryInfo;
 	}
 
 	@Override
@@ -281,8 +307,8 @@ public class RegistrationForm extends BaseForm
 	private List<FormElement> getDefaultExternalSignupFormLayoutElements(MessageSource msg)
 	{
 
-		List<AuthenticationOptionKey> remoteSignupGrid = getExternalSignupGridSpec().getSpecs();
-		List<AuthenticationOptionKey> remoteSignup = getExternalSignupSpec().getSpecs();
+		List<AuthenticationOptionsSelector> remoteSignupGrid = getExternalSignupGridSpec().getSpecs();
+		List<AuthenticationOptionsSelector> remoteSignup = getExternalSignupSpec().getSpecs();
 
 		List<FormElement> ret = new ArrayList<>();
 		for (int i = 0; i < remoteSignup.size(); i++)
@@ -304,12 +330,12 @@ public class RegistrationForm extends BaseForm
 	public FormLayout getDefaultSecondaryFormLayout(MessageSource msg)
 	{
 		List<FormElement> elements;
-		if (!isCredentialAvailableAtSecondaryFormLayout(this))
+		if (isCredentialAvailableAtSecondaryFormLayout(this))
 		{
-			elements = FormLayoutUtils.getDefaultFormLayoutElementsWithoutCredentials(this, msg);
+			elements = FormLayoutUtils.getDefaultFormLayoutElements(this, msg);	
 		} else
 		{
-			elements = FormLayoutUtils.getDefaultFormLayoutElements(this, msg);
+			elements = FormLayoutUtils.getDefaultFormLayoutElementsWithoutCredentials(this, msg);
 		}
 		addRegistrationFormSpecificElements(msg, elements);
 		return new FormLayout(elements);
@@ -317,7 +343,7 @@ public class RegistrationForm extends BaseForm
 	
 	public static boolean isCredentialAvailableAtSecondaryFormLayout(RegistrationForm form)
 	{
-		return form.getExternalSignupSpec().isEnabled() && form.getFormLayouts().isLocalSignupEmbeddedAsButton();
+		return form.getFormLayouts().isLocalSignupEmbeddedAsButton();
 	}
 	
 	/**
@@ -351,6 +377,8 @@ public class RegistrationForm extends BaseForm
 		root.put("ShowSignInLink", showSignInLink);
 		root.put("SignInLink", signInLink);
 		root.put("AutoLoginToRealm", autoLoginToRealm);
+		root.set("SwitchToEnquiryInfo", I18nStringJsonUtil.toJson(switchToEnquiryInfo));
+
 		return root;
 	}
 
@@ -408,6 +436,12 @@ public class RegistrationForm extends BaseForm
 			n = root.get("AutoLoginToRealm");
 			if (n != null && !n.isNull())
 				setAutoLoginToRealm(n.asText());
+			
+			n = root.get("SwitchToEnquiryInfo");
+			if (n != null && !n.isNull())
+				setSwitchToEnquiryInfo(I18nStringJsonUtil.fromJson(n));
+			
+			
 		} catch (Exception e)
 		{
 			throw new InternalException("Can't deserialize registration form from JSON", e);
@@ -433,7 +467,9 @@ public class RegistrationForm extends BaseForm
 				&& Objects.equals(formLayouts, castOther.formLayouts)
 				&& Objects.equals(showSignInLink, castOther.showSignInLink)
 				&& Objects.equals(autoLoginToRealm, castOther.autoLoginToRealm)
-				&& Objects.equals(signInLink, castOther.signInLink);
+				&& Objects.equals(signInLink, castOther.signInLink)
+				&& Objects.equals(switchToEnquiryInfo, castOther.switchToEnquiryInfo);
+
 	}
 
 	@Override
@@ -442,6 +478,6 @@ public class RegistrationForm extends BaseForm
 		return Objects.hash(super.hashCode(), name, description, publiclyAvailable, notificationsConfiguration,
 				captchaLength, registrationCode, defaultCredentialRequirement,
 				title2ndStage, externalSignupSpec, formLayouts, showSignInLink, signInLink, 
-				autoLoginToRealm);
+				autoLoginToRealm, switchToEnquiryInfo);
 	}
 }

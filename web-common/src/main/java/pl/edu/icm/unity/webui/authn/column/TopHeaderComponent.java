@@ -4,6 +4,8 @@
  */
 package pl.edu.icm.unity.webui.authn.column;
 
+import java.util.Optional;
+
 import com.vaadin.shared.ui.MarginInfo;
 import com.vaadin.ui.Alignment;
 import com.vaadin.ui.Button;
@@ -11,9 +13,10 @@ import com.vaadin.ui.Component;
 import com.vaadin.ui.CustomComponent;
 import com.vaadin.ui.VerticalLayout;
 
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
+import pl.edu.icm.unity.MessageSource;
 import pl.edu.icm.unity.webui.EndpointRegistrationConfiguration;
 import pl.edu.icm.unity.webui.VaadinEndpointProperties;
+import pl.edu.icm.unity.webui.authn.LocaleChoiceComponent;
 import pl.edu.icm.unity.webui.common.Styles;
 
 /**
@@ -25,17 +28,17 @@ import pl.edu.icm.unity.webui.common.Styles;
  */
 class TopHeaderComponent extends CustomComponent
 {
-	private UnityMessageSource msg;
+	private MessageSource msg;
 	
-	public TopHeaderComponent(Component localeChoice, boolean enableRegistration, 
+	public TopHeaderComponent(Optional<LocaleChoiceComponent> localeChoice, boolean enableRegistration, 
 			VaadinEndpointProperties config, Runnable registrationLayoutLauncher, 
-			UnityMessageSource msg)
+			MessageSource msg)
 	{
 		this.msg = msg;
 		init(localeChoice, enableRegistration, config.getRegistrationConfiguration(), registrationLayoutLauncher);
 	}
 	
-	private void init(Component localeChoice, boolean enableRegistration, 
+	private void init(Optional<LocaleChoiceComponent> localeChoice, boolean enableRegistration, 
 			EndpointRegistrationConfiguration endpointRegistrationConfiguration, 
 			Runnable registrationLayoutLauncher)
 	{
@@ -44,10 +47,11 @@ class TopHeaderComponent extends CustomComponent
 		header.setSpacing(true);
 		header.setWidth(100, Unit.PERCENTAGE);
 		
-		Component localeSelector = encapsulateLocaleChoice(localeChoice);
-		header.addComponent(localeSelector);
-		header.setExpandRatio(localeSelector, 1.0f);
-		
+		if (!localeChoice.isEmpty())
+		{	Component localeSelector = encapsulateLocaleChoice(localeChoice.get());
+			header.addComponent(localeSelector);
+			header.setExpandRatio(localeSelector, 1.0f);
+		}
 		if (enableRegistration && endpointRegistrationConfiguration.isDisplayRegistrationFormsInHeader())
 		{
 			Button registrationButton = new Button(msg.getMessage("AuthenticationUI.gotoSignUp"));

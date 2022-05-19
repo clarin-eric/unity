@@ -13,6 +13,7 @@ import java.io.IOException;
 import java.nio.charset.Charset;
 import java.nio.charset.CharsetEncoder;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -22,7 +23,7 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import org.apache.log4j.Logger;
+import org.apache.logging.log4j.Logger;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.env.CommandLinePropertySource;
 import org.springframework.core.env.Environment;
@@ -52,7 +53,7 @@ public class UnityServerConfiguration extends UnityFilePropertiesHelper
 	public static final String PROFILE_PRODUCTION = "production";
 	
 	public enum LogoutMode {internalOnly, internalAndSyncPeers, internalAndAsyncPeers}
-	private static final Logger log = Log.getLegacyLogger(Log.U_SERVER_CFG, UnityServerConfiguration.class);
+	private static final Logger log = Log.getLogger(Log.U_SERVER_CFG, UnityServerConfiguration.class);
 	public static final String CONFIGURATION_FILE = "conf/unityServer.conf";
 	public static final String DEFAULT_EMAIL_CHANNEL = "default_email";
 	public static final String DEFAULT_SMS_CHANNEL = "default_sms";
@@ -71,6 +72,7 @@ public class UnityServerConfiguration extends UnityFilePropertiesHelper
 	public static final String TEMPLATES_CONF = "templatesFile";
 	public static final String PKI_CONF = "pkiConfigFile";
 	public static final String THREAD_POOL_SIZE = "threadPoolSize";
+	public static final String USE_CONFIG_FILE_AS_INITIAL_TEMPLATE_ONLY = "useConfiguredContentsOnFreshStartOnly";
 	public static final String IGNORE_CONFIGURED_CONTENTS_SETTING = "ignoreContentsReloadingFromConfiguration";
 	public static final String RELOAD_MSG_TEMPLATES = "reloadMessageTemplatesFromConfiguration";
 	public static final String CONFIG_ONLY_ERA_CONTROL = "fullyRecreateEndpointsAROnStartup";
@@ -87,6 +89,7 @@ public class UnityServerConfiguration extends UnityFilePropertiesHelper
 	public static final String ALLOW_FULL_HTML = "allowFullHtml"; 
 	public static final String DEFAULT_WEB_PATH = "defaultWebPath";
 	public static final String REDIRECT_MODE = "redirectMode";
+	public static final String AUDITEVENTLOGS_ENABLED = "auditEventLogsEnabled";
 	
 	public static final String IMPORT_PFX = "userImport."; 
 	
@@ -161,13 +164,28 @@ public class UnityServerConfiguration extends UnityFilePropertiesHelper
 	public static final String MOBILE_CONFIRMATION_REQUEST_LIMIT = "mobileConfirmationRequestLimit";
 	
 	public static final String AUTHZ_CACHE_MS = "authorizationRoleCacheTTL";
+	public static final String MAX_REMOTE_AUTHN_TIME_S = "maxRemoteAuthnTime";
 	
 	public static final String SCRIPTS = "script.";
 	public static final String SCRIPT_FILE = "file";
 	public static final String SCRIPT_TYPE = "type";
 	public static final String SCRIPT_TRIGGER = "trigger";
 
+	public static final String EXTERNAL_NOTIFICATION_PFX = "extNotification.";
+	public static final String EXTERNAL_NOTIFICATION_NAME = "channelName";
+	public static final String EXTERNAL_NOTIFICATION_SUPPORTS_TEMPLATES = "supportsTemplate";
+	public static final String EXTERNAL_NOTIFICATION_FILE = "senderPath";
+
+	
 	public static final String ENABLE_LOW_LEVEL_EVENTS = "enableLowLevelEvents";
+	
+	public static final String RESTRICT_FILE_SYSTEM_ACCESS = "restrictFileSystemAccess";
+	public static final String FILE_SIZE_LIMIT = "fileSizeLimit";
+
+	public static final String MAX_CONCURRENT_PASSWORD_CHECKS = "maxConcurrentPasswordChecks";
+
+	public static final String EXTENSION_PFX = "ext.";
+	
 	
 	@DocumentationReferenceMeta
 	public final static Map<String, PropertyMD> defaults = new HashMap<>();
@@ -185,10 +203,15 @@ public class UnityServerConfiguration extends UnityFilePropertiesHelper
 		DocumentationCategory initEndpointsCat = new DocumentationCategory("Content initializers: endpoints", "7");
 		DocumentationCategory otherCat = new DocumentationCategory("Other", "8");
 		
+		defaults.put(RESTRICT_FILE_SYSTEM_ACCESS, new PropertyMD("false").setCategory(mainCat).
+				setDescription("If true then files from disk can be served only if are physically located in webContents"));	
+		defaults.put(FILE_SIZE_LIMIT, new PropertyMD("2000000").setPositive().setCategory(mainCat).
+				setDescription("Max file size in bytes which can be saved by file storage service in the database"));		
 		defaults.put(ENABLED_LOCALES, new PropertyMD().setList(true).setCategory(mainCat).
 				setDescription("List of enabled locales. " +
 				"Each entry must have a language code as 'en' or 'pl' first, " +
-				"and then, after a space an optional, short name which will be presented in the UI. By default the 'en' locale is installed."));
+				"and then, after a space an optional, short name which will be presented in the UI. "
+				+ "By default the 'en' locale is installed."));
 		defaults.put(DEFAULT_LOCALE, new PropertyMD("en").setCategory(mainCat).
 				setDescription("The default locale to be used. Must be one of the enabled locales."));
 		defaults.put(MAIL_CONF, new PropertyMD().setPath().setCategory(mainCat).
@@ -208,17 +231,25 @@ public class UnityServerConfiguration extends UnityFilePropertiesHelper
 				setDescription("If set to true then all configuration settings related to loading of "
 						+ "database contents (endpoints, authenticators, credentials, ...) "
 						+ "are ignored. This is useful in the case of redundant Unity instance,"
-						+ " which should use the database contents configured at the master serevr."));
+						+ " which should use the database contents configured at the master server."));
 		defaults.put(RELOAD_MSG_TEMPLATES, new PropertyMD("false").setCategory(mainCat).
 				setDescription("If set to true then message templates will be reloaded at startup "
 						+ "from files on disk. Otherwise only the new templates are "
-						+ "loaded and the tempaltes in DB are left untouched."));
+						+ "loaded and the templates in DB are left untouched."));
+		defaults.put(USE_CONFIG_FILE_AS_INITIAL_TEMPLATE_ONLY, new PropertyMD("true").setCategory(mainCat).
+				setDescription("If set to true then every element of system features (i.e. endpoints, "
+						+ "authenticators, credentials, message templates, etc) defined in configuration "
+						+ "are loaded only during the first start. This is the default and needed for preserving "
+						+ "config changes performed at runtime using admin Console or REST API. "
+						+ "If set to false then those settings will be also consulted on each restart. See other options (" 
+						+ CONFIG_ONLY_ERA_CONTROL + ", " + RELOAD_MSG_TEMPLATES + ") for how this can be further controlled in such case."));
 		defaults.put(CONFIG_ONLY_ERA_CONTROL, new PropertyMD("true").setCategory(mainCat).
-				setDescription("If set to true then all Endpoints, Authenticators and authentication Realms "
-						+ "are fully recreated from configuration at startup. This is convenient unless you "
-						+ "use other management means for those artefacts (as REST interface). "
-						+ "Then set it to false, to have only incremental changes from configuration "
-						+ "- elements not present in configuration will not be removed then. "
+				setDescription("If set to true then all Endpoints, Authenticators (with their translation profiles), "
+						+ "authentication Flows and authentication Realms "
+						+ "are fully recreated from configuration at startup. This is convenient if you "
+						+ "prefer to steer the system with configuration file, and use UI only for contents management. "
+						+ "By default (when option is false), only the new options from configuration are loaded, "
+						+ "which basically becomes an initial system configuration template. "
 						+ "Note that this option is ignored if " + IGNORE_CONFIGURED_CONTENTS_SETTING + 
 						" is true."));
 		defaults.put(LOGOUT_MODE, new PropertyMD(LogoutMode.internalAndSyncPeers).setCategory(mainCat).
@@ -256,6 +287,8 @@ public class UnityServerConfiguration extends UnityFilePropertiesHelper
 				+ " as it is impossible to insert links and other advanced formating."));
 		defaults.put(DEFAULT_WEB_PATH, new PropertyMD().setCategory(mainCat).setDescription(
 				"If set Unity will redirect request without the path to this one"));
+		defaults.put(AUDITEVENTLOGS_ENABLED, new PropertyMD("true").setCategory(mainCat).setDescription(
+				"Indicate if AuditEvent logs are gathered by the system."));
 		defaults.put(UNITYGW_WEB_CONTENT_PATH, new PropertyMD().setPath().setCategory(mainCat).setDescription(
 				"Defines a folder from which all the web applications operating on the shared unitygw path "
 				+ "(e.g. the email confirmation screen) "
@@ -314,7 +347,7 @@ public class UnityServerConfiguration extends UnityFilePropertiesHelper
 						+ "will use " + ENDPOINT_NAME));
 		defaults.put(ENDPOINT_AUTHENTICATORS, new PropertyMD().setStructuredListEntry(ENDPOINTS).setCategory(initEndpointsCat).
 				setDescription("Endpoint authenticator or authentication flow names separated with ';'."));	
-		defaults.put(ENDPOINT_REALM, new PropertyMD().setMandatory().setStructuredListEntry(ENDPOINTS).setCategory(initEndpointsCat).
+		defaults.put(ENDPOINT_REALM, new PropertyMD().setStructuredListEntry(ENDPOINTS).setCategory(initEndpointsCat).
 				setDescription("Authentication realm name, to which this endpoint belongs."));
 
 		defaults.put(AUTHENTICATORS, new PropertyMD().setStructuredList(false).setCategory(initAuthnCat).
@@ -343,15 +376,17 @@ public class UnityServerConfiguration extends UnityFilePropertiesHelper
 				setCategory(initAuthnCat).setDescription("Second factor authenticators, separated with a single comma (no spaces)."));
 
 		defaults.put(RE_AUTHENTICATION_POLICY, new PropertyMD("SESSION_2F CURRENT SESSION_1F ENDPOINT_2F").setCategory(reauthnCat)
-				.setDescription("Comma separated list configuring repeated or step up authentication which is"
-						+ "protecting sensitive operations like changing credentials. Entries are either "
-						+ "authenticators do not requiring redirection (as SAML or OAuth) or special entries: "
+				.setDescription("Comma separated list configuring repeated (aka step up) authentication which is "
+						+ "protecting sensitive operations like changing credentials. "
+						+ "This config option controls how to verify the user executing sensitive operation. "
+						+ "Entries are either authenticators which do not require redirection "
+						+ "(e.g. SAML or OAuth are not allowed) or any of special entries: "
 						+ "+ENDPOINT_2F+ credentials from the endpoint's 2nd factor configuration. " + 
 						"+SESSION_1F+ +SESSION_2F+ - credential used for the user's session, either 1st or 2nd factor. "
 						+ "In case of remembered logins, this falls back to the credential "
 						+ "which was originally used to authenticate the user. " + 
 						"+CURRENT+ - available only when the sensitive operation is changing an existing credential. "
-						+ "Request authenticating with the credential being changed, this credential must be enabled on the endpoint."));
+						+ "This credential must be enabled on the endpoint serving the request."));
 		defaults.put(RE_AUTHENTICATION_GRACE_TIME, new PropertyMD("600").setMin(2).setCategory(reauthnCat)
 				.setDescription("Time in seconds in which user don't have to re-authenticate again. "
 						+ "It is suggested not to set this value to less then 10 seconds"));
@@ -463,11 +498,46 @@ public class UnityServerConfiguration extends UnityFilePropertiesHelper
 						+ "but change of authrization role may not be fully recognized "
 						+ "by the system untile the time defined here passes. "
 						+ "Set to 0 to disable cache."));
+		defaults.put(MAX_REMOTE_AUTHN_TIME_S, new PropertyMD("5400").setCategory(mainCat). //90 mins
+				setDescription("Defines for how long (in s) server will maintain a started, "
+						+ "but not finished remote authentication data. After this timeout"
+						+ " authentication process is assumed to be stale and "
+						+ "its memory will be reclaimed."));
+		defaults.put(EXTERNAL_NOTIFICATION_PFX, new PropertyMD().setStructuredList(false).setCategory(mainCat)
+				.setDescription("List of message sending facilities additional to built in SMS and email."));
+		defaults.put(EXTERNAL_NOTIFICATION_FILE, new PropertyMD()
+				.setStructuredListEntry(EXTERNAL_NOTIFICATION_PFX).setMandatory().setCategory(mainCat)
+				.setDescription("A file with Groovy script to send a message. "
+						+ "Scripts context will be feeded with receipentAddress variable (String), "
+						+ "and - depending on embedded templates support - "
+						+ "variables with complete message (subject and body) or "
+						+ "just template params (templateId, templateParams map)."));
+		defaults.put(EXTERNAL_NOTIFICATION_NAME, new PropertyMD()
+				.setStructuredListEntry(EXTERNAL_NOTIFICATION_PFX).setMandatory().setCategory(mainCat)
+				.setDescription("Channel name."));
+		defaults.put(EXTERNAL_NOTIFICATION_SUPPORTS_TEMPLATES, new PropertyMD("false")
+				.setStructuredListEntry(EXTERNAL_NOTIFICATION_PFX).setCategory(mainCat)
+				.setDescription("Whether the notification service handles message "
+						+ "templating on its own or not and requires complete messages."));
+
+		defaults.put(MAX_CONCURRENT_PASSWORD_CHECKS, new PropertyMD().setInt().setMin(1).setMax(256)
+				.setCategory(mainCat)
+				.setDescription("Number of concurrent passwords checks allowed to be run in parallel. "
+						+ "Password checking is a memory (and CPU) intensive, "
+						+ "and the biggger work factor, the bigger memory need for "
+						+ "a single password checking is. The bigger this number is "
+						+ "the lower the maximum allowed work factor is. "
+						+ "Having this number larger then the number of cores makes no sense. "
+						+ "By default this parameter is equal to "
+						+ "JVM max heap size in GB times 2 (but not less then 1)."));
+		
+		defaults.put(EXTENSION_PFX, new PropertyMD().setCategory(mainCat).setCanHaveSubkeys().setHidden());
 		
 		SUPPORTED_LOCALES.put("en", new Locale("en"));
 		SUPPORTED_LOCALES.put("pl", new Locale("pl"));
 		SUPPORTED_LOCALES.put("de", new Locale("de"));
 		SUPPORTED_LOCALES.put("nb", new Locale("nb"));
+		SUPPORTED_LOCALES.put("fr", new Locale("fr"));
 	}
 
 	private UnityHttpServerConfiguration jp;
@@ -600,9 +670,16 @@ public class UnityServerConfiguration extends UnityFilePropertiesHelper
 		return pkiConf;
 	}
 	
+	public int getFileSizeLimit()
+	{
+		return getIntValue(UnityServerConfiguration.FILE_SIZE_LIMIT);
+	}
+	
 	public List<String> getEndpointAuth(String endpointKey)
 	{
 		String spec = getValue(endpointKey+UnityServerConfiguration.ENDPOINT_AUTHENTICATORS);
+		if (spec == null)
+			return Collections.emptyList();
 		String[] authenticationOptions = spec.split(";");		
 		List<String> endpointAuthn = new ArrayList<>();
 		for (String authenticationOption : authenticationOptions)
@@ -679,5 +756,18 @@ public class UnityServerConfiguration extends UnityFilePropertiesHelper
 		}
 
 		return getIntValue(UnityServerConfiguration.EMAIL_CONFIRMATION_REQUEST_LIMIT);
+	}
+	
+	public int getMaxConcurrentPasswordChecks()
+	{
+		if (isSet(MAX_CONCURRENT_PASSWORD_CHECKS))
+			return getIntValue(MAX_CONCURRENT_PASSWORD_CHECKS);
+		
+		long maxMemory = Runtime.getRuntime().maxMemory();
+		if (maxMemory == Long.MAX_VALUE)
+			maxMemory = 1 << 30;
+		double maxMemGB = maxMemory / (double)(1 << 30);
+		int maxConcurrency = (int)Math.round(maxMemGB * 2);
+		return maxConcurrency > 0 ? maxConcurrency : 1;
 	}
 }

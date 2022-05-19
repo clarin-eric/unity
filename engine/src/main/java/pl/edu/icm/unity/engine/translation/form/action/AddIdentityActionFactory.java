@@ -15,6 +15,10 @@ import org.springframework.stereotype.Component;
 import pl.edu.icm.unity.base.utils.Log;
 import pl.edu.icm.unity.engine.api.identity.IdentityTypeDefinition;
 import pl.edu.icm.unity.engine.api.identity.IdentityTypeSupport;
+import pl.edu.icm.unity.engine.api.mvel.MVELExpressionContext;
+import pl.edu.icm.unity.engine.api.translation.ExternalDataParser;
+import pl.edu.icm.unity.engine.api.translation.form.RegistrationContext;
+import pl.edu.icm.unity.engine.api.translation.form.RegistrationMVELContextKey;
 import pl.edu.icm.unity.engine.api.translation.form.RegistrationTranslationAction;
 import pl.edu.icm.unity.engine.api.translation.form.TranslatedRegistrationRequest;
 import pl.edu.icm.unity.exceptions.EngineException;
@@ -33,9 +37,10 @@ public class AddIdentityActionFactory extends AbstractRegistrationTranslationAct
 {
 	public static final String NAME = "addIdentity";
 	private IdentityTypeSupport idTypeSupport;
+	private ExternalDataParser dataParser;
 	
 	@Autowired
-	public AddIdentityActionFactory(IdentityTypeSupport idTypeSupport)
+	public AddIdentityActionFactory(IdentityTypeSupport idTypeSupport, ExternalDataParser dataParser)
 	{
 		super(NAME, new ActionParameterDefinition[] {
 				new ActionParameterDefinition(
@@ -45,15 +50,19 @@ public class AddIdentityActionFactory extends AbstractRegistrationTranslationAct
 				new ActionParameterDefinition(
 						"identity",
 						"RegTranslationAction.addIdentity.paramDesc.identity",
-						Type.EXPRESSION, true)
+						Type.EXPRESSION, true,
+						MVELExpressionContext.builder().withTitleKey("RegTranslationAction.addIdentity.editor.title")
+						.withEvalToKey("RegTranslationAction.addIdentity.editor.evalTo")
+						.withVars(RegistrationMVELContextKey.toMap()).build())
 		});
 		this.idTypeSupport = idTypeSupport;
+		this.dataParser = dataParser;
 	}
 
 	@Override
 	public RegistrationTranslationAction getInstance(String... parameters)
 	{
-		return new AddIdentityAction(getActionType(), parameters, idTypeSupport);
+		return new AddIdentityAction(getActionType(), parameters, idTypeSupport, dataParser);
 	}
 	
 	public static class AddIdentityAction extends RegistrationTranslationAction
@@ -64,18 +73,20 @@ public class AddIdentityActionFactory extends AbstractRegistrationTranslationAct
 		private Serializable expressionCompiled;
 		private IdentityTypeSupport idTypeSupport;
 		private IdentityTypeDefinition typeDefinition;
+		private ExternalDataParser dataParser;
 		
 		public AddIdentityAction(TranslationActionType description, String[] parameters,
-				IdentityTypeSupport idTypeSupport) 
+				IdentityTypeSupport idTypeSupport, ExternalDataParser dataParser) 
 		{
 			super(description, parameters);
 			this.idTypeSupport = idTypeSupport;
+			this.dataParser = dataParser;
 			setParameters(parameters);
 		}
 
 		@Override
 		protected void invokeWrapped(TranslatedRegistrationRequest state, Object mvelCtx,
-				String currentProfile) throws EngineException
+				RegistrationContext context, String currentProfile) throws EngineException
 		{
 			Object value = MVEL.executeExpression(expressionCompiled, mvelCtx, new HashMap<>());
 			if (value == null)
@@ -84,8 +95,7 @@ public class AddIdentityActionFactory extends AbstractRegistrationTranslationAct
 				return;
 			}
 			
-			IdentityParam identity = typeDefinition.convertFromString(
-					value.toString(), null, currentProfile);
+			IdentityParam identity = dataParser.parseAsIdentity(typeDefinition, value, null, currentProfile); 
 			log.debug("Mapped identity: " + identity);
 			state.addIdentity(identity);
 		}

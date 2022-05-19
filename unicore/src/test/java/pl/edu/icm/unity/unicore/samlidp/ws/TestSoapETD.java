@@ -91,7 +91,7 @@ public class TestSoapETD extends DBIntegrationTestBase
 			EndpointConfiguration cfg = new EndpointConfiguration(new I18nString("endpoint1"), "desc",
 					 Lists.newArrayList("flow1"), SAML_ENDP_CFG, realm.getName());
 			endpointMan.deploy(SamlUnicoreSoapEndpoint.NAME, "endpoint1", "/saml", cfg);
-			List<ResolvedEndpoint> endpoints = endpointMan.getEndpoints();
+			List<ResolvedEndpoint> endpoints = endpointMan.getDeployedEndpoints();
 			assertEquals(1, endpoints.size());
 
 			httpServer.start();
@@ -157,7 +157,7 @@ public class TestSoapETD extends DBIntegrationTestBase
 	protected void createUsers() throws Exception
 	{
 		Identity added2 = idsMan.addEntity(new IdentityParam(X500Identity.ID, DEMO_SERVER_DN), 
-				"cr-cert", EntityState.valid, false);
+				"cr-cert", EntityState.valid);
 		EntityParam e2 = new EntityParam(added2);
 		eCredMan.setEntityCredential(e2, "credential2", "");
 		

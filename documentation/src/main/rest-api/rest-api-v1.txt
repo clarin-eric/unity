@@ -115,6 +115,7 @@ Example output:
 +@QueryParam("group")+ +
 +@QueryParam("effective")+ +
 +@QueryParam("identityType")+ +
++@QueryParam("includeSimpleValues")+ +
 +@GET+ +
 
 Returns attributes of a given entity in a selected group. Values are encoded in syntax type dependent way.
@@ -173,6 +174,290 @@ Example output:
 ]
 ----
 
+The optional includeSimpleValues query parameter (by default false) can be used to add to the output additional
+property with a attributes' values parsed to simple output.
+
+Example output: 
+----
+    {
+        "values": [
+            "{\"image\":\"{\\\"type\\\":\\\"PNG\\\",\\\"value\\\":\\\"iVBORw0KGgoAAAANSUhEUgAAAMgAAADICAIAAAAiOjnJAAAzEklEQVR42u1dB1gVxxa\\\"}\",\"externalId\":\"b4118506-3194-4f59-94a7-56c2d3babf00\"}"
+        ],
+        "creationTs": 1581616749295,
+        "updateTs": 1581616749295,
+        "direct": true,
+        "name": "publicImage",
+        "groupPath": "/",
+        "valueSyntax": "publicLinkableImage",
+        "simpleValues": [
+            "https://localhost:2443/unitygw/content/b4118506-3194-4f59-94a7-56c2d3babf00"
+        ]
+    }
+----
+
+
+=== Get entity attributes in groups
+
++@Path(/entity/{entityId}/groups/attributes)+ +
++@QueryParam("groupsPatterns")+ +
++@QueryParam("effective")+ +
++@QueryParam("identityType")+ +
++@GET+ +
+
+Returns grouped by group attributes of a given entity in a selected groups patterns.
+Group pattern is an ant pattern, which has following rules:
+(?) - matches one character within a path variable
+(*) - matches any characters within a path variable
+(**) - matches any characters across whole directory
+Values are encoded in syntax type dependent way.
+The optional effective query parameter (by default true) can be used to control whether only directly defined
+or effective attributes are queried.
+
+Example output:
+----
+[
+    "/": [
+        {
+            "values": [
+                "2017-04-03T22:18:34"
+            ],
+            "creationTs": 1491257914036,
+            "updateTs": 1491257914036,
+            "direct": true,
+            "name": "sys:LastAuthentication",
+            "groupPath": "/",
+            "valueSyntax": "string"
+        },
+        {
+            "values": [
+                "Regular User"
+            ],
+            "creationTs": 1491257136049,
+            "updateTs": 1491257136049,
+            "direct": true,
+            "name": "sys:AuthorizationRole",
+            "groupPath": "/",
+            "valueSyntax": "enumeration"
+        }
+    ],
+    "/test": [
+        {
+            "values": [
+                "{\"value\":\"some@email.com\",\"confirmationData\":{\"confirmed\":true,\"confirmationDate\":1491257136061,\"sentRequestAmount\":0},\"tags\":[]}"
+            ],
+            "creationTs": 1491257136075,
+            "updateTs": 1491257136075,
+            "direct": true,
+            "name": "email",
+            "groupPath": "/test",
+            "valueSyntax": "verifiableEmail"
+        },
+        {
+            "values": [
+                "Example organization",
+                "org2",
+                "org3"
+            ],
+            "creationTs": 1491257136052,
+            "updateTs": 1491257136052,
+            "direct": true,
+            "name": "o",
+            "groupPath": "/test",
+            "valueSyntax": "string"
+        }
+    ]
+]
+----
+
+=== Get complete user record
+
++@Path("/entity/{entityId}/record")+ +
++@GET+ +
+
+Returns a complete record with information about a given entity. Includes:
+
+. entity state
+. identities
+. status of credentials
+. membership in groups
+. attributes in all groups
+
+Example output:
+
+----
+{
+  "entity": {
+    "entityInformation": {
+      "state": "valid",
+      "entityId": 1
+    },
+    "identities": [
+      {
+        "value": "a",
+        "confirmationInfo": {
+          "confirmed": false,
+          "confirmationDate": 0,
+          "sentRequestAmount": 0
+        },
+        "comparableValue": "a",
+        "creationTs": 1630876607610,
+        "updateTs": 1630876607610,
+        "typeId": "userName",
+        "entityId": 1
+      },
+      {
+        "value": "6cfb445e-ddb5-43d0-9141-63acf8b662e4",
+        "confirmationInfo": {
+          "confirmed": false,
+          "confirmationDate": 0,
+          "sentRequestAmount": 0
+        },
+        "comparableValue": "6cfb445e-ddb5-43d0-9141-63acf8b662e4",
+        "creationTs": 1630876607643,
+        "updateTs": 1630876607643,
+        "typeId": "persistent",
+        "entityId": 1
+      }
+    ],
+    "credentialInfo": {
+      "credentialRequirementId": "sys:all",
+      "credentialsState": {
+        "certificate credential": {
+          "state": "correct",
+          "stateDetail": null,
+          "extraInformation": ""
+        },
+        "fido": {
+          "state": "notSet",
+          "stateDetail": null,
+          "extraInformation": ""
+        },
+        "sys:password": {
+          "state": "correct",
+          "stateDetail": null,
+          "extraInformation": "{\"lastChange\":1630876608112}"
+        },
+        "customPassword": {
+          "state": "notSet",
+          "stateDetail": null,
+          "extraInformation": ""
+        },
+        "sys:sms": {
+          "state": "notSet",
+          "stateDetail": null,
+          "extraInformation": ""
+        }
+      }
+    }
+  },
+  "groups": {
+    "/projects": {
+      "creationTs": 1630876712555,
+      "group": "/projects",
+      "entityId": 1
+    },
+    "/": {
+      "creationTs": 1630876607615,
+      "group": "/",
+      "entityId": 1
+    }
+  },
+  "attributesInGroups": {
+    "/projects": [
+      {
+        "values": [
+          "1234"
+        ],
+        "creationTs": 1630876729838,
+        "updateTs": 1630876729838,
+        "direct": true,
+        "name": "code",
+        "groupPath": "/projects",
+        "valueSyntax": "string"
+      }
+    ],
+    "/": [
+      {
+        "values": [
+          "Default Administrator"
+        ],
+        "creationTs": 1630876609099,
+        "updateTs": 1630876609099,
+        "direct": false,
+        "name": "name",
+        "groupPath": "/",
+        "valueSyntax": "string"
+      },
+      {
+        "values": [
+          "2021-09-05T23:18:24"
+        ],
+        "creationTs": 1630876633643,
+        "updateTs": 1630876704874,
+        "direct": true,
+        "name": "sys:LastAuthentication",
+        "groupPath": "/",
+        "valueSyntax": "string"
+      },
+      {
+        "values": [
+          "sys:all"
+        ],
+        "creationTs": 1630876607623,
+        "updateTs": 1630876607623,
+        "direct": true,
+        "name": "sys:CredentialRequirements",
+        "groupPath": "/",
+        "valueSyntax": "string"
+      }
+    ]
+  }
+}
+
+----
+
+
+=== Get group metadata
+
++@Path("/group/{groupPath}/meta")+ +
++@GET+ +
+
+Returns settings of a group.
+
+Example output: 
+----
+{
+    "i18nDescription": {
+        "DefaultValue": null,
+        "Map": {}
+    },
+    "displayedName": {
+        "DefaultValue": "/",
+        "Map": {"en" : "Root group"}
+    },
+    "attributeStatements": [
+        {
+            "resolution": "skip",
+            "condition": "true",
+            "fixedAttribute": {
+                "values": [
+                    "Regular User"
+                ],
+                "name": "sys:AuthorizationRole",
+                "groupPath": "/",
+                "valueSyntax": "enumeration"
+            }
+        }
+    ],
+    "attributesClasses": [],
+    "delegationConfiguration": {
+        "enabled": false
+    },
+    "publicGroup": false,
+    "path": "/"
+}
+----
+
 
 === Get group contents
 
@@ -228,12 +513,122 @@ Example output:
 ----
 
 
-=== Create group
+=== Get multiple groups members with attributes
+
++@Path("/group-members-multi/{rootGroupPath}")+ +
++@POST+ +
++@Consumes(MediaType.APPLICATION_JSON)+ +
+
+Returns all resolved members in all groups under a given path, also including grand children. 
+
+The body of the request must be JSON array with strings. If the array is empty then data for all groups is returned.
+Otherwise the array may contain a set of group names, all of which must be children of rootGroupPath. 
+Only the data for those groups will be returned.
+
+Output structure: 
+----
+{
+    "entities": [
+        {
+            // the same as result to resolve identity operation
+        },
+        ...
+    ],
+    "members": {
+        "/root/grp3": [
+            {
+                "attributes": [
+                    {
+						// the same syntax as in get entity attributes case
+					},
+					...
+			    ],
+                "entityId": 10	//one of group members, of which attributes are provided in this element
+            },
+            ...
+        ],
+        ...
+    }
+}
+----
+
+=== Create group (simple)
 
 +@Path("/group/{groupPath}")+ +
++@QueryParam("withParents")+ +
 +@POST+ +
 
-Creates a new group. The created group will be empty.
+Creates a new group. The created group will be empty and will contain only the default settings 
+(e.g. no attribute statements, no description, displayed name set to group path name).
+The optional +(false,withParents)+ query parameter (by default false) can be used to add groups in recursive way.
+(For example three groups can be add by one request in following hierarchy "newGroup1/newGroup2/newGroup3")
+
+
+=== Create group (advanced)
+
++@Path("/group")+ +
++@POST+ +
++@Consumes(MediaType.APPLICATION_JSON)+ +
+
+Creates a new group with complete configuration provided in JSON body. Example (rather minimal) request:
+
+----
+{
+    "displayedName": {
+        "Map": {"en":"Fancy name"}
+    },
+    "i18nDescription": {
+        "Map": {"en":"Fancy description"}
+    },
+    "attributeStatements": [],
+    "attributesClasses": [],
+    "delegationConfiguration": {
+        "enabled": false
+    },
+    "publicGroup": false,
+    "path": "/added-group"
+}
+----
+
+=== Create groups 
+
++@Path("/groups")+ +
++@POST+ +
++@Consumes(MediaType.APPLICATION_JSON)+ +
+
+Creates new groups with complete configuration provided in JSON body. Example (rather minimal) request:
+
+----
+[
+	{
+	    "displayedName": {
+	        "Map": {"en":"Fancy name"}
+	    },
+	    "i18nDescription": {
+	        "Map": {"en":"Fancy description"}
+	    },
+	    "attributeStatements": [],
+	    "attributesClasses": [],
+	    "delegationConfiguration": {
+	        "enabled": false
+	    },
+	    "publicGroup": false,
+	    "path": "/added-group"
+	},
+	// ... next group definition 
+]
+----
+
+The format of the body is the same as returned by the group metadata endpoint.
+
+=== Update group settings
+
++@Path("/group")+ +
++@PUT+ +
++@Consumes(MediaType.APPLICATION_JSON)+ +
+
+Uses the same body syntax as create group (the POST) endpoint. Allows for changing displayed name, 
+attribute statements, classes etc.
 
 
 === Delete groups
@@ -435,6 +830,33 @@ For the password credential the complete value could be (with a selected securit
 ]
 ----
 
+=== Set credential status
+
++@Path("/entity/{entityId}/credential/{credential}/status/{status}")+ +
++@QueryParam("identityType")+ +
++@PUT+ +
+
+Sets a given credential status for the user. Allowed status is either +notSet+ (clears the credential) or +outdated+ 
+(invalidated existing credential, user will need to change it after the next interactive login).  
+
+
+=== Set 2nd factor (2FA) opt-in for entity
+
++@Path("/entity/{entityId}/2f-optin/{status}")+ +
++@QueryParam("identityType")+ +
++@PUT+ +
+
+Sets the status of 2nd factor use opt in for an entity. Status can be +true+ or +false+.
+
+=== Get 2nd factor (2FA) opt-in of entity
+
++@Path("/entity/{entityId}/2f-optin")+ +
++@QueryParam("identityType")+ +
++@GET+ +
+
+Returns string with the status of 2nd factor use opt-in of a given entity.
+
+
 === Get attribute types
 
 +@Path("/attributeTypes")+ +
@@ -540,9 +962,9 @@ Returns all deployed endpoints. Example response with a single endpoint:
 ----
 [{
         "endpoint": {
-            "name": "/admin",
-            "typeId": "WebAdminUI",
-            "contextAddress": "/admin",
+            "name": "/console",
+            "typeId": "WebConsoleUI",
+            "contextAddress": "/console",
             "configuration": {
                 "displayedName": {
                     "DefaultValue": "UNITY administration interface",
@@ -592,13 +1014,13 @@ Returns all deployed endpoints. Example response with a single endpoint:
             "maxInactivity": 600
         },
         "type": {
-            "name": "WebAdminUI",
+            "name": "WebConsoleUI",
             "description": "Web administrative user interface",
             "supportedBindings": [
                 "web-vaadin7"
             ],
             "paths": {
-                "/admin": "Web admin endpoint"
+                "/console": "Web admin endpoint"
             }
         }
     }]
@@ -867,4 +1289,37 @@ then any token can be removed, otherwise it is allowed for removing owned tokens
 Triggers sending user notification of the given message template. Request may use additional, variable, query parameters
 which are used as template parameters. All such parameters should have the +custom.+ prefix (which is mandatory
 in message template for custom properties).
- 
+
+=== Get idp usage statistics
+
++@Path("/idp-stats")+ +
++@GET+ +
++@QueryParam("since")+ +
++@QueryParam("groupBy")+ +
++@QueryParam("skipZeroRecords")+ +
+
+Returns idp usage statistics since a given date. Idp statistics can be grouped, allowed options are: none, day, month, total. 
+It is also possible to control whether all-zero records in the requested time range should be included or not with the 
++skipZeroRecords+ option, accepting +true+ (the default) and +false+ values.
+
+Example output without any grouping applied:
+
+----
+[
+   {
+      "idpId":"endpoint-id",
+      "idpName":"Endpoint name",
+      "clientId":"clientId1",
+      "clientName":"Client Name",
+      "sigInStats":[
+         {
+            "periodStart":"2021-10-21T15:14:09Z",
+            "periodEnd":"2021-10-21T15:15:09Z",
+            "totatCount":1,
+            "successfullCount":1,
+            "failedCount":0
+         }
+      ]
+   }
+]
+----

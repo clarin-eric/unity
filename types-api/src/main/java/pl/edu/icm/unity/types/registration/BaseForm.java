@@ -5,8 +5,10 @@
 package pl.edu.icm.unity.types.registration;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonValue;
@@ -22,6 +24,7 @@ import pl.edu.icm.unity.exceptions.InternalException;
 import pl.edu.icm.unity.types.DescribedObjectROImpl;
 import pl.edu.icm.unity.types.I18nString;
 import pl.edu.icm.unity.types.I18nStringJsonUtil;
+import pl.edu.icm.unity.types.policyAgreement.PolicyAgreementConfiguration;
 import pl.edu.icm.unity.types.registration.layout.FormLayoutSettings;
 import pl.edu.icm.unity.types.translation.ProfileType;
 import pl.edu.icm.unity.types.translation.TranslationProfile;
@@ -48,7 +51,9 @@ public abstract class BaseForm extends DescribedObjectROImpl
 			new TranslationProfile("registrationProfile", "", ProfileType.REGISTRATION, new ArrayList<>());
 	private FormLayoutSettings layoutSettings = FormLayoutSettings.DEFAULT;
 	private List<RegistrationWrapUpConfig> wrapUpConfig = new ArrayList<>();
+	private List<PolicyAgreementConfiguration> policyAgreements = new ArrayList<>();
 	private boolean byInvitationOnly;
+	private boolean checkIdentityOnSubmit;
 	
 	@JsonCreator
 	BaseForm(ObjectNode json)
@@ -78,8 +83,38 @@ public abstract class BaseForm extends DescribedObjectROImpl
 		if (formInformation == null)
 			throw new IllegalStateException("Form information must be not-null "
 					+ "in a form (but it contents can be empty)");
+		if (policyAgreements.stream().filter(a -> a == null).findFirst().isPresent())
+			throw new IllegalStateException(
+					"Form policy agreement must be not-null" + " and not-empty in a form");
+		
+		assertAllQueryParamsAreUnique();
 	}
 	
+	private void assertAllQueryParamsAreUnique()
+	{
+		Set<String> params = new HashSet<>();
+		for (IdentityRegistrationParam identityParam : identityParams)
+		{
+			if (identityParam.getUrlQueryPrefill() != null)
+			{
+				if (!params.add(identityParam.getUrlQueryPrefill().paramName))
+					throw new IllegalStateException("URL prefill parameter >" 
+							+ identityParam.getUrlQueryPrefill().paramName 
+							+ "< is used twice in the form");
+			}
+		}
+		for (AttributeRegistrationParam attributeParam : attributeParams)
+		{
+			if (attributeParam.getUrlQueryPrefill() != null)
+			{
+				if (!params.add(attributeParam.getUrlQueryPrefill().paramName))
+					throw new IllegalStateException("URL prefill parameter >" 
+							+ attributeParam.getUrlQueryPrefill().paramName 
+							+ "< is used twice in the form");
+			}
+		}
+	}
+
 	@Override
 	@JsonValue
 	public ObjectNode toJson()
@@ -101,6 +136,8 @@ public abstract class BaseForm extends DescribedObjectROImpl
 		root.set("PageTitle", jsonMapper.valueToTree(getPageTitle()));
 		root.set("WrapUpConfig", jsonMapper.valueToTree(getWrapUpConfig()));
 		root.put("ByInvitationOnly", isByInvitationOnly());
+		root.set("PolicyAgreements", jsonMapper.valueToTree(getPolicyAgreements()));
+		root.put("CheckIdentityOnSubmit", isCheckIdentityOnSubmit());
 		return root;
 	}
 
@@ -190,6 +227,14 @@ public abstract class BaseForm extends DescribedObjectROImpl
 			n = root.get("ByInvitationOnly");
 			if (n != null && !n.isNull())
 				setByInvitationOnly(n.asBoolean());
+			
+			n = root.get("PolicyAgreements");
+			if (n != null && !n.isNull())
+				setPolicyAgreements(jsonMapper.convertValue(n, new TypeReference<List<PolicyAgreementConfiguration>>(){}));
+			
+			n = root.get("CheckIdentityOnSubmit");
+			if (n != null && !n.isNull())
+				setCheckIdentityOnSubmit(n.asBoolean());
 			
 		} catch (Exception e)
 		{
@@ -349,7 +394,7 @@ public abstract class BaseForm extends DescribedObjectROImpl
 		return displayedName == null ? new I18nString(getName()) : displayedName;
 	}
 
-	void setDisplayedName(I18nString displayedName)
+	public void setDisplayedName(I18nString displayedName)
 	{
 		this.displayedName = displayedName;
 	}
@@ -406,11 +451,31 @@ public abstract class BaseForm extends DescribedObjectROImpl
 		this.byInvitationOnly = byInvitationOnly;
 	}
 
-	public boolean isLocalSignupEnabled()
+	public boolean hasAnyLocalCredential()
 	{
 		return !credentialParams.isEmpty();
 	}
 	
+	public List<PolicyAgreementConfiguration> getPolicyAgreements()
+	{
+		return policyAgreements;
+	}
+
+	public void setPolicyAgreements(List<PolicyAgreementConfiguration> policyAgreements)
+	{
+		this.policyAgreements = policyAgreements;
+	}
+	
+	public boolean isCheckIdentityOnSubmit()
+	{
+		return checkIdentityOnSubmit;
+	}
+
+	public void setCheckIdentityOnSubmit(boolean checkIdentityOnSubmit)
+	{
+		this.checkIdentityOnSubmit = checkIdentityOnSubmit;
+	}
+
 	public abstract BaseFormNotifications getNotificationsConfiguration();
 	
 	@Override
@@ -428,12 +493,14 @@ public abstract class BaseForm extends DescribedObjectROImpl
 				&& Objects.equals(groupParams, castOther.groupParams)
 				&& Objects.equals(credentialParams, castOther.credentialParams)
 				&& Objects.equals(agreements, castOther.agreements)
+				&& Objects.equals(policyAgreements, castOther.policyAgreements)
 				&& Objects.equals(collectComments, castOther.collectComments)
 				&& Objects.equals(displayedName, castOther.displayedName)
 				&& Objects.equals(formInformation, castOther.formInformation)
 				&& Objects.equals(translationProfile, castOther.translationProfile)
 				&& Objects.equals(layoutSettings, castOther.layoutSettings)
 				&& Objects.equals(wrapUpConfig, castOther.wrapUpConfig)
+				&& Objects.equals(checkIdentityOnSubmit, castOther.checkIdentityOnSubmit)
 				&& Objects.equals(byInvitationOnly, castOther.byInvitationOnly);
 	}
 
@@ -441,7 +508,7 @@ public abstract class BaseForm extends DescribedObjectROImpl
 	public int hashCode()
 	{
 		return Objects.hash(super.hashCode(), identityParams, attributeParams, groupParams, credentialParams,
-				agreements, collectComments, displayedName, formInformation, translationProfile, 
-				layoutSettings, wrapUpConfig, byInvitationOnly);
+				agreements, policyAgreements, collectComments, displayedName, formInformation, translationProfile, 
+				layoutSettings, wrapUpConfig, byInvitationOnly, checkIdentityOnSubmit);
 	}
 }

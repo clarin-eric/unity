@@ -4,13 +4,14 @@
  */
 package pl.edu.icm.unity.oauth.as;
 
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.apache.logging.log4j.Logger;
 
@@ -20,7 +21,6 @@ import pl.edu.icm.unity.base.utils.Log;
 import pl.edu.icm.unity.engine.api.AttributesManagement;
 import pl.edu.icm.unity.engine.api.EntityManagement;
 import pl.edu.icm.unity.exceptions.EngineException;
-import pl.edu.icm.unity.oauth.as.OAuthAuthzContext.ScopeInfo;
 import pl.edu.icm.unity.oauth.as.OAuthSystemAttributesProvider.GrantFlow;
 import pl.edu.icm.unity.oauth.as.token.OAuthTokenEndpoint;
 import pl.edu.icm.unity.oauth.as.webauthz.OAuthParseServlet;
@@ -41,14 +41,15 @@ public class OAuthRequestValidator
 	protected OAuthASProperties oauthConfig;
 	protected EntityManagement identitiesMan;
 	protected AttributesManagement attributesMan;
-	
+	protected OAuthScopesService scopeService;
 	
 	public OAuthRequestValidator(OAuthASProperties oauthConfig,
-			EntityManagement identitiesMan, AttributesManagement attributesMan)
+			EntityManagement identitiesMan, AttributesManagement attributesMan, OAuthScopesService scopeService)
 	{
 		this.oauthConfig = oauthConfig;
 		this.identitiesMan = identitiesMan;
 		this.attributesMan = attributesMan;
+		this.scopeService = scopeService;
 	}
 
 	/**
@@ -104,25 +105,42 @@ public class OAuthRequestValidator
 		return allowedFlows;
 	}
 	
-	public List<ScopeInfo> getValidRequestedScopes(Scope requestedScopes)
+	public Optional<Set<String>> getAllowedScopes(Map<String, AttributeExt> attributes)
 	{
-		List<ScopeInfo> ret = new ArrayList<>();
-		Set<String> scopeKeys = oauthConfig.getStructuredListKeys(OAuthASProperties.SCOPES);
-		if (requestedScopes != null)
+		AttributeExt allowedScopesA = attributes.get(OAuthSystemAttributesProvider.ALLOWED_SCOPES);
+		if (allowedScopesA == null)
 		{
-			for (String scopeKey: scopeKeys)
-			{
-				String scope = oauthConfig.getValue(scopeKey+OAuthASProperties.SCOPE_NAME);
-
-				if (requestedScopes.contains(scope))
-				{
-					String desc = oauthConfig.getValue(scopeKey+OAuthASProperties.SCOPE_DESCRIPTION);
-					List<String> attributes = oauthConfig.getListOfValues(
-							scopeKey+OAuthASProperties.SCOPE_ATTRIBUTES);
-					ret.add(new ScopeInfo(scope, desc, attributes));
-				}
-			}
+			return Optional.empty();
+		} else
+		{
+			return Optional.of(Set.copyOf(allowedScopesA.getValues()));
 		}
-		return ret;
+	}
+
+	public List<OAuthScope> getValidRequestedScopes(Map<String, AttributeExt> clientAttributes, Scope requestedScopes)
+	{
+		List<OAuthScope> scopesDefinedOnServer = scopeService.getActiveScopes(oauthConfig);
+		Optional<Set<String>> allowedByClientScopes = getAllowedScopes(clientAttributes);
+		Set<String> notAllowedByClient = requestedScopes.stream().map(s -> s.getValue())
+				.filter(scope -> (allowedByClientScopes.isPresent() && !allowedByClientScopes.get().contains(scope)))
+				.collect(Collectors.toSet());
+		if (!notAllowedByClient.isEmpty())
+		{
+			log.info(
+					"Requested scopes not allowed for the client and ignored: " + String.join(",", notAllowedByClient));
+		}
+
+		Set<String> notDefinedOnServer = requestedScopes.stream().map(s -> s.getValue())
+				.filter(scope -> !scopesDefinedOnServer.stream()
+						.filter(serverScope -> scope.equals(serverScope.name)).findAny().isPresent())
+				.collect(Collectors.toSet());
+		if (!notDefinedOnServer.isEmpty())
+		{
+			log.info("Requested scopes not available on the endpoint and ignored: "
+					+ String.join(",", notDefinedOnServer));
+		}
+		return scopesDefinedOnServer.stream().filter(
+				scope -> (requestedScopes.contains(scope.name) && !notAllowedByClient.contains(scope.name)))
+				.collect(Collectors.toList());
 	}
 }

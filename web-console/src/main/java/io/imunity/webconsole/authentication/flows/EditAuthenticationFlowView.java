@@ -9,24 +9,23 @@ import java.util.List;
 
 import org.springframework.beans.factory.ObjectFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
 
 import com.vaadin.navigator.ViewChangeListener.ViewChangeEvent;
-import com.vaadin.ui.Alignment;
 import com.vaadin.ui.CustomComponent;
-import com.vaadin.ui.Layout;
 import com.vaadin.ui.VerticalLayout;
 
 import io.imunity.webconsole.WebConsoleNavigationInfoProviderBase;
-import io.imunity.webconsole.authentication.flows.AuthenticationFlowsView.FlowsNavigationInfoProvider;
-import io.imunity.webelements.helpers.ConfirmViewHelper;
+import io.imunity.webconsole.authentication.facilities.AuthenticationFacilitiesView;
 import io.imunity.webelements.helpers.NavigationHelper;
 import io.imunity.webelements.helpers.NavigationHelper.CommonViewParam;
 import io.imunity.webelements.navigation.NavigationInfo;
 import io.imunity.webelements.navigation.NavigationInfo.Type;
 import io.imunity.webelements.navigation.UnityView;
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
+import pl.edu.icm.unity.MessageSource;
 import pl.edu.icm.unity.engine.api.utils.PrototypeComponent;
 import pl.edu.icm.unity.webui.common.NotificationPopup;
+import pl.edu.icm.unity.webui.common.StandardButtonsHelper;
 import pl.edu.icm.unity.webui.exceptions.ControllerException;
 
 /**
@@ -36,49 +35,21 @@ import pl.edu.icm.unity.webui.exceptions.ControllerException;
  *
  */
 @PrototypeComponent
-public class EditAuthenticationFlowView extends CustomComponent implements UnityView
+class EditAuthenticationFlowView extends CustomComponent implements UnityView
 {
 	public static final String VIEW_NAME = "EditAuthenticationFlow";
 
 	private AuthenticationFlowsController controller;
 	private AuthenticationFlowEditor editor;
-	private UnityMessageSource msg;
+	private MessageSource msg;
 	private String flowName;
 
 	@Autowired
-	public EditAuthenticationFlowView(UnityMessageSource msg,
+	EditAuthenticationFlowView(MessageSource msg,
 			AuthenticationFlowsController controller)
 	{
 		this.msg = msg;
 		this.controller = controller;
-	}
-
-	private void onConfirm()
-	{
-		if (editor.hasErrors())
-		{
-			return;
-		}
-
-		try
-		{
-			if (!controller.updateFlow(editor.getAuthenticationFlow()))
-				return;
-		} catch (ControllerException e)
-		{
-
-			NotificationPopup.showError(e);
-			return;
-		}
-
-		NavigationHelper.goToView(AuthenticationFlowsView.VIEW_NAME);
-
-	}
-
-	private void onCancel()
-	{
-		NavigationHelper.goToView(AuthenticationFlowsView.VIEW_NAME);
-
 	}
 
 	@Override
@@ -91,8 +62,8 @@ public class EditAuthenticationFlowView extends CustomComponent implements Unity
 			flow = controller.getFlow(flowName);
 		} catch (ControllerException e)
 		{
-			NotificationPopup.showError(e);
-			NavigationHelper.goToView(AuthenticationFlowsView.VIEW_NAME);
+			NotificationPopup.showError(msg, e);
+			NavigationHelper.goToView(AuthenticationFacilitiesView.VIEW_NAME);
 			return;
 		}
 		
@@ -102,8 +73,8 @@ public class EditAuthenticationFlowView extends CustomComponent implements Unity
 			allAuthenticators = controller.getAllAuthenticators();
 		} catch (ControllerException e)
 		{
-			NotificationPopup.showError(e);
-			NavigationHelper.goToView(AuthenticationFlowsView.VIEW_NAME);
+			NotificationPopup.showError(msg, e);
+			NavigationHelper.goToView(AuthenticationFacilitiesView.VIEW_NAME);
 			return;
 		}
 
@@ -112,12 +83,37 @@ public class EditAuthenticationFlowView extends CustomComponent implements Unity
 		VerticalLayout main = new VerticalLayout();
 		main.setMargin(false);
 		main.addComponent(editor);
-		main.setWidth(44, Unit.EM);
-		Layout hl = ConfirmViewHelper.getConfirmButtonsBar(msg.getMessage("save"),
-				msg.getMessage("close"), () -> onConfirm(), () -> onCancel());
-		main.addComponent(hl);
-		main.setComponentAlignment(hl, Alignment.BOTTOM_CENTER);
+		main.addComponent(StandardButtonsHelper.buildConfirmEditButtonsBar(msg,
+				() -> onConfirm(), () -> onCancel()));
 		setCompositionRoot(main);
+	}
+	
+	private void onConfirm()
+	{
+		if (editor.hasErrors())
+		{
+			return;
+		}
+
+		try
+		{
+			controller.updateFlow(editor.getAuthenticationFlow());
+				
+		} catch (ControllerException e)
+		{
+
+			NotificationPopup.showError(msg, e);
+			return;
+		}
+
+		NavigationHelper.goToView(AuthenticationFacilitiesView.VIEW_NAME);
+
+	}
+
+	private void onCancel()
+	{
+		NavigationHelper.goToView(AuthenticationFacilitiesView.VIEW_NAME);
+
 	}
 
 	@Override
@@ -132,17 +128,16 @@ public class EditAuthenticationFlowView extends CustomComponent implements Unity
 		return VIEW_NAME;
 	}
 
-	@org.springframework.stereotype.Component
-	public static class EditFlowViewInfoProvider extends WebConsoleNavigationInfoProviderBase
+	@Component
+	public static class EditAuthenticationFlowViewInfoProvider extends WebConsoleNavigationInfoProviderBase
 	{
 
 		@Autowired
-		public EditFlowViewInfoProvider(FlowsNavigationInfoProvider parent,
-				ObjectFactory<EditAuthenticationFlowView> factory)
+		public EditAuthenticationFlowViewInfoProvider(ObjectFactory<EditAuthenticationFlowView> factory)
 		{
 			super(new NavigationInfo.NavigationInfoBuilder(VIEW_NAME,
 					Type.ParameterizedView)
-							.withParent(parent.getNavigationInfo())
+							.withParent(AuthenticationFlowsNavigationInfoProvider.ID)
 							.withObjectFactory(factory).build());
 
 		}

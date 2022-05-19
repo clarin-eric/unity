@@ -4,10 +4,14 @@
  */
 package pl.edu.icm.unity.webui.common.credentials.pass;
 
+import java.util.Optional;
+
+import com.vaadin.ui.Component;
 import com.vaadin.ui.Label;
+import com.vaadin.ui.VerticalLayout;
 
 import pl.edu.icm.unity.JsonUtil;
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
+import pl.edu.icm.unity.MessageSource;
 import pl.edu.icm.unity.exceptions.EngineException;
 import pl.edu.icm.unity.exceptions.IllegalCredentialException;
 import pl.edu.icm.unity.stdext.credential.pass.PasswordCredential;
@@ -23,11 +27,11 @@ import pl.edu.icm.unity.webui.common.credentials.CredentialEditorContext;
  */
 public class PasswordCredentialEditor implements CredentialEditor
 {
-	private UnityMessageSource msg;
+	private MessageSource msg;
 	private PasswordCredential config;
 	private PasswordEditorComponent editor;
 
-	public PasswordCredentialEditor(UnityMessageSource msg)
+	public PasswordCredentialEditor(MessageSource msg)
 	{
 		this.msg = msg;
 	}
@@ -50,14 +54,15 @@ public class PasswordCredentialEditor implements CredentialEditor
 	}
 
 	@Override
-	public ComponentsContainer getViewer(String credentialExtraInformation)
+	public Optional<Component> getViewer(String credentialExtraInformation)
 	{
-		ComponentsContainer ret = new ComponentsContainer();
+		VerticalLayout ret = new VerticalLayout();
+		ret.setMargin(false);
 		PasswordExtraInfo pei = PasswordExtraInfo.fromJson(credentialExtraInformation);
 		if (pei.getLastChange() == null)
-			return ret;
+			return Optional.empty();
 		
-		ret.add(new Label(msg.getMessage("PasswordCredentialEditor.lastModification", 
+		ret.addComponent(new Label(msg.getMessage("PasswordCredentialEditor.lastModification", 
 				pei.getLastChange())));
 		
 		PasswordCredentialResetSettings resetS = config.getPasswordResetSettings();
@@ -66,9 +71,9 @@ public class PasswordCredentialEditor implements CredentialEditor
 			String secQ = pei.getSecurityQuestion() == null ? 
 					msg.getMessage("PasswordCredentialEditor.notDefined")
 					: pei.getSecurityQuestion();
-			ret.add(new Label(msg.getMessage("PasswordCredentialEditor.securityQuestion", secQ)));
+			ret.addComponent(new Label(msg.getMessage("PasswordCredentialEditor.securityQuestion", secQ)));
 		}
-		return ret;
+		return Optional.of(ret);
 	}
 
 	@Override

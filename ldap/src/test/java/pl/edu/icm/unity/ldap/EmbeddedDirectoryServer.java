@@ -29,10 +29,13 @@ import eu.emi.security.authn.x509.X509Credential;
 import eu.emi.security.authn.x509.helpers.BinaryCertChainValidator;
 import eu.emi.security.authn.x509.impl.KeystoreCertChainValidator;
 import eu.emi.security.authn.x509.impl.KeystoreCredential;
-import eu.emi.security.authn.x509.impl.SocketFactoryCreator;
+import eu.emi.security.authn.x509.impl.SocketFactoryCreator2;
 import eu.unicore.security.canl.IAuthnAndTrustConfiguration;
+import eu.unicore.util.httpclient.HostnameMismatchCallbackImpl;
+import eu.unicore.util.httpclient.ServerHostnameCheckingMode;
 import pl.edu.icm.unity.engine.DBIntegrationTestBase;
 import pl.edu.icm.unity.engine.api.PKIManagement;
+import pl.edu.icm.unity.engine.api.pki.NamedCertificate;
 import pl.edu.icm.unity.exceptions.EngineException;
 import pl.edu.icm.unity.exceptions.WrongArgumentException;
 
@@ -44,22 +47,29 @@ import pl.edu.icm.unity.exceptions.WrongArgumentException;
 public class EmbeddedDirectoryServer
 {
 	private InMemoryDirectoryServer ds;
-	private KeystoreCredential credential;
-	private String cfgDirectory;
+	private final KeystoreCredential credential;
+	private final String cfgDirectory;
+	private final ServerHostnameCheckingMode hostnameCheckingMode;
 	
-	public EmbeddedDirectoryServer(KeystoreCredential credential, String cfgDirectory)
+	public EmbeddedDirectoryServer(KeystoreCredential credential, String cfgDirectory, 
+			ServerHostnameCheckingMode hostnameChackingMode)
 	{
 		this.credential = credential;
 		this.cfgDirectory = cfgDirectory;
+		this.hostnameCheckingMode = hostnameChackingMode;
 	}
 
 	public EmbeddedDirectoryServer() throws Exception
 	{
-		this(DBIntegrationTestBase.getDemoCredential(), "src/test/resources");
+		this(DBIntegrationTestBase.getDemoCredential(), "src/test/resources", ServerHostnameCheckingMode.WARN);
 	}
 
-	
 	public InMemoryDirectoryServer startEmbeddedServer() throws Exception
+	{
+		return startEmbeddedServer("/test-data.ldif");
+	}
+	
+	public InMemoryDirectoryServer startEmbeddedServer(String testDataFilePath) throws Exception
 	{
 		InMemoryDirectoryServerConfig config =
 				new InMemoryDirectoryServerConfig("dc=unity-example,dc=com");
@@ -67,9 +77,12 @@ public class EmbeddedDirectoryServer
 		List<InMemoryListenerConfig> listenerConfigs = new ArrayList<>();
 		
 		BinaryCertChainValidator acceptAll = new BinaryCertChainValidator(true);
-		SSLServerSocketFactory serverSocketFactory = SocketFactoryCreator.getServerSocketFactory(credential, 
-				acceptAll);
-		SSLSocketFactory clientSocketFactory = SocketFactoryCreator.getSocketFactory(null, acceptAll);
+		SSLServerSocketFactory serverSocketFactory = new SocketFactoryCreator2(credential, 
+					acceptAll, new HostnameMismatchCallbackImpl(hostnameCheckingMode))
+				.getServerSocketFactory();
+		SSLSocketFactory clientSocketFactory = new SocketFactoryCreator2(null, 
+					acceptAll, new HostnameMismatchCallbackImpl(hostnameCheckingMode))
+				.getSocketFactory();
 		System.out.println(Arrays.toString(serverSocketFactory.getSupportedCipherSuites()));
 		System.out.println(Arrays.toString(clientSocketFactory.getSupportedCipherSuites()));
 		
@@ -87,7 +100,7 @@ public class EmbeddedDirectoryServer
 		config.setSchema(merged);
 		
 		ds = new InMemoryDirectoryServer(config);
-		ds.importFromLDIF(true, cfgDirectory + "/test-data.ldif");
+		ds.importFromLDIF(true, cfgDirectory + testDataFilePath);
 		ds.startListening();
 		return ds;
 	}
@@ -146,32 +159,61 @@ public class EmbeddedDirectoryServer
 			}
 
 			@Override
-			public Set<String> getCertificateNames() throws EngineException
+			public Set<String> getAllCertificateNames() throws EngineException
 			{
 				return null;
 			}
 
 			@Override
-			public X509Certificate getCertificate(String name) throws EngineException
+			public NamedCertificate getCertificate(String name) throws EngineException
+			{
+				return null;
+			}
+
+
+			@Override
+			public void addVolatileCertificate(String name, X509Certificate updated)
+					throws EngineException
+			{
+			}
+
+
+			@Override
+			public void addPersistedCertificate(NamedCertificate toAdd) throws EngineException
+			{
+
+				
+			}
+
+			@Override
+			public List<NamedCertificate> getPersistedCertificates() throws EngineException
 			{
 				return null;
 			}
 
 			@Override
-			public void updateCertificate(String name, X509Certificate updated)
-					throws EngineException
+			public void loadCertificatesFromConfigFile()
 			{
+				
 			}
 
 			@Override
-			public void removeCertificate(String name) throws EngineException
+			public List<NamedCertificate> getVolatileCertificates() throws EngineException
 			{
+				return null;
 			}
 
 			@Override
-			public void addCertificate(String name, X509Certificate updated)
-					throws EngineException
+			public void removeCertificate(String toRemove) throws EngineException
 			{
+				
+				
+			}
+
+			@Override
+			public void updateCertificate(NamedCertificate toUpdate) throws EngineException
+			{
+				
 			}
 		};
 	}

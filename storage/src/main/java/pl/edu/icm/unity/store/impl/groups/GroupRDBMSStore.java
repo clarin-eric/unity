@@ -5,13 +5,19 @@
 package pl.edu.icm.unity.store.impl.groups;
 
 import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.apache.ibatis.exceptions.PersistenceException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
 
 import pl.edu.icm.unity.store.impl.StorageLimits;
+import pl.edu.icm.unity.store.rdbms.GenericDBBean;
 import pl.edu.icm.unity.store.rdbms.GenericNamedRDBMSCRUD;
 import pl.edu.icm.unity.store.rdbms.tx.SQLTransactionTL;
 import pl.edu.icm.unity.types.basic.Group;
@@ -64,24 +70,55 @@ public class GroupRDBMSStore extends GenericNamedRDBMSCRUD<Group, GroupBean> imp
 	}
 	
 	@Override
+	public List<Long> createList(List<Group> objs)
+	{
+		Set<String> parentsUsed = new HashSet<>();
+		for (Group grp: objs)
+		{
+			StorageLimits.checkNameLimit(grp.getName());
+			parentsUsed.add(grp.getParentPath());
+		}
+		GroupsMapper mapper = SQLTransactionTL.getSql().getMapper(GroupsMapper.class);
+		
+		List<GroupBean> byNames = mapper.getByNames(new ArrayList<>(parentsUsed));
+		Map<String, GroupBean> resolvedParents = byNames.stream()
+				.collect(Collectors.toMap(grp -> grp.getName(), grp -> grp));
+		
+		List<GroupBean> converted = new ArrayList<>(objs.size());
+		for (Group obj: objs)
+		{
+			GroupBean toAdd = jsonSerializer.toDB(obj);
+			assertContentsLimit(toAdd.getContents());
+			toAdd.setParentId((int)(long)(resolvedParents.get(obj.getParentPath()).getId()));
+			converted.add(toAdd);
+		}
+		mapper.createList(converted);
+		
+		return converted.stream()
+				.map(GenericDBBean::getId)
+				.collect(Collectors.toList());
+	}
+	
+	@Override
 	public void updateByKey(long key, Group obj)
 	{
 		StorageLimits.checkNameLimit(obj.getName());
 		GroupsMapper mapper = SQLTransactionTL.getSql().getMapper(GroupsMapper.class);
-		GroupBean old = mapper.getByKey(key);
-		if (old == null)
+		GroupBean oldBean = mapper.getByKey(key);
+		if (oldBean == null)
 			throw new IllegalArgumentException(elementName + " with key [" + key + 
 					"] does not exist");
-		if (!old.getName().equals(obj.getName()))
+		if (!oldBean.getName().equals(obj.getName()))
 		{
-			if (old.getName().equals("/"))
+			if (oldBean.getName().equals("/"))
 				throw new IllegalArgumentException("It is not allowed to rename the root group");
-			if (!old.getParent().equals(obj.getParentPath()))
+			if (!oldBean.getParent().equals(obj.getParentPath()))
 				throw new IllegalArgumentException("It is not allowed to change group path, "
-						+ "only rename is possible for " + old.getName() + 
+						+ "only rename is possible for " + oldBean.getName() + 
 						" (trying to rename to " + obj.getName() + ")");
-			updateChilderenPaths(old.getName(), obj.getName(), mapper);
+			updateChilderenPaths(oldBean.getName(), obj.getName(), mapper);
 		}
+		Group old = jsonSerializer.fromDB(oldBean);
 		preUpdateCheck(old, obj);
 		firePreUpdate(key, obj.getName(), obj, old);
 		GroupBean toUpdate = jsonSerializer.toDB(obj);
@@ -106,5 +143,19 @@ public class GroupRDBMSStore extends GenericNamedRDBMSCRUD<Group, GroupBean> imp
 				mapper.updateByKey(gb);
 			}
 		}
+	}
+
+	@Override
+	public List<Group> getGroupChain(String path)
+	{
+		GroupsMapper mapper = SQLTransactionTL.getSql().getMapper(GroupsMapper.class);
+		List<Group> ret = new ArrayList<>();
+		Group grp = new Group(path);
+		for (GroupBean bean: mapper.getByNames(grp.getPathsChain()))
+		{
+			Group obj = jsonSerializer.fromDB(bean);
+			ret.add(obj);
+		}
+		return ret;
 	}
 }

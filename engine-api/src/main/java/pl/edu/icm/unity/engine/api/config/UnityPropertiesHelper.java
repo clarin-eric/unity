@@ -4,6 +4,9 @@
  */
 package pl.edu.icm.unity.engine.api.config;
 
+import java.io.IOException;
+import java.io.StringReader;
+import java.io.StringWriter;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -16,11 +19,12 @@ import java.util.TreeSet;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import org.apache.log4j.Logger;
+import org.apache.logging.log4j.Logger;
 
 import eu.unicore.util.configuration.PropertiesHelper;
 import eu.unicore.util.configuration.PropertyMD;
 import pl.edu.icm.unity.MessageSource;
+import pl.edu.icm.unity.exceptions.InternalException;
 import pl.edu.icm.unity.types.I18nString;
 
 /**
@@ -162,6 +166,10 @@ public class UnityPropertiesHelper extends PropertiesHelper
 		return getLocalizedString(this, msg, baseKey);
 	}
 	
+	public I18nString getLocalizedStringWithoutFallbackToDefault(MessageSource msg, String baseKey)
+	{
+		return getLocalizedStringWithoutFallbackToDefault(this, msg, baseKey);
+	}
 
 	/**
 	 * @param msg
@@ -184,5 +192,77 @@ public class UnityPropertiesHelper extends PropertiesHelper
 				ret.addValue(locale.getKey(), v);
 		}
 		return ret;
+	}
+	
+	static I18nString getLocalizedStringWithoutFallbackToDefault(UnityPropertiesHelper helper, MessageSource msg,
+			String baseKey)
+	{
+		I18nString ret = new I18nString();
+		Map<String, Locale> supportedLocales = msg.getSupportedLocales();
+		String defaultVal = helper.getValue(baseKey);
+
+		for (Map.Entry<String, Locale> locale : supportedLocales.entrySet())
+		{
+			String v = helper.getLocalizedValueWithOutFallbackToDefault(baseKey, locale.getValue());
+			if (v != null)
+				ret.addValue(locale.getKey(), v);
+		}
+		
+		if ((ret.getValueRaw(msg.getDefaultLocaleCode()) == null
+				|| ret.getValueRaw(msg.getDefaultLocaleCode()).isEmpty()) && defaultVal != null)
+		{
+			ret.addValue(msg.getDefaultLocaleCode(), defaultVal);
+		}
+	
+		return ret;
+	}
+	
+	public String getLocalizedValueWithOutFallbackToDefault(String key, Locale locale)
+	{
+		boolean hasCountry = !locale.getCountry().equals("");
+		boolean hasLang = !locale.getLanguage().equals("");
+		String keyPfx = key + ".";
+
+		if (hasCountry && hasLang)
+		{
+			String fullLocale = locale.getLanguage() + "_" + locale.getCountry();
+			if (isSet(keyPfx + fullLocale))
+				return getValue(keyPfx + fullLocale);
+		}
+
+		if (hasLang)
+		{
+			String fullLocale = locale.getLanguage();
+			if (isSet(keyPfx + fullLocale))
+				return getValue(keyPfx + fullLocale);
+		}
+
+		return null;
+	}
+	
+	public String getAsString()
+	{
+		StringWriter writer = new StringWriter();
+		try
+		{
+			properties.store(writer, "");
+		} catch (IOException e)
+		{
+			throw new InternalException("Can not save properties to string");
+		}
+		return writer.getBuffer().toString();
+	}
+	
+	public static Properties parse(String properties)
+	{
+		Properties raw = new Properties();
+		try
+		{
+			raw.load(new StringReader(properties));
+		} catch (IOException e)
+		{
+			throw new InternalException("Can not parse proeprties", e);
+		}
+		return raw;
 	}
 }

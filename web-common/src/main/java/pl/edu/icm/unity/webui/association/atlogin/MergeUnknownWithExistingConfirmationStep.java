@@ -6,9 +6,9 @@ package pl.edu.icm.unity.webui.association.atlogin;
 
 import org.vaadin.teemu.wizards.Wizard;
 
+import pl.edu.icm.unity.MessageSource;
 import pl.edu.icm.unity.engine.api.authn.AuthenticatedEntity;
-import pl.edu.icm.unity.engine.api.authn.remote.RemotelyAuthenticatedContext;
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
+import pl.edu.icm.unity.engine.api.authn.remote.RemotelyAuthenticatedPrincipal;
 import pl.edu.icm.unity.engine.api.translation.in.InputTranslationEngine;
 import pl.edu.icm.unity.exceptions.EngineException;
 import pl.edu.icm.unity.types.basic.EntityParam;
@@ -22,11 +22,11 @@ import pl.edu.icm.unity.webui.common.NotificationPopup;
  */
 class MergeUnknownWithExistingConfirmationStep extends AbstractConfirmationStep
 {
-	private final RemotelyAuthenticatedContext unknownUser;
+	private final RemotelyAuthenticatedPrincipal unknownUser;
 	private AuthenticatedEntity locallyAuthenticatedEntity;
 	
-	MergeUnknownWithExistingConfirmationStep(UnityMessageSource msg, 
-			RemotelyAuthenticatedContext unknownUser,
+	MergeUnknownWithExistingConfirmationStep(MessageSource msg, 
+			RemotelyAuthenticatedPrincipal unknownUser,
 			InputTranslationEngine translationEngine,
 			Wizard wizard)
 	{
@@ -37,16 +37,26 @@ class MergeUnknownWithExistingConfirmationStep extends AbstractConfirmationStep
 	void setAuthenticatedUser(AuthenticatedEntity ae)
 	{
 		locallyAuthenticatedEntity = ae;
-		introLabel.setHtmlValue("MergeUnknownWithExistingConfirmationStep.info", 
-				unknownUser.getRemoteIdPName(), 
-				locallyAuthenticatedEntity.getAuthenticatedWith().get(0));
+		if (ae != null)
+		{
+			introLabel.setHtmlValue("MergeUnknownWithExistingConfirmationStep.info", unknownUser.getRemoteIdPName(),
+					locallyAuthenticatedEntity.getAuthenticatedWith().get(0));
+		} else
+		{
+			introLabel.setHtmlValue("MergeUnknownWithExistingConfirmationStep.errorNotExistingIdentity");
+			//block finish button
+			errorComponent.setVisible(true);
+		}
 	}
 
 	@Override
 	protected void merge()
 	{
 		if (locallyAuthenticatedEntity == null)
+		{
+			NotificationPopup.showError(msg.getMessage("ConnectId.ConfirmStep.mergeFailed"), "");
 			return;
+		}
 		EntityParam existing = new EntityParam(locallyAuthenticatedEntity.getEntityId());
 		try
 		{

@@ -12,18 +12,17 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import pl.edu.icm.unity.Constants;
 import pl.edu.icm.unity.JsonUtil;
+import pl.edu.icm.unity.MessageSource;
 import pl.edu.icm.unity.base.utils.Log;
 import pl.edu.icm.unity.engine.api.confirmation.EmailConfirmationRedirectURLBuilder.ConfirmedElementType;
 import pl.edu.icm.unity.engine.api.confirmation.states.RegistrationEmailConfirmationState;
 import pl.edu.icm.unity.engine.api.confirmation.states.RegistrationEmailConfirmationState.RequestType;
 import pl.edu.icm.unity.engine.api.finalization.WorkflowFinalizationConfiguration;
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
 import pl.edu.icm.unity.engine.api.registration.PostFillingHandler;
 import pl.edu.icm.unity.engine.forms.enquiry.EnquiryResponseAutoProcessEvent;
 import pl.edu.icm.unity.engine.forms.reg.RegistrationRequestAutoProcessEvent;
 import pl.edu.icm.unity.exceptions.EngineException;
 import pl.edu.icm.unity.exceptions.IdentityExistsException;
-import pl.edu.icm.unity.exceptions.RuntimeEngineException;
 import pl.edu.icm.unity.store.api.generic.EnquiryFormDB;
 import pl.edu.icm.unity.store.api.generic.EnquiryResponseDB;
 import pl.edu.icm.unity.store.api.generic.RegistrationFormDB;
@@ -47,7 +46,7 @@ import pl.edu.icm.unity.types.registration.UserRequestState;
  */
 public abstract class RegistrationEmailFacility<T extends RegistrationEmailConfirmationState> extends BaseEmailFacility<T>
 {
-	private static final Logger LOG = Log.getLogger(Log.U_SERVER, RegistrationEmailFacility.class);
+	private static final Logger LOG = Log.getLogger(Log.U_SERVER_CONFIRMATION, RegistrationEmailFacility.class);
 	
 	protected final ObjectMapper mapper = Constants.MAPPER;
 	
@@ -57,13 +56,13 @@ public abstract class RegistrationEmailFacility<T extends RegistrationEmailConfi
 	protected EnquiryFormDB enquiresDB;
 	private ApplicationEventPublisher publisher;
 	private TxManager txMan;
-	private UnityMessageSource msg;
+	private MessageSource msg;
 
 
 	public RegistrationEmailFacility(RegistrationRequestDB requestDB, EnquiryResponseDB enquiryResponsesDB,
 			RegistrationFormDB formsDB, EnquiryFormDB enquiresDB,
 			ApplicationEventPublisher publisher,
-			TxManager txMan, UnityMessageSource msg)
+			TxManager txMan, MessageSource msg)
 	{
 		this.requestDB = requestDB;
 		this.enquiryResponsesDB = enquiryResponsesDB;
@@ -111,7 +110,7 @@ public abstract class RegistrationEmailFacility<T extends RegistrationEmailConfi
 			try
 			{
 				autoProcess(confirmResult.confirmationState, confirmResult.reqState, confirmResult.form.getName());
-			} catch (RuntimeEngineException e)
+			} catch (Exception e)
 			{
 				if (confirmResult.type == RequestType.REGISTRATION
 						&& e.getCause() instanceof IdentityExistsException)
@@ -119,7 +118,7 @@ public abstract class RegistrationEmailFacility<T extends RegistrationEmailConfi
 					return getRegistrationUserExistsFinalizationConfig(
 							(RegistrationForm) confirmResult.form, confirmResult.requestId);
 				}
-				LOG.error(e);
+				LOG.error("Auto-processing of a request bound to confirmation failed", e);
 			}
 		}
 		
@@ -218,17 +217,17 @@ public abstract class RegistrationEmailFacility<T extends RegistrationEmailConfi
 		{
 			RegistrationForm form = formsDB.get(formId);
 			String info = "Automatically processing registration request " + state.getRequestId()
-				+ " after confirmation [" + state.getType() + "]" + state.getValue() + " by "
-				+ state.getFacilityId() + ". Action: {0}";
+				+ " to form " + form.getName() + " after confirmation [" + state.getType() + "]" 
+				+ state.getValue() + " by " + state.getFacilityId() + ". Action: {0}";
 			publisher.publishEvent(new RegistrationRequestAutoProcessEvent(form, 
 					(RegistrationRequestState) reqState, info));
 		} else
 		{
+			EnquiryForm form = enquiresDB.get(formId);
 			String info = "Automatically processing enquiry response " + state.getRequestId()
-				+ " after confirmation [" + state.getType() + "]" + 
+				+ " to form " + form.getName() + " after confirmation [" + state.getType() + "]" + 
 				state.getValue() + " by "
 				+ state.getFacilityId() + ". Action: {0}";
-			EnquiryForm form = enquiresDB.get(formId);
 			publisher.publishEvent(new EnquiryResponseAutoProcessEvent(form, 
 					(EnquiryResponseState) reqState, info));
 		}

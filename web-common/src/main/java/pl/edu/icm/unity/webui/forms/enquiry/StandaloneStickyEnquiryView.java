@@ -14,9 +14,10 @@ import com.vaadin.ui.HorizontalLayout;
 import com.vaadin.ui.Label;
 import com.vaadin.ui.VerticalLayout;
 
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
-import pl.edu.icm.unity.webui.authn.StandardWebAuthenticationProcessor;
+import pl.edu.icm.unity.MessageSource;
+import pl.edu.icm.unity.webui.authn.StandardWebLogoutHandler;
 import pl.edu.icm.unity.webui.common.Styles;
+import pl.edu.icm.unity.webui.common.file.ImageAccessService;
 
 /**
  * Standalone view for sticky enquiry. Show remove last request button if
@@ -29,10 +30,11 @@ public class StandaloneStickyEnquiryView extends StandaloneEnquiryView
 {
 	private Runnable removeCallback;
 
-	StandaloneStickyEnquiryView(EnquiryResponseEditor editor, StandardWebAuthenticationProcessor authnProcessor,
-			UnityMessageSource msg, Callback callback, Runnable removeCallback)
+	StandaloneStickyEnquiryView(EnquiryResponseEditor editor, StandardWebLogoutHandler authnProcessor, 
+			ImageAccessService imageAccessService,
+			MessageSource msg, Callback callback, Runnable removeCallback)
 	{
-		super(editor, authnProcessor, msg, callback);
+		super(editor, authnProcessor, imageAccessService, msg, callback);
 		this.removeCallback = removeCallback;
 	}
 

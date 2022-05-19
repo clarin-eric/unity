@@ -113,4 +113,12 @@
 		<qualifier value="insecure"/>
 		<constructor-arg name="authz" ref="noauthz"/>
 	</bean>
+	<bean class="pl.edu.icm.unity.engine.PKIManagementImpl">
+		<qualifier value="insecure"/>
+		<constructor-arg name="authz" ref="noauthz"/>
+	</bean>
+	<bean class="pl.edu.icm.unity.engine.policyDocument.PolicyDocumentsManagementImpl">
+		<qualifier value="insecure"/>
+		<constructor-arg name="authz" ref="noauthz"/>
+	</bean>
 </beans>

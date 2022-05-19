@@ -25,10 +25,11 @@ import pl.edu.icm.unity.webui.authn.remote.AbstractRedirectRequestHandler;
 public class RedirectRequestHandler extends AbstractRedirectRequestHandler
 {
 	private static final Logger log = Log.getLogger(Log.U_SERVER_OAUTH, RedirectRequestHandler.class);
+	static final String REMOTE_AUTHN_CONTEXT = OAuth2Retrieval.class.getName()+".authnContext";
 	
 	public RedirectRequestHandler()
 	{
-		super(OAuth2Retrieval.REMOTE_AUTHN_CONTEXT);
+		super(REMOTE_AUTHN_CONTEXT);
 	}
 
 	@Override
@@ -39,10 +40,7 @@ public class RedirectRequestHandler extends AbstractRedirectRequestHandler
 		VaadinServletResponse rr = (VaadinServletResponse) response;
 		setCommonHeaders(response);
 		String redirectURL = context.getRequestURI().toString();
-		if (log.isDebugEnabled())
-		{
-			log.debug("Starting OAuth redirection to OAuth provider " + redirectURL);
-		}
+		log.info("Starting OAuth redirection to OAuth provider " + redirectURL);
 		rr.sendRedirect(redirectURL);
 		return true;
 	}

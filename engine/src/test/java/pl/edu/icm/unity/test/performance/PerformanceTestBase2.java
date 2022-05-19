@@ -31,10 +31,9 @@ import pl.edu.icm.unity.engine.api.EntityManagement;
 import pl.edu.icm.unity.engine.api.GroupsManagement;
 import pl.edu.icm.unity.engine.api.authn.InvocationContext;
 import pl.edu.icm.unity.engine.api.authn.LoginSession;
-import pl.edu.icm.unity.engine.api.identity.IdentityResolver;
 import pl.edu.icm.unity.engine.api.session.SessionManagement;
 import pl.edu.icm.unity.exceptions.EngineException;
-import pl.edu.icm.unity.stdext.attr.JpegImageAttributeSyntax;
+import pl.edu.icm.unity.stdext.attr.ImageAttributeSyntax;
 import pl.edu.icm.unity.stdext.attr.StringAttribute;
 import pl.edu.icm.unity.stdext.attr.StringAttributeSyntax;
 import pl.edu.icm.unity.stdext.credential.pass.PasswordToken;
@@ -88,8 +87,6 @@ public abstract class PerformanceTestBase2 extends SecuredDBIntegrationTestBase
 	protected AttributeTypeManagement attrTypesMan;
 	@Autowired
 	protected SessionManagement sessionMan;
-	@Autowired
-	protected IdentityResolver identityResolver;
 	
 	@Before
 	@Override
@@ -143,7 +140,7 @@ public abstract class PerformanceTestBase2 extends SecuredDBIntegrationTestBase
 		for (int i = 0; i < entities; i++)
 		{
 			Identity added1 = idsMan.addEntity(new IdentityParam(UsernameIdentity.ID,
-					"user" + i), CR_MOCK, EntityState.valid, false);
+					"user" + i), CR_MOCK, EntityState.valid);
 
 			eCredMan.setEntityCredential(new EntityParam(added1), "credential1",
 					new PasswordToken("PassWord8743#%$^&*").toJson());
@@ -152,7 +149,7 @@ public abstract class PerformanceTestBase2 extends SecuredDBIntegrationTestBase
 			{
 				IdentityParam toAdd = new IdentityParam(UsernameIdentity.ID, 
 						"user" + i + "_additional" + j);
-				idsMan.addIdentity(toAdd, new EntityParam(added1.getEntityId()), false);
+				idsMan.addIdentity(toAdd, new EntityParam(added1.getEntityId()));
 			}
 		}
 
@@ -237,8 +234,8 @@ public abstract class PerformanceTestBase2 extends SecuredDBIntegrationTestBase
 
 		for (int i = 0; i < attributeTypes; i++)
 		{
-			AttributeType type = new AttributeType("jpeg_" + i,
-					JpegImageAttributeSyntax.ID);
+			AttributeType type = new AttributeType("img_" + i,
+					ImageAttributeSyntax.ID);
 			type.setMaxElements(1000);
 			attrTypesMan.addAttributeType(type);
 		}

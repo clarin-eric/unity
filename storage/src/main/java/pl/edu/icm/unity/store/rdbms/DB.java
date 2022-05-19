@@ -8,14 +8,18 @@
 
 package pl.edu.icm.unity.store.rdbms;
 
+import static pl.edu.icm.unity.store.AppDataSchemaVersion.CURRENT;
+
+import java.util.List;
+
 import org.apache.ibatis.session.SqlSession;
 import org.apache.logging.log4j.Logger;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import eu.unicore.util.db.DBPropertiesHelper;
 import pl.edu.icm.unity.base.utils.Log;
 import pl.edu.icm.unity.exceptions.InternalException;
-import pl.edu.icm.unity.store.AppDataSchemaVersion;
 import pl.edu.icm.unity.store.StorageCleanerImpl;
 import pl.edu.icm.unity.store.StorageConfiguration;
 import pl.edu.icm.unity.store.StorageEngine;
@@ -46,7 +50,7 @@ public class DB implements StoreLoaderInternal
 	{
 		this.sessionMan = sessionMan;
 		this.initDB = initDB;
-		if (cfg.getEngine() == StorageEngine.rdbms || cfg.getEngine() == StorageEngine.hz)
+		if (cfg.getEngine() == StorageEngine.rdbms)
 			initialize(cfg);
 	}
 	
@@ -62,10 +66,10 @@ public class DB implements StoreLoaderInternal
 				"Have you initialized it? Are connection details correctly " +
 				"entered in configuration? The error was:\n\n" + e, e);
 		}
-		if (!actualDbVersion.equals(AppDataSchemaVersion.CURRENT.getDbVersion()))
+		if (!actualDbVersion.equals(String.valueOf(CURRENT.getAppSchemaVersion())))
 			throw new InternalException("The database is initialized with " +
 				"wrong schema. It is of version: " + actualDbVersion + 
-				" while you are using now version:" + AppDataSchemaVersion.CURRENT.getDbVersion());
+				" while you are using now version:" + CURRENT.getAppSchemaVersion());
 	}
 	
 	public String checkCurrentVersion(DBSessionManager sessionMan) throws Exception
@@ -82,7 +86,7 @@ public class DB implements StoreLoaderInternal
 	
 	public void initialize(StorageConfiguration config) throws Exception
 	{
-		log.info("Initializing RDBMS storage engine");
+		log.info("Initializing RDBMS storage engine {}", config.getEngineConfig().getValue(DBPropertiesHelper.URL));
 		initDB.initIfNeeded();
 		verifyDBVersion(sessionMan);
 		
@@ -99,7 +103,7 @@ public class DB implements StoreLoaderInternal
 			initDB.updateContents();
 		} catch (Exception e)
 		{
-			log.fatal("Update of database contents failded. You have to:\n1) Restore DB from backup\n"
+			log.fatal("Update of database contents failed. You have to:\n1) Restore DB from backup\n"
 					+ "2) Use the previous version of Unity\n"
 					+ "3) Report this problem with the exception following this "
 					+ "message to the Unity support mailing list"); 
@@ -128,5 +132,12 @@ public class DB implements StoreLoaderInternal
 	@Override
 	public void shutdown()
 	{
+	}
+
+	@Override
+	public void deletePreImport(List<String> contentType)
+	{
+		initDB.deletePreImport(SQLTransactionTL.getSql(), contentType);
+		
 	}
 }

@@ -6,6 +6,7 @@ package pl.edu.icm.unity.saml.idp.web.filter;
 
 import java.io.BufferedReader;
 import java.io.IOException;
+import java.util.Optional;
 
 import javax.servlet.Filter;
 import javax.servlet.FilterChain;
@@ -15,20 +16,19 @@ import javax.servlet.ServletRequest;
 import javax.servlet.ServletResponse;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
-import javax.servlet.http.HttpSession;
 
 import org.apache.logging.log4j.Logger;
 
 import pl.edu.icm.unity.base.utils.Log;
 import pl.edu.icm.unity.saml.SAMLProcessingException;
 import pl.edu.icm.unity.saml.idp.ctx.SAMLAuthnContext;
+import pl.edu.icm.unity.saml.idp.web.SamlSessionService;
 import pl.edu.icm.unity.webui.idpcommon.EopException;
 
 /**
  * Filter which is invoked prior to authentication. 
  * <p>
- * If a request comes to any other address then the SAML consumer servlet path, then the filter checks if a SAML context 
- * is available in the session. If not - the request is banned and an error page displayed.
+ * The filter checks if a SAML context is available in the session. If not - the request is banned and an error page displayed.
  * 
  * @author K. Benedyczak
  */
@@ -40,7 +40,6 @@ public class SamlGuardFilter implements Filter
 
 	public SamlGuardFilter(ErrorHandler errorHandler)
 	{
-		super();
 		this.errorHandler = errorHandler;
 	}
 
@@ -64,21 +63,19 @@ public class SamlGuardFilter implements Filter
 			throw new ServletException("This filter can be used only for HTTP servlets");
 		HttpServletRequest request = (HttpServletRequest) requestBare;
 		HttpServletResponse response = (HttpServletResponse) responseBare;
-		HttpSession session = request.getSession();
-		SAMLAuthnContext context = (SAMLAuthnContext) session.getAttribute(
-				SamlParseServlet.SESSION_SAML_CONTEXT); 
-
-		if (context == null)
+		
+		Optional<SAMLAuthnContext> context = SamlSessionService.getContext(request); 
+		if (!context.isPresent())
 		{
 			if (log.isDebugEnabled())
 			{
-				log.debug("Request to SAML post-processing address, without SAML context: " 
+				log.warn("Request to SAML post-processing address, without SAML context: " 
 						+ request.getRequestURI() + "?" + request.getQueryString());
 				if (log.isTraceEnabled())
 					dumpRequest(request);
 			}
 			errorHandler.showErrorPage(new SAMLProcessingException("No SAML context"), 
-					(HttpServletResponse) response);
+					response);
 			return;
 		} else
 		{

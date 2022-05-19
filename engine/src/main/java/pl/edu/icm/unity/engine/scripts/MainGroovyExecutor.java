@@ -18,7 +18,8 @@ import org.springframework.stereotype.Component;
 
 import eu.unicore.util.configuration.ConfigurationException;
 import groovy.lang.Binding;
-import pl.edu.icm.unity.base.event.Event;
+import pl.edu.icm.unity.MessageSource;
+import pl.edu.icm.unity.base.event.PersistableEvent;
 import pl.edu.icm.unity.base.utils.Log;
 import pl.edu.icm.unity.engine.api.AttributeClassManagement;
 import pl.edu.icm.unity.engine.api.AttributeTypeManagement;
@@ -47,7 +48,9 @@ import pl.edu.icm.unity.engine.api.event.EventCategory;
 import pl.edu.icm.unity.engine.api.identity.IdentityTypeSupport;
 import pl.edu.icm.unity.engine.api.initializers.ScriptConfiguration;
 import pl.edu.icm.unity.engine.api.initializers.ScriptType;
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
+import pl.edu.icm.unity.engine.api.session.SessionManagement;
+import pl.edu.icm.unity.engine.api.token.TokensManagement;
+import pl.edu.icm.unity.engine.api.translation.form.RegistrationFormTranslationActionGenerator;
 import pl.edu.icm.unity.engine.api.utils.GroupDelegationConfigGenerator;
 
 /**
@@ -59,10 +62,10 @@ import pl.edu.icm.unity.engine.api.utils.GroupDelegationConfigGenerator;
 @Component
 public class MainGroovyExecutor
 {
-	private static final Logger LOG = Log.getLogger(Log.U_SERVER, MainGroovyExecutor.class);
+	private static final Logger LOG = Log.getLogger(Log.U_SERVER_SCRIPT, MainGroovyExecutor.class);
 	
 	@Autowired
-	private UnityMessageSource unityMessageSource;
+	private MessageSource unityMessageSource;
 	@Autowired
 	private UnityServerConfiguration config;
 	@Autowired
@@ -136,12 +139,16 @@ public class MainGroovyExecutor
 	@Autowired
 	@Qualifier("insecure")
 	private GroupDelegationConfigGenerator groupDelegationConfigGenerator;
-	
-	
 	@Autowired
-	private ApplicationContext applCtx;
+	private SessionManagement sessionManagement;
+	@Autowired
+	private RegistrationFormTranslationActionGenerator regTranslationActionGenerator;
+	@Autowired
+	private TokensManagement tokensManagement;
+	@Autowired
+	private ApplicationContext applicationContext;
 	
-	public void run(ScriptConfiguration conf, Event event)
+	public void run(ScriptConfiguration conf, PersistableEvent event)
 	{
 		if (conf == null || conf.getType() != ScriptType.groovy)
 			throw new IllegalArgumentException(
@@ -169,7 +176,7 @@ public class MainGroovyExecutor
 		try
 		{
 			InputStream is = location.startsWith("classpath:") ?
-					applCtx.getResource(location).getInputStream() :
+					applicationContext.getResource(location).getInputStream() :
 					new FileInputStream(location);
 			return new InputStreamReader(is);
 		} catch (IOException e)
@@ -178,7 +185,7 @@ public class MainGroovyExecutor
 		}
 	}
 
-	Binding getBinding(Event event)
+	Binding getBinding(PersistableEvent event)
 	{
 		Binding binding = new Binding();
 		binding.setVariable("event", event.getTrigger());
@@ -209,6 +216,10 @@ public class MainGroovyExecutor
 		binding.setVariable("attributeTypeSupport", attributeTypeSupport);
 		binding.setVariable("identityTypeSupport", identityTypeSupport);
 		binding.setVariable("groupDelegationConfigGenerator", groupDelegationConfigGenerator);
+		binding.setVariable("sessionManagement", sessionManagement);
+		binding.setVariable("regTranslationActionGenerator", regTranslationActionGenerator);
+		binding.setVariable("tokensManagement", tokensManagement);
+		binding.setVariable("applicationContext", applicationContext);
 		boolean coldStart = false;
 		if (event.getTrigger().equals(EventCategory.POST_INIT.toString()) || 
 				event.getTrigger().equals(EventCategory.PRE_INIT.toString()))

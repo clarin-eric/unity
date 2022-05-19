@@ -18,7 +18,7 @@ import pl.edu.icm.unity.engine.api.endpoint.EndpointInstance;
 import pl.edu.icm.unity.engine.api.endpoint.SharedEndpointManagement;
 import pl.edu.icm.unity.exceptions.EngineException;
 import pl.edu.icm.unity.saml.metadata.MultiMetadataServlet;
-import pl.edu.icm.unity.saml.metadata.cfg.RemoteMetaManager;
+import pl.edu.icm.unity.saml.metadata.cfg.SPRemoteMetaManager;
 import pl.edu.icm.unity.types.endpoint.EndpointTypeDescription;
 import pl.edu.icm.unity.ws.authn.WebServiceAuthentication;
 
@@ -33,13 +33,10 @@ public class ECPEndpointFactory implements EndpointFactory
 	public static final String SERVLET_PATH = "/saml2-ecp";
 	public static final String NAME = "SAML-ECP";
 	
-	private ObjectFactory<ECPEndpoint> factory;
-	
-	private EndpointTypeDescription description;
-	
-	private MultiMetadataServlet metadataServlet;
-
-	private Map<String, RemoteMetaManager> remoteMetadataManagers;
+	private final ObjectFactory<ECPEndpoint> factory;
+	private final EndpointTypeDescription description;
+	private final MultiMetadataServlet metadataServlet;
+	private final Map<String, SPRemoteMetaManager> remoteMetadataManagersBySamlId;
 	
 	@Autowired
 	public ECPEndpointFactory(SharedEndpointManagement sharedEndpointManagement,
@@ -50,7 +47,7 @@ public class ECPEndpointFactory implements EndpointFactory
 		metadataServlet = new MultiMetadataServlet(METADATA_SERVLET_PATH);
 		sharedEndpointManagement.deployInternalEndpointServlet(METADATA_SERVLET_PATH, 
 				new ServletHolder(metadataServlet), false);
-		this.remoteMetadataManagers = Collections.synchronizedMap(new HashMap<String, RemoteMetaManager>());
+		this.remoteMetadataManagersBySamlId = Collections.synchronizedMap(new HashMap<>());
 	}
 	
 	private static EndpointTypeDescription initDescription()
@@ -72,7 +69,7 @@ public class ECPEndpointFactory implements EndpointFactory
 	public EndpointInstance newInstance()
 	{
 		ECPEndpoint endpoint = factory.getObject();
-		endpoint.init(remoteMetadataManagers, metadataServlet);
+		endpoint.init(remoteMetadataManagersBySamlId, metadataServlet);
 		return endpoint;
 	}
 }

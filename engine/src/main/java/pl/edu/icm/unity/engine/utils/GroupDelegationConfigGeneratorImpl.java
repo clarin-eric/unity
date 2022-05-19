@@ -17,17 +17,17 @@ import org.springframework.stereotype.Component;
 
 import com.google.common.collect.Lists;
 
+import pl.edu.icm.unity.MessageSource;
 import pl.edu.icm.unity.base.msgtemplates.reg.AcceptRegistrationTemplateDef;
 import pl.edu.icm.unity.base.msgtemplates.reg.InvitationTemplateDef;
 import pl.edu.icm.unity.base.msgtemplates.reg.NewEnquiryTemplateDef;
 import pl.edu.icm.unity.base.msgtemplates.reg.RejectRegistrationTemplateDef;
 import pl.edu.icm.unity.base.msgtemplates.reg.UpdateRegistrationTemplateDef;
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
+import pl.edu.icm.unity.engine.api.translation.form.RegistrationMVELContextKey;
 import pl.edu.icm.unity.engine.api.translation.form.TranslatedRegistrationRequest.AutomaticRequestAction;
 import pl.edu.icm.unity.engine.api.utils.GroupDelegationConfigGenerator;
 import pl.edu.icm.unity.engine.attribute.AttributesHelper;
 import pl.edu.icm.unity.engine.server.EngineInitialization;
-import pl.edu.icm.unity.engine.translation.form.RegistrationMVELContext.ContextKey;
 import pl.edu.icm.unity.engine.translation.form.action.AddToGroupActionFactory;
 import pl.edu.icm.unity.engine.translation.form.action.AutoProcessActionFactory;
 import pl.edu.icm.unity.exceptions.EngineException;
@@ -48,6 +48,7 @@ import pl.edu.icm.unity.types.registration.CredentialRegistrationParam;
 import pl.edu.icm.unity.types.registration.EnquiryForm;
 import pl.edu.icm.unity.types.registration.EnquiryFormBuilder;
 import pl.edu.icm.unity.types.registration.EnquiryFormNotifications;
+import pl.edu.icm.unity.types.registration.GroupRegistrationParam;
 import pl.edu.icm.unity.types.registration.ParameterRetrievalSettings;
 import pl.edu.icm.unity.types.registration.RegistrationForm;
 import pl.edu.icm.unity.types.registration.RegistrationFormBuilder;
@@ -67,7 +68,7 @@ import pl.edu.icm.unity.types.translation.TranslationRule;
 @Primary
 public class GroupDelegationConfigGeneratorImpl implements GroupDelegationConfigGenerator
 {
-	private UnityMessageSource msg;
+	private MessageSource msg;
 	private RegistrationFormDB regFormDB;
 	private MessageTemplateDB messageDB;
 	private EnquiryFormDB enqFormDB;
@@ -75,7 +76,7 @@ public class GroupDelegationConfigGeneratorImpl implements GroupDelegationConfig
 	private AttributesHelper attrHelper;
 
 	@Autowired
-	public GroupDelegationConfigGeneratorImpl(UnityMessageSource msg, RegistrationFormDB regFormDB,
+	public GroupDelegationConfigGeneratorImpl(MessageSource msg, RegistrationFormDB regFormDB,
 			MessageTemplateDB messageDB, EnquiryFormDB enqFormDB, AttributesHelper attrHelper,
 			GroupDAO groupDB)
 	{
@@ -157,8 +158,8 @@ public class GroupDelegationConfigGeneratorImpl implements GroupDelegationConfig
 			return ret;
 		}
 
-		if (form.getIdentityParams() == null || form.getIdentityParams().size() != 1
-				|| !form.getIdentityParams().get(0).getIdentityType().equals(EmailIdentity.ID))
+		if (form.getIdentityParams() == null || form.getIdentityParams().isEmpty() ||
+				!form.getIdentityParams().get(0).getIdentityType().equals(EmailIdentity.ID))
 		{
 			ret.add(msg.getMessage("FormGenerator.noEmailIdentity"));
 		}
@@ -233,7 +234,7 @@ public class GroupDelegationConfigGeneratorImpl implements GroupDelegationConfig
 
 	@Transactional
 	@Override
-	public RegistrationForm generateRegistrationForm(String groupPath, String logo, List<String> attributes)
+	public RegistrationForm generateProjectRegistrationForm(String groupPath, String logo, List<String> attributes)
 			throws EngineException
 	{
 
@@ -256,7 +257,7 @@ public class GroupDelegationConfigGeneratorImpl implements GroupDelegationConfig
 				.withOptional(true)
 				.endIdentityParam()
 				.withAddedGroupParam()
-				.withLabel(msg.getMessage("FormGenerator.selectGroups"))
+				.withLabel(msg.getMessage("FormGenerator.yourGroups"))
 				.withGroupPath(groupPath + "/?*/**")
 				.withRetrievalSettings(ParameterRetrievalSettings.interactive).withMultiselect(true)
 				.endGroupParam().withFormLayoutSettings(getDefaultLayoutSettings(logo))
@@ -283,7 +284,7 @@ public class GroupDelegationConfigGeneratorImpl implements GroupDelegationConfig
 
 	@Transactional
 	@Override
-	public EnquiryForm generateJoinEnquiryForm(String groupPath, String logo) throws EngineException
+	public EnquiryForm generateProjectJoinEnquiryForm(String groupPath, String logo) throws EngineException
 	{
 
 		Set<String> actualForms = enqFormDB.getAll().stream().map(r -> r.getName()).collect(Collectors.toSet());
@@ -294,7 +295,7 @@ public class GroupDelegationConfigGeneratorImpl implements GroupDelegationConfig
 						groupDisplayedName, actualForms))
 				.withTargetGroups(new String[] { "/" }).withType(EnquiryForm.EnquiryType.STICKY)
 				.withTargetCondition("!(groups contains '" + groupPath + "')")
-				.withAddedGroupParam().withLabel(msg.getMessage("FormGenerator.selectGroups"))
+				.withAddedGroupParam().withLabel(msg.getMessage("FormGenerator.yourGroups"))
 				.withMultiselect(true).withGroupPath(groupPath + "/?*/**")
 				.withRetrievalSettings(ParameterRetrievalSettings.interactive).endGroupParam()
 				.withDisplayedName(new I18nString(msg.getLocaleCode(),
@@ -306,7 +307,7 @@ public class GroupDelegationConfigGeneratorImpl implements GroupDelegationConfig
 
 	@Transactional
 	@Override
-	public EnquiryForm generateUpdateEnquiryForm(String groupPath, String logo) throws EngineException
+	public EnquiryForm generateProjectUpdateEnquiryForm(String groupPath, String logo) throws EngineException
 	{
 
 		Set<String> actualForms = enqFormDB.getAll().stream().map(r -> r.getName()).collect(Collectors.toSet());
@@ -316,7 +317,7 @@ public class GroupDelegationConfigGeneratorImpl implements GroupDelegationConfig
 				.withName(generateName(msg.getMessage("FormGenerator.updateEnquiryNameSuffix"),
 						groupDisplayedName, actualForms))
 				.withTargetGroups(new String[] { groupPath }).withType(EnquiryForm.EnquiryType.STICKY)
-				.withAddedGroupParam().withLabel(msg.getMessage("FormGenerator.selectGroups"))
+				.withAddedGroupParam().withLabel(msg.getMessage("FormGenerator.yourGroups"))
 				.withMultiselect(true).withGroupPath(groupPath + "/?*/**")
 				.withRetrievalSettings(ParameterRetrievalSettings.interactive).endGroupParam()
 				.withDisplayedName(new I18nString(msg.getLocaleCode(),
@@ -325,11 +326,131 @@ public class GroupDelegationConfigGeneratorImpl implements GroupDelegationConfig
 				.withFormLayoutSettings(getDefaultLayoutSettings(logo))
 				.build();
 	}
+	
+	@Transactional
+	@Override
+	public RegistrationForm generateSubprojectRegistrationForm(String toCopyName, String projectPath, String subprojectPath, String logo)
+	{
+		Set<String> actualForms = regFormDB.getAll().stream().map(r -> r.getName()).collect(Collectors.toSet());
+		String groupDisplayedName = getGroupDisplayedName(subprojectPath);
+		RegistrationForm toCopy = regFormDB.get(toCopyName);
+	
+		FormLayoutSettings formLayoutSettings = toCopy.getLayoutSettings();
+		formLayoutSettings.setLogoURL(logo);
+		
+		return new RegistrationFormBuilder(toCopy)
+				.withName(generateName(msg.getMessage("FormGenerator.registrationNameSuffix"),
+						groupDisplayedName, actualForms))
+				.withGroupParams(updateGroupParams(toCopy.getGroupParams(), projectPath, subprojectPath))
+				.withFormLayoutSettings(formLayoutSettings)
+				.withDisplayedName(new I18nString(msg.getLocaleCode(),
+						msg.getMessage("FormGenerator.joinTitle", groupDisplayedName)))
+				.withTranslationProfile(updateTranslationProfile(toCopy.getTranslationProfile(), projectPath, subprojectPath)).build();		
+	}
+	
+	@Transactional
+	@Override
+	public EnquiryForm generateSubprojectJoinEnquiryForm(String toCopyName, String projectPath, String subprojectPath, String logo)
+	{
+		
+		Set<String> actualForms = enqFormDB.getAll().stream().map(r -> r.getName()).collect(Collectors.toSet());
+		String groupDisplayedName = getGroupDisplayedName(subprojectPath);
+		EnquiryForm toCopy = enqFormDB.get(toCopyName);
+		FormLayoutSettings formLayoutSettings = toCopy.getLayoutSettings();
+		formLayoutSettings.setLogoURL(logo);
+		return new EnquiryFormBuilder(toCopy)
+				.withName(generateName(msg.getMessage("FormGenerator.joinEnquiryNameSuffix"),
+						groupDisplayedName, actualForms))
+				.withTargetGroups(toCopy.getTargetGroups())
+				.withTargetCondition("!(groups contains '" + subprojectPath + "')")
+				.withGroupParams(updateGroupParams(toCopy.getGroupParams(), projectPath, subprojectPath))
+				
+				.withDisplayedName(new I18nString(msg.getLocaleCode(),
+						msg.getMessage("FormGenerator.joinTitle", groupDisplayedName)))
+				.withFormLayoutSettings(formLayoutSettings)
+				.withTranslationProfile(updateTranslationProfile(toCopy.getTranslationProfile(), projectPath, subprojectPath))
+				.build();
+	}
+	
+	@Transactional
+	@Override
+	public EnquiryForm generateSubprojectUpdateEnquiryForm(String toCopyName, String projectPath, String subprojectPath, String logo)
+	{
+		
+		Set<String> actualForms = enqFormDB.getAll().stream().map(r -> r.getName()).collect(Collectors.toSet());
+		String groupDisplayedName = getGroupDisplayedName(subprojectPath);
+		EnquiryForm toCopy = enqFormDB.get(toCopyName);
+		FormLayoutSettings formLayoutSettings = toCopy.getLayoutSettings();
+		formLayoutSettings.setLogoURL(logo);
+		
+		return new EnquiryFormBuilder(toCopy)
+				.withName(generateName(msg.getMessage("FormGenerator.updateEnquiryNameSuffix"),
+						groupDisplayedName, actualForms))
+				.withTargetGroups(new String[] { subprojectPath })
+				.withGroupParams(updateGroupParams(toCopy.getGroupParams(), projectPath, subprojectPath))
+				.withDisplayedName(new I18nString(msg.getLocaleCode(),
+						msg.getMessage("FormGenerator.updateTitle",
+								groupDisplayedName)))
+				.withFormLayoutSettings(formLayoutSettings)
+				.build();
+	}
+		
+
+	
+	private List<GroupRegistrationParam> updateGroupParams(List<GroupRegistrationParam> toUpdate, String projectPath, String subprojectPath)
+	{
+		List<GroupRegistrationParam> groupParams = new ArrayList<>();
+		for (GroupRegistrationParam groupParam : toUpdate)
+		{
+			GroupRegistrationParam newGroupParam = new GroupRegistrationParam();
+			newGroupParam.setDescription(groupParam.getDescription());
+			newGroupParam.setIncludeGroupsMode(groupParam.getIncludeGroupsMode());
+			newGroupParam.setGroupPath(groupParam.getGroupPath());
+			newGroupParam.setLabel(groupParam.getLabel());
+			newGroupParam.setRetrievalSettings(groupParam.getRetrievalSettings());
+			newGroupParam.setMultiSelect(groupParam.isMultiSelect());
+			
+			if (newGroupParam.getGroupPath().equals(projectPath + "/?*/**"))
+			{
+				newGroupParam.setGroupPath(subprojectPath + "/?*/**");
+			}else if (newGroupParam.getGroupPath().equals(projectPath))
+			{
+				newGroupParam.setGroupPath(subprojectPath);
+			}
+			groupParams.add(newGroupParam);
+		}
+		return groupParams;
+	}
+	
+	private TranslationProfile updateTranslationProfile(TranslationProfile toUpdate, String projectPath,
+			String subprojectPath)
+	{
+		List<TranslationRule> rules = new ArrayList<>();
+		for (TranslationRule rule : toUpdate.getRules())
+		{
+			if (rule.getAction().getName().equals(AddToGroupActionFactory.NAME))
+			{
+				String[] params = rule.getAction().getParameters();
+				for (int i = 0; i < params.length; i++)
+				{
+					params[i] = params[i].replace(projectPath, subprojectPath);
+				}
+
+				TranslationRule nrule = new TranslationRule(rule.getCondition(),
+						new TranslationAction(rule.getAction().getName(), params));
+				rules.add(nrule);
+			} else
+			{
+				rules.add(rule);
+			}
+		}
+
+		return new TranslationProfile("autoProfile", "", ProfileType.REGISTRATION, rules);
+	}
 
 	private RegistrationFormNotifications getDefaultRegistrationNotificationConfig()
 	{
 		RegistrationFormNotifications not = new RegistrationFormNotifications();
-		not.setInvitationTemplate(getDefaultInvitationTemplate());
 		not.setInvitationTemplate(getDefaultInvitationTemplate());
 		not.setAcceptedTemplate(getDefaultAcceptTemplate());
 		not.setRejectedTemplate(getDefaultRejectTemplate());
@@ -389,7 +510,7 @@ public class GroupDelegationConfigGeneratorImpl implements GroupDelegationConfig
 				new String[] { "\"" + group + "\"" });
 
 		List<TranslationRule> rules = Lists.newArrayList(
-				new TranslationRule(ContextKey.validCode.toString() + " == true", a1),
+				new TranslationRule(RegistrationMVELContextKey.validCode.toString() + " == true", a1),
 				new TranslationRule("true", a2));
 
 		TranslationProfile tp = new TranslationProfile("autoProfile" , "", ProfileType.REGISTRATION, rules);

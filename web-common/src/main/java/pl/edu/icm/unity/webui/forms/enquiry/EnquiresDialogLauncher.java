@@ -5,21 +5,22 @@
 package pl.edu.icm.unity.webui.forms.enquiry;
 
 import java.util.List;
+import java.util.Optional;
 
 import org.apache.logging.log4j.Logger;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import pl.edu.icm.unity.MessageSource;
 import pl.edu.icm.unity.base.utils.Log;
-import pl.edu.icm.unity.engine.api.authn.remote.RemotelyAuthenticatedContext;
+import pl.edu.icm.unity.engine.api.authn.remote.RemotelyAuthenticatedPrincipal;
 import pl.edu.icm.unity.engine.api.finalization.WorkflowFinalizationConfiguration;
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
 import pl.edu.icm.unity.exceptions.WrongArgumentException;
 import pl.edu.icm.unity.types.registration.EnquiryForm;
 import pl.edu.icm.unity.types.registration.EnquiryForm.EnquiryType;
 import pl.edu.icm.unity.types.registration.EnquiryResponse;
 import pl.edu.icm.unity.types.registration.RegistrationContext.TriggeringMode;
-import pl.edu.icm.unity.webui.authn.StandardWebAuthenticationProcessor;
+import pl.edu.icm.unity.webui.authn.StandardWebLogoutHandler;
 import pl.edu.icm.unity.webui.common.NotificationPopup;
 
 /**
@@ -31,14 +32,14 @@ import pl.edu.icm.unity.webui.common.NotificationPopup;
 public class EnquiresDialogLauncher
 {
 	private static final Logger log = Log.getLogger(Log.U_SERVER_WEB, EnquiresDialogLauncher.class);
-	private UnityMessageSource msg;
+	private MessageSource msg;
 	private EnquiryResponseEditorController enquiryController;
-	private StandardWebAuthenticationProcessor authnProcessor;
+	private StandardWebLogoutHandler authnProcessor;
 	
 	@Autowired
-	public EnquiresDialogLauncher(UnityMessageSource msg,
+	public EnquiresDialogLauncher(MessageSource msg,
 			EnquiryResponseEditorController enquiryController,
-			StandardWebAuthenticationProcessor authnProcessor)
+			StandardWebLogoutHandler authnProcessor)
 	{
 		this.msg = msg;
 		this.enquiryController = enquiryController;
@@ -60,8 +61,8 @@ public class EnquiresDialogLauncher
 		EnquiryResponseEditor editor;
 		try
 		{
-			editor = enquiryController.getEditorInstance(enquiry, 
-					RemotelyAuthenticatedContext.getLocalContext());
+			editor = enquiryController.getEditorInstanceForAuthenticatedUser(enquiry, 
+					RemotelyAuthenticatedPrincipal.getLocalContext());
 		} catch (Exception e)
 		{
 			log.error("Can't create an editor for enquiry form " + enquiry.getName(), e);
@@ -90,7 +91,7 @@ public class EnquiresDialogLauncher
 		public void newRequest(EnquiryResponse request) throws WrongArgumentException
 		{
 			WorkflowFinalizationConfiguration submitted = enquiryController.submitted(request, formsToFill.get(currentFormIndex), 
-					TriggeringMode.manualAtLogin);
+					TriggeringMode.manualAtLogin, Optional.empty());
 			//auto redirect is ignored when in dialog
 			if (!submitted.autoRedirect && !submitted.success)
 			{

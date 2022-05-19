@@ -20,16 +20,20 @@ import org.eclipse.jetty.servlet.FilterHolder;
 import org.eclipse.jetty.servlet.ServletContextHandler;
 import org.eclipse.jetty.servlet.ServletHolder;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Primary;
 
 import eu.unicore.samly2.SAMLConstants;
 import eu.unicore.samly2.webservice.SAMLLogoutInterface;
 import eu.unicore.util.configuration.ConfigurationException;
+import pl.edu.icm.unity.MessageSource;
 import pl.edu.icm.unity.engine.api.PKIManagement;
 import pl.edu.icm.unity.engine.api.attributes.AttributeTypeSupport;
+import pl.edu.icm.unity.engine.api.authn.RememberMeProcessor;
 import pl.edu.icm.unity.engine.api.config.UnityServerConfiguration;
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
+import pl.edu.icm.unity.engine.api.files.URIAccessService;
+import pl.edu.icm.unity.engine.api.server.AdvertisedAddressProvider;
 import pl.edu.icm.unity.engine.api.server.NetworkServer;
 import pl.edu.icm.unity.engine.api.session.LoginToHttpSessionBinder;
 import pl.edu.icm.unity.engine.api.session.SessionManagement;
@@ -41,6 +45,7 @@ import pl.edu.icm.unity.engine.api.utils.RoutingServlet;
 import pl.edu.icm.unity.exceptions.EngineException;
 import pl.edu.icm.unity.saml.idp.IdpSamlTrustProvider;
 import pl.edu.icm.unity.saml.idp.SamlIdpProperties;
+import pl.edu.icm.unity.saml.idp.SamlIdpStatisticReporter.SamlIdpStatisticReporterFactory;
 import pl.edu.icm.unity.saml.idp.web.filter.ErrorHandler;
 import pl.edu.icm.unity.saml.idp.web.filter.IdpConsentDeciderServletFactory;
 import pl.edu.icm.unity.saml.idp.web.filter.SamlGuardFilter;
@@ -66,7 +71,7 @@ import pl.edu.icm.unity.webui.authn.AuthenticationUI;
 import pl.edu.icm.unity.webui.authn.CancelHandler;
 import pl.edu.icm.unity.webui.authn.InvocationContextSetupFilter;
 import pl.edu.icm.unity.webui.authn.ProxyAuthenticationFilter;
-import pl.edu.icm.unity.webui.authn.RememberMeProcessor;
+import pl.edu.icm.unity.webui.authn.remote.RemoteRedirectedAuthnResponseProcessingFilter;
 import pl.edu.icm.unity.ws.CXFUtils;
 import pl.edu.icm.unity.ws.XmlBeansNsHackOutHandler;
 import xmlbeans.org.oasis.saml2.metadata.EndpointType;
@@ -98,36 +103,55 @@ public class SamlAuthVaadinEndpoint extends VaadinEndpoint
 	protected IdpConsentDeciderServletFactory dispatcherServletFactory;
 	private SAMLLogoutProcessorFactory logoutProcessorFactory;
 	private SLOReplyInstaller sloReplyInstaller;
-	private UnityMessageSource msg;
+	private MessageSource msg;
 	protected AttributeTypeSupport aTypeSupport;
 	private RemoteMetadataService metadataService;
+	private URIAccessService uriAccessService;
+	private final SamlIdpStatisticReporterFactory idpStatisticReporterFactory;
 	
 	@Autowired
 	public SamlAuthVaadinEndpoint(NetworkServer server,
-			ApplicationContext applicationContext, FreemarkerAppHandler freemarkerHandler,
-			PKIManagement pkiManagement,
-			ExecutorsService executorsService, 
+			ApplicationContext applicationContext,
+			FreemarkerAppHandler freemarkerHandler,
+			@Qualifier("insecure") PKIManagement pkiManagement,
+			ExecutorsService executorsService,
 			IdpConsentDeciderServletFactory dispatcherServletFactory,
-			SAMLLogoutProcessorFactory logoutProcessorFactory, SLOReplyInstaller sloReplyInstaller,
-			UnityMessageSource msg, AttributeTypeSupport aTypeSupport,
-			RemoteMetadataService metadataService)
+			SAMLLogoutProcessorFactory logoutProcessorFactory,
+			SLOReplyInstaller sloReplyInstaller,
+			MessageSource msg,
+			AttributeTypeSupport aTypeSupport,
+			RemoteMetadataService metadataService,
+			URIAccessService uriAccessService,
+			AdvertisedAddressProvider advertisedAddrProvider,
+			RemoteRedirectedAuthnResponseProcessingFilter remoteAuthnResponseProcessingFilter,
+			SamlIdpStatisticReporterFactory idpStatisticReporterFactory)
 	{
-		this(SAML_CONSUMER_SERVLET_PATH, server, applicationContext, freemarkerHandler, SamlIdPWebUI.class, 
-				pkiManagement, executorsService, dispatcherServletFactory, 
-				logoutProcessorFactory, sloReplyInstaller, msg, 
-				aTypeSupport, metadataService);
+		this(SAML_CONSUMER_SERVLET_PATH, server, advertisedAddrProvider, applicationContext, freemarkerHandler,
+				SamlIdPWebUI.class, pkiManagement, executorsService, dispatcherServletFactory, logoutProcessorFactory,
+				sloReplyInstaller, msg, aTypeSupport, metadataService, uriAccessService,
+				remoteAuthnResponseProcessingFilter, idpStatisticReporterFactory);
 	}
-	
-	protected SamlAuthVaadinEndpoint(String publicEntryServletPath, NetworkServer server,
-			ApplicationContext applicationContext, FreemarkerAppHandler freemarkerHandler,
-			Class<?> uiClass, PKIManagement pkiManagement,
-			ExecutorsService executorsService, 
+
+	protected SamlAuthVaadinEndpoint(String publicEntryServletPath,
+			NetworkServer server,
+			AdvertisedAddressProvider advertisedAddrProvider,
+			ApplicationContext applicationContext,
+			FreemarkerAppHandler freemarkerHandler,
+			Class<?> uiClass,
+			PKIManagement pkiManagement,
+			ExecutorsService executorsService,
 			IdpConsentDeciderServletFactory dispatcherServletFactory,
-			SAMLLogoutProcessorFactory logoutProcessorFactory, SLOReplyInstaller sloReplyInstaller,
-			UnityMessageSource msg, AttributeTypeSupport aTypeSupport,
-			RemoteMetadataService metadataService)
+			SAMLLogoutProcessorFactory logoutProcessorFactory,
+			SLOReplyInstaller sloReplyInstaller,
+			MessageSource msg,
+			AttributeTypeSupport aTypeSupport,
+			RemoteMetadataService metadataService,
+			URIAccessService uriAccessService,
+			RemoteRedirectedAuthnResponseProcessingFilter remoteAuthnResponseProcessingFilter,
+			SamlIdpStatisticReporterFactory idpStatisticReporterFactory)
 	{
-		super(server, msg, applicationContext, uiClass.getSimpleName(), SAML_UI_SERVLET_PATH);
+		super(server, advertisedAddrProvider, msg, applicationContext, uiClass.getSimpleName(), SAML_UI_SERVLET_PATH,
+				remoteAuthnResponseProcessingFilter);
 		this.publicEntryPointPath = publicEntryServletPath;
 		this.freemarkerHandler = freemarkerHandler;
 		this.dispatcherServletFactory = dispatcherServletFactory;
@@ -138,6 +162,8 @@ public class SamlAuthVaadinEndpoint extends VaadinEndpoint
 		this.msg = msg;
 		this.aTypeSupport = aTypeSupport;
 		this.metadataService = metadataService;
+		this.uriAccessService = uriAccessService;
+		this.idpStatisticReporterFactory = idpStatisticReporterFactory;
 	}
 	
 	@Override
@@ -186,6 +212,9 @@ public class SamlAuthVaadinEndpoint extends VaadinEndpoint
 		ServletHolder samlParseHolder = createServletHolder(samlParseServlet, true);
 		context.addServlet(samlParseHolder, publicEntryPointPath + "/*");
 
+		context.addFilter(new FilterHolder(remoteAuthnResponseProcessingFilter), "/*", 
+				EnumSet.of(DispatcherType.REQUEST));
+		
 		Filter samlGuardFilter = new SamlGuardFilter(new ErrorHandler(aTypeSupport, freemarkerHandler));
 		context.addFilter(new FilterHolder(samlGuardFilter), SAML_ENTRY_SERVLET_PATH, 
 				EnumSet.of(DispatcherType.REQUEST, DispatcherType.FORWARD));
@@ -195,7 +224,7 @@ public class SamlAuthVaadinEndpoint extends VaadinEndpoint
 		context.addServlet(routingServletHolder, SAML_ENTRY_SERVLET_PATH + "/*");
 		
 		Servlet samlConsentDeciderServlet = dispatcherServletFactory.getInstance(
-				SAML_UI_SERVLET_PATH, AUTHENTICATION_PATH);
+				SAML_UI_SERVLET_PATH, AUTHENTICATION_PATH, description.getEndpoint());
 		ServletHolder samlConsentDeciderHolder = createServletHolder(samlConsentDeciderServlet, true);
 		context.addServlet(samlConsentDeciderHolder, SAML_CONSENT_DECIDER_SERVLET_PATH + "/*");
 		
@@ -226,7 +255,8 @@ public class SamlAuthVaadinEndpoint extends VaadinEndpoint
 
 		proxyAuthnFilter = new ProxyAuthenticationFilter(authenticationFlows, 
 				description.getEndpoint().getContextAddress(),
-				genericEndpointProperties.getBooleanValue(VaadinEndpointProperties.AUTO_LOGIN));
+				genericEndpointProperties.getBooleanValue(VaadinEndpointProperties.AUTO_LOGIN),
+				description.getRealm());
 		context.addFilter(new FilterHolder(proxyAuthnFilter), AUTHENTICATION_PATH + "/*", 
 				EnumSet.of(DispatcherType.REQUEST, DispatcherType.FORWARD));
 
@@ -241,7 +271,7 @@ public class SamlAuthVaadinEndpoint extends VaadinEndpoint
 				registrationConfiguration, properties, 
 				getBootstrapHandler4Authn(SAML_ENTRY_SERVLET_PATH));
 		
-		CancelHandler cancelHandler = new SamlAuthnCancelHandler(freemarkerHandler, aTypeSupport);
+		CancelHandler cancelHandler = new SamlAuthnCancelHandler(freemarkerHandler, aTypeSupport, idpStatisticReporterFactory, description.getEndpoint());
 		authenticationServlet.setCancelHandler(cancelHandler);
 		
 		ServletHolder authnServletHolder = createVaadinServletHolder(authenticationServlet, true);
@@ -286,11 +316,11 @@ public class SamlAuthVaadinEndpoint extends VaadinEndpoint
 		sloRedirect.setResponseLocation(sloReplyInstaller.getServletURL());
 		sloRedirect.setBinding(SAMLConstants.BINDING_HTTP_REDIRECT);
 		EndpointType sloSoap = EndpointType.Factory.newInstance();
-		sloSoap.setLocation(sloSoapEndpointURL);
+		sloSoap.setLocation(sloSoapEndpointURL + "/SingleLogoutService");
 		sloSoap.setBinding(SAMLConstants.BINDING_SOAP);
 		EndpointType[] sloEndpoints = new EndpointType[] {sloPost, sloRedirect, sloSoap};
 		
-		MetadataProvider provider = MetadataProviderFactory.newIdpInstance(samlProperties, 
+		MetadataProvider provider = MetadataProviderFactory.newIdpInstance(samlProperties, uriAccessService, 
 				executorsService, authnEndpoints, null, sloEndpoints);
 		return new MetadataServlet(provider);
 	}

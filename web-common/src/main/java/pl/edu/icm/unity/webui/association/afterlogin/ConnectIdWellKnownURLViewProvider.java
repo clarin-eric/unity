@@ -12,14 +12,14 @@ import org.springframework.stereotype.Component;
 import com.vaadin.navigator.View;
 import com.vaadin.server.Page;
 
+import pl.edu.icm.unity.MessageSource;
 import pl.edu.icm.unity.engine.api.authn.InvocationContext;
 import pl.edu.icm.unity.engine.api.authn.LoginSession;
-import pl.edu.icm.unity.engine.api.msg.UnityMessageSource;
+import pl.edu.icm.unity.engine.api.authn.sandbox.SandboxAuthnNotifier;
 import pl.edu.icm.unity.engine.api.translation.in.InputTranslationEngine;
 import pl.edu.icm.unity.engine.api.translation.in.MappedIdentity;
 import pl.edu.icm.unity.engine.api.translation.in.MappingResult;
 import pl.edu.icm.unity.webui.association.afterlogin.ConnectIdWizardProvider.WizardFinishedCallback;
-import pl.edu.icm.unity.webui.sandbox.SandboxAuthnNotifier;
 import pl.edu.icm.unity.webui.wellknownurl.PostAssociationRedirectURLBuilder;
 import pl.edu.icm.unity.webui.wellknownurl.SecuredViewProvider;
 import pl.edu.icm.unity.webui.wellknownurl.PostAssociationRedirectURLBuilder.Status;
@@ -33,14 +33,14 @@ import pl.edu.icm.unity.webui.wellknownurl.PostAssociationRedirectURLBuilder.Sta
 public class ConnectIdWellKnownURLViewProvider implements SecuredViewProvider
 {
 	public static final String PATH = "account-association";
-	private UnityMessageSource msg;
+	private MessageSource msg;
 	private InputTranslationEngine translationEngine;
 	private SandboxAuthnNotifier sandboxNotifier;
 	private String sandboxUrlForAssociation;
 	private ConnectIdWellKnownURLProperties connectIdProperties;
 
 	@Autowired
-	public ConnectIdWellKnownURLViewProvider(UnityMessageSource msg, InputTranslationEngine translationEngine)
+	public ConnectIdWellKnownURLViewProvider(MessageSource msg, InputTranslationEngine translationEngine)
 	{
 		this.msg = msg;
 		this.translationEngine = translationEngine;
