@@ -91,8 +91,8 @@ public class HomeEndpointProperties extends UnityPropertiesHelper
 		META.put(ENQUIRIES, new PropertyMD().setList(false).
 				setDescription("List of enquiries to be presented on User Home UI."));	
 
-                META.put(SUPPORT_PAGE, new PropertyMD("http://unity-idm.eu/site/support").
-                                setDescription("Link to support page"));
+                //META.put(SUPPORT_PAGE, new PropertyMD("http://unity-idm.eu/site/support").
+                //                setDescription("Link to support page"));
                                 
 		META.put(ENABLE_PROJECT_MANAGEMENT_LINK, new PropertyMD("true").setDescription(
 				"If true then the project managament link is shown in header of User Home UI."));

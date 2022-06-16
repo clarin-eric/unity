@@ -8,10 +8,25 @@ import java.security.Security;
 
 import javax.net.ssl.KeyManagerFactory;
 
+import org.apache.directory.api.ldap.model.message.ExtendedRequest;
+import org.apache.directory.api.ldap.model.message.ExtendedResponse;
+import org.apache.directory.server.core.api.partition.PartitionNexus;
+import org.apache.directory.server.core.security.CertificateUtil;
+import org.apache.directory.server.ldap.ExtendedOperationHandler;
 import org.apache.directory.server.ldap.LdapServer;
 
 import eu.emi.security.authn.x509.X509Credential;
+import org.apache.directory.server.ldap.handlers.extended.StartTlsHandler;
+import org.apache.directory.server.ldap.handlers.ssl.LdapsInitializer;
+import org.apache.directory.server.protocol.shared.transport.TcpTransport;
+import org.apache.directory.server.protocol.shared.transport.Transport;
 import org.apache.logging.log4j.Logger;
+import org.apache.mina.core.filterchain.DefaultIoFilterChainBuilder;
+import org.apache.mina.core.filterchain.IoFilterChainBuilder;
+import org.apache.mina.core.session.IoEventType;
+import org.apache.mina.filter.codec.ProtocolCodecFilter;
+import org.apache.mina.filter.executor.ExecutorFilter;
+import org.apache.mina.filter.executor.UnorderedThreadPoolExecutor;
 import pl.edu.icm.unity.base.utils.Log;
 
 /**
@@ -31,12 +46,13 @@ class UnityLdapServer extends LdapServer {
     UnityLdapServer(X509Credential credential) {
         this.credential = credential;
     }
-
+/*
     @Override
     public void loadKeyStore() throws Exception {
         if (this.credential == null) {
             //If no credential is set, fall back to the default implementation
             LOG.info("No unity credential configured");
+
             super.loadKeyStore();
         } else {
             LOG.info("Using the unity credential");
@@ -57,8 +73,9 @@ class UnityLdapServer extends LdapServer {
         if (this.credential == null) {
             return super.getKeyManagerFactory();
         }
+
         //Return the unity key manager factory
         return unityKeyManagerFactory;
     }
-
+*/
 }

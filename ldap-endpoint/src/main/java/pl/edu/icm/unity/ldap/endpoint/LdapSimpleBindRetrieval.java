@@ -43,10 +43,12 @@ public class LdapSimpleBindRetrieval extends AbstractCredentialRetrieval<Passwor
 	public AuthenticationResult authenticate(LdapServerProperties configuration, BindOperationContext bindContext) 
 			throws AuthenticationException
 	{
+
+
 		Optional<String> username = LdapNodeUtils.getUserName(configuration, bindContext.getDn());
 		if (!username.isPresent())
 			throw new AuthenticationException("Can not extract Unity username from the DN " + bindContext.getDn());
 		String password = new String(bindContext.getCredentials(), StandardCharsets.UTF_8);
-		return credentialExchange.checkPassword(username.get(), password, null);
+		return credentialExchange.checkPassword(username.get(), password, null, false, null);
 	}
 }

@@ -22,7 +22,7 @@
 		<spring.version>5.3.18</spring.version>
 		<vaadin.version>8.14.3</vaadin.version>
 		<cxf.version>3.4.5</cxf.version>
-		<apacheds.version>2.0.0-M26</apacheds.version>
+		<apacheds.version>2.0.0.AM26</apacheds.version>
 		<bc.version>1.69</bc.version>
 		<selenium.version>3.141.59</selenium.version>
 		<jackson.version>2.13.2</jackson.version>
@@ -111,10 +111,12 @@
 
 
 	<repositories>
+		<!--
 		<repository>
 			<id>clarin</id>
 			<url>https://nexus.clarin.eu/repository/Clarin/</url>
 		</repository>
+		-->
 		<repository>
 			<snapshots>
 				<enabled>false</enabled>

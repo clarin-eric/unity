@@ -37,38 +37,40 @@
             <scope>test</scope>
         </dependency>
         <dependency>
-            <groupId>pl.edu.icm.unity</groupId>
+            <groupId>io.imunity</groupId>
             <artifactId>unity-server-engine</artifactId>
-            <version>${project.version}</version>
+            <!--<version>${project.version}</version>-->
+            <!--
             <type>test-jar</type>
             <scope>test</scope>
+            -->
         </dependency>
         <dependency>
-            <groupId>pl.edu.icm.unity</groupId>
+            <groupId>io.imunity</groupId>
             <artifactId>unity-server-engine</artifactId>
             <version>${project.version}</version>
             <scope>test</scope>
         </dependency>
         <dependency>
-			<groupId>pl.edu.icm.unity</groupId>
+			<groupId>io.imunity</groupId>
 			<artifactId>unity-server-storage</artifactId>
 			<version>${project.version}</version>
 			<scope>test</scope>
 		</dependency>
 		<dependency>
-            <groupId>pl.edu.icm.unity</groupId>
+            <groupId>io.imunity</groupId>
             <artifactId>unity-server-ldap</artifactId>
             <version>${project.version}</version>
 			<scope>test</scope>
         </dependency>
 		
         <dependency>
-            <groupId>pl.edu.icm.unity</groupId>
+            <groupId>io.imunity</groupId>
             <artifactId>unity-server-engine-api</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>
-            <groupId>pl.edu.icm.unity</groupId>
+            <groupId>io.imunity</groupId>
             <artifactId>unity-server-std-plugins</artifactId>
             <version>${project.version}</version>
         </dependency>
@@ -86,7 +88,7 @@
         </dependency>        
         <dependency>
             <groupId>org.apache.directory.server</groupId>
-            <artifactId>apacheds-protocol-ldap</artifactId>        
+            <artifactId>apacheds-protocol-ldap</artifactId>
         </dependency>
         <dependency>
             <groupId>org.apache.directory.api</groupId>
@@ -103,6 +105,12 @@
         <dependency>
             <groupId>org.apache.directory.server</groupId>
             <artifactId>apacheds-interceptors-logger</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.imunity</groupId>
+            <artifactId>unity-server-engine</artifactId>
+            <version>3.9.0</version>
+            <scope>compile</scope>
         </dependency>
     </dependencies>
 	

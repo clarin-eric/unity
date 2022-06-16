@@ -57,6 +57,7 @@ import pl.edu.icm.unity.engine.api.authn.LoginSession;
 import pl.edu.icm.unity.engine.api.authn.LoginSession.RememberMeInfo;
 import pl.edu.icm.unity.engine.api.session.SessionManagement;
 import pl.edu.icm.unity.exceptions.EngineException;
+import pl.edu.icm.unity.types.authn.AuthenticationOptionKey;
 import pl.edu.icm.unity.types.authn.AuthenticationRealm;
 import pl.edu.icm.unity.types.basic.EntityParam;
 import pl.edu.icm.unity.types.basic.GroupMembership;
@@ -228,22 +229,30 @@ class LdapApacheDSInterceptor extends BaseInterceptor
 		//
 		if (authnResult.getStatus() == Status.success)
 		{
+			/*
 			if (authnResult.getAuthenticatedEntity().getOutdatedCredentialId() != null)
 			{
 				log.debug("Blocking access as an outdated credential was used for bind, user is "
 						+ bindContext.getDn());
 				throw new LdapAuthenticationException("Outdated credential");
 			}
+			*/
 
 			LdapPrincipal policyConfig = new LdapPrincipal(schemaManager,
 					bindContext.getDn(), AuthenticationLevel.SIMPLE);
 			// do not expose anything private
 			bindContext.setCredentials(null);
 			policyConfig.setUserPassword(new byte[][] { new byte[] {} });
+
+			//long entityId = authnResult.getAuthenticatedEntity().getEntityId();
+			long entityId = authnResult.getSuccessResult().authenticatedEntity.getEntityId();
+			AuthenticationOptionKey authenticationOptionKey =
+					new AuthenticationOptionKey(authenticatorId, "ldap");// idpKey.asString());
 			LoginSession ls = sessionMan.getCreateSession(
-					authnResult.getAuthenticatedEntity().getEntityId(), realm,
-					"", null, new RememberMeInfo(false, false), 
-					authenticatorId, null);
+					entityId, realm,
+					"", null, new RememberMeInfo(false, false),
+					authenticationOptionKey, null);
+
 			CoreSessionExt mods = new CoreSessionExt(policyConfig, directoryService,
 					ls);
 			bindContext.setSession(mods);

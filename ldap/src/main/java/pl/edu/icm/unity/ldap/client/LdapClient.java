@@ -16,7 +16,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.function.Consumer;
 
 import javax.net.ssl.SSLContext;
 
@@ -59,20 +58,20 @@ import pl.edu.icm.unity.stdext.identity.X500Identity;
  * Depending on configuration, it's possible to bind as normal user, or as a privileged (system) user
  * who is allowed to search a whole (sub-)tree
  * <p>
- * When binding as user, the code first binds with the provided username and password credentials. 
- * If this succeeds then (depending on configuration) user's attributes are retrieved and/or user's 
+ * When binding as user, the code first binds with the provided username and password credentials.
+ * If this succeeds then (depending on configuration) user's attributes are retrieved and/or user's
  * groups are assembled.
  * <p>
  * When binding as system user, the code first binds with the provided system username and password credentials.
  * The requested user is then searched. If found, the code checks the user password by attempting to
  * bind as the user. If this succeeds, the code again binds as system user, and proceeds to retrieve user
- * attributes as above. 
+ * attributes as above.
  * <p>
  * The attributes searching is pretty straightforward. The most of the code in this class is responsible for
  * flexible group retrieval. Both 'memberOf' style and 'member' means of expressing group membership are supported,
- * with some additional options. Most notably it is possible to use a full DN of the group or its attribute 
- * as the group name.  
- * 
+ * with some additional options. Most notably it is possible to use a full DN of the group or its attribute
+ * as the group name.
+ *
  * @author K. Benedyczak
  */
 public class LdapClient
@@ -81,13 +80,13 @@ public class LdapClient
 
 	private String idpName;
 	private final LdapGroupHelper groupHelper;
-	
+
 	public LdapClient(String idpName)
 	{
 		this.idpName = idpName;
 		this.groupHelper = new LdapGroupHelper();
 	}
-	
+
 	public LdapClient()
 	{
 		this.groupHelper = new LdapGroupHelper();
@@ -96,25 +95,42 @@ public class LdapClient
 	/**
 	 * Performs authentication by binding and searches for all configured attributes.
 	 */
-	public RemotelyAuthenticatedInput bindAndSearch(String userOrig, String password, 
-			LdapClientConfiguration configuration) throws LDAPException, LdapAuthenticationException, 
+	public RemotelyAuthenticatedInput bindAndSearch(String userOrig, String password,
+													LdapClientConfiguration configuration) throws LDAPException, LdapAuthenticationException,
 			KeyManagementException, NoSuchAlgorithmException
 	{
 		LDAPConnection connection = createConnection(configuration);
-		
+
 		String user = LdapUtils.extractUsername(userOrig, configuration.getUserExtractPattern());
-		
+
 		String dn = establishUserDN(user, configuration, connection);
 		log.info("Established user's DN is: " + dn);
-		
-		//actual authentication
-		bindAsUser(connWithUser.connection, connWithUser.dn, password, configuration);
-		
-		return retrieveUserInformation(configuration, connWithUser);
+
+		bindAsUser(connection, dn, password, configuration);
+		if (configuration.isBindOnly())
+		{
+			RemotelyAuthenticatedInput ret = new RemotelyAuthenticatedInput(idpName);
+			ret.addIdentity(new RemoteIdentity(dn, X500Identity.ID));
+			return ret;
+		}
+
+		if (configuration.getBindAs() == BindAs.system)
+			bindAsSystem(connection, configuration);
+
+		SearchResultEntry entry = findBaseEntry(configuration, dn, connection);
+
+		RemotelyAuthenticatedInput ret = assembleBaseResult(entry);
+		findGroupsMembership(connection, entry, configuration, ret.getGroups());
+
+		performAdditionalQueries(connection, configuration, user, ret);
+		ret.setRawAttributes(ret.getAttributes());
+
+		connection.close();
+		return ret;
 	}
 
 	/**
-	 * Resolves information about a given user, with all the features, but without binding as the user 
+	 * Resolves information about a given user, with all the features, but without binding as the user
 	 * (so the user must be authenticated with other means). This works only when configured to bind as system.
 	 * @param user
 	 * @param configuration
@@ -124,8 +140,8 @@ public class LdapClient
 	 * @throws KeyManagementException
 	 * @throws NoSuchAlgorithmException
 	 */
-	public RemotelyAuthenticatedInput search(String userOrig, LdapClientConfiguration configuration) 
-			throws LDAPException, LdapAuthenticationException, 
+	public RemotelyAuthenticatedInput search(String userOrig, LdapClientConfiguration configuration)
+			throws LDAPException, LdapAuthenticationException,
 			KeyManagementException, NoSuchAlgorithmException
 	{
 		if (configuration.getBindAs() == BindAs.user)
@@ -136,55 +152,37 @@ public class LdapClient
 			throw new LdapAuthenticationException("Can't authenticate");
 		}
 
-		LDAPConnectionWithUser connWithUser = createConnectionForUser(userOrig, configuration);
-		return retrieveUserInformation(configuration, connWithUser);
-	}
-
-
-	public void bindAndExecute(String userOrig, String password,
-			LdapClientConfiguration configuration, Consumer<LDAPConnectionWithUser> function) 
-					throws KeyManagementException, NoSuchAlgorithmException, LDAPException, LdapAuthenticationException
-	{
-		LDAPConnectionWithUser connWithUser = createConnectionForUser(userOrig, configuration);
-
 		String user = LdapUtils.extractUsername(userOrig, configuration.getUserExtractPattern());
-		
+
 		LDAPConnection connection = createConnection(configuration);
-		
+
 		String dn = establishUserDN(user, configuration, connection);
 		log.info("Established user's DN is: " + dn);
-		
-		function.accept(connWithUser);
-	}
 
-	
-	private RemotelyAuthenticatedInput retrieveUserInformation(LdapClientConfiguration configuration,
-			LDAPConnectionWithUser connWithUser) throws LDAPException, LdapAuthenticationException
-	{
 		if (configuration.isBindOnly())
 		{
 			RemotelyAuthenticatedInput ret = new RemotelyAuthenticatedInput(idpName);
-			ret.addIdentity(new RemoteIdentity(connWithUser.dn, X500Identity.ID));
+			ret.addIdentity(new RemoteIdentity(dn, X500Identity.ID));
 			return ret;
 		}
-		
+
 		if (configuration.getBindAs() == BindAs.system)
-			bindAsSystem(connWithUser.connection, configuration);
-		
-		SearchResultEntry entry = findBaseEntry(configuration, connWithUser.dn, connWithUser.connection);
-		
+			bindAsSystem(connection, configuration);
+
+		SearchResultEntry entry = findBaseEntry(configuration, dn, connection);
+
 		RemotelyAuthenticatedInput ret = assembleBaseResult(entry);
-		findGroupsMembership(connWithUser.connection, entry, configuration, ret.getGroups());
-		
-		performAdditionalQueries(connWithUser.connection, configuration, connWithUser.user, ret);
+		findGroupsMembership(connection, entry, configuration, ret.getGroups());
+
+		performAdditionalQueries(connection, configuration, user, ret);
 		ret.setRawAttributes(ret.getAttributes());
-		
-		connWithUser.connection.close();
+
+		connection.close();
 		return ret;
 	}
-	
+
 	public Optional<String> searchAttribute(String userOrig, String attributeName, LdapClientConfiguration configuration)
-			throws LDAPException, LdapAuthenticationException, 
+			throws LDAPException, LdapAuthenticationException,
 			KeyManagementException, NoSuchAlgorithmException
 	{
 		if (configuration.getBindAs() != BindAs.system)
@@ -192,11 +190,11 @@ public class LdapClient
 			log.error("Bind with system credential required");
 			throw new LdapAuthenticationException("Can't authenticate");
 		}
-		
+
 		String user = LdapUtils.extractUsername(userOrig, configuration.getUserExtractPattern());
-		
+
 		LDAPConnection connection = createConnection(configuration);
-		
+
 		String dn = establishUserDN(user, configuration, connection);
 		log.info("Established user's DN is: " + dn);
 		bindAsSystem(connection, configuration);
@@ -207,10 +205,10 @@ public class LdapClient
 		{
 			return Optional.ofNullable(attribute.getValue());
 		}
-	
+
 		return Optional.empty();
 	}
-	
+
 	/**
 	 * Returns DN of the user. Depending on configuration the user's DN can be simply formed from a 
 	 * configured template or can be discovered with a custom search run as admin user. 
@@ -221,10 +219,10 @@ public class LdapClient
 	 * @throws LDAPException
 	 * @throws LdapAuthenticationException
 	 */
-	private String establishUserDN(String username, LdapClientConfiguration configuration, 
-			LDAPConnection connection) throws LDAPException, LdapAuthenticationException
+	private String establishUserDN(String username, LdapClientConfiguration configuration,
+								   LDAPConnection connection) throws LDAPException, LdapAuthenticationException
 	{
-		SearchSpecification searchForUser = configuration.getSearchForUserSpec(); 
+		SearchSpecification searchForUser = configuration.getSearchForUserSpec();
 		if (searchForUser == null)
 			return configuration.getBindDN(username);
 
@@ -232,7 +230,7 @@ public class LdapClient
 		int timeLimit = configuration.getSearchTimeLimit();
 		int sizeLimit = configuration.getResultEntriesLimit();
 		DereferencePolicy derefPolicy = configuration.getDereferencePolicy();
-		SearchResult result = performSearch(connection, searchForUser, username, 
+		SearchResult result = performSearch(connection, searchForUser, username,
 				timeLimit, sizeLimit, derefPolicy);
 		if (result.getEntryCount() == 0)
 		{
@@ -244,10 +242,10 @@ public class LdapClient
 			throw new LdapAuthenticationException("Too many users found");
 		} else
 		{
-			return result.getSearchEntries().get(0).getDN();			
+			return result.getSearchEntries().get(0).getDN();
 		}
 	}
-	
+
 	/**
 	 * Creates an ladp connection and secures it. Failover settings from configuration are taken into account.
 	 * @param configuration
@@ -256,7 +254,7 @@ public class LdapClient
 	 * @throws NoSuchAlgorithmException
 	 * @throws LDAPException
 	 */
-	private LDAPConnection createConnection(LdapClientConfiguration configuration) 
+	private LDAPConnection createConnection(LdapClientConfiguration configuration)
 			throws KeyManagementException, NoSuchAlgorithmException, LDAPException
 	{
 		LDAPConnectionOptions connectionOptions = new LDAPConnectionOptions();
@@ -264,30 +262,30 @@ public class LdapClient
 		connectionOptions.setFollowReferrals(configuration.isFollowReferral());
 		connectionOptions.setReferralHopLimit(configuration.getFollowReferrals());
 		connectionOptions.setResponseTimeoutMillis(configuration.getSocketReadTimeout());
-		
+
 		FailoverServerSet failoverSet;
 		if (configuration.getConnectionMode() == ConnectionMode.SSL)
 		{
 			X509CertChainValidator validator = configuration.getConnectionValidator();
-			ServerHostnameCheckingMode certificateCheckingMode = configuration.isTrustAllCerts() ? 
+			ServerHostnameCheckingMode certificateCheckingMode = configuration.isTrustAllCerts() ?
 					ServerHostnameCheckingMode.NONE : ServerHostnameCheckingMode.FAIL;
-			SSLContext ctx = SSLContextCreator.createSSLContext(null, validator, 
+			SSLContext ctx = SSLContextCreator.createSSLContext(null, validator,
 					"TLS", "LDAP client", log, certificateCheckingMode);
-			failoverSet = new FailoverServerSet(configuration.getServersAddresses(), 
+			failoverSet = new FailoverServerSet(configuration.getServersAddresses(),
 					configuration.getPorts(), ctx.getSocketFactory(), connectionOptions);
 		} else
 		{
-			failoverSet = new FailoverServerSet(configuration.getServersAddresses(), 
-				configuration.getPorts(), connectionOptions);
+			failoverSet = new FailoverServerSet(configuration.getServersAddresses(),
+					configuration.getPorts(), connectionOptions);
 		}
-		
+
 		LDAPConnection connection = failoverSet.getConnection();
-		
+
 		log.debug("Established connection to LDAP server");
 		if (configuration.getConnectionMode() == ConnectionMode.startTLS)
 		{
 			X509CertChainValidator validator = configuration.getConnectionValidator();
-			SSLContext ctx = SSLContextCreator.createSSLContext(null, validator, 
+			SSLContext ctx = SSLContextCreator.createSSLContext(null, validator,
 					"TLSv1.2", "LDAP client", log, ServerHostnameCheckingMode.FAIL);
 			ExtendedResult extendedResult = connection.processExtendedOperation(
 					new StartTLSExtendedRequest(ctx));
@@ -296,7 +294,7 @@ public class LdapClient
 			{
 				connection.close();
 				throw new LDAPException(extendedResult.getResultCode(), "Unable to esablish " +
-						"a secure TLS connection to the LDAP server: " + 
+						"a secure TLS connection to the LDAP server: " +
 						extendedResult.toString());
 			}
 			log.debug("Connection upgraded to TLS");
@@ -304,8 +302,8 @@ public class LdapClient
 		return connection;
 	}
 
-	private void bindAsUser(LDAPConnection connection, String dn, String password, 
-			LdapClientConfiguration configuration) throws LdapAuthenticationException, LDAPException
+	private void bindAsUser(LDAPConnection connection, String dn, String password,
+							LdapClientConfiguration configuration) throws LdapAuthenticationException, LDAPException
 	{
 		try
 		{
@@ -321,7 +319,7 @@ public class LdapClient
 		log.info("LDAP bind as user " + dn + " was successful");
 	}
 
-	private void bindAsSystem(LDAPConnection connection, LdapClientConfiguration configuration) 
+	private void bindAsSystem(LDAPConnection connection, LdapClientConfiguration configuration)
 			throws LdapAuthenticationException, LDAPException
 	{
 		String systemDN = configuration.getSystemDN();
@@ -342,26 +340,26 @@ public class LdapClient
 	}
 
 	private SearchResultEntry findBaseEntry(LdapClientConfiguration configuration, String dn,
-			LDAPConnection connection) throws LdapAuthenticationException, LDAPException
+											LDAPConnection connection) throws LdapAuthenticationException, LDAPException
 	{
 		String[] queriedAttributes = configuration.getRetrievalLdapAttributes().stream().toArray(String[]::new);
 		SearchScope searchScope = configuration.getSearchScope();
-		
+
 		int timeLimit = configuration.getSearchTimeLimit();
 		int sizeLimit = configuration.getResultEntriesLimit();
 		DereferencePolicy derefPolicy = configuration.getDereferencePolicy();
 		Filter validUsersFilter = configuration.getParsedValidUserFilter();
-		
-		ReadOnlySearchRequest searchRequest = new SearchRequest(dn, searchScope, derefPolicy, 
+
+		ReadOnlySearchRequest searchRequest = new SearchRequest(dn, searchScope, derefPolicy,
 				sizeLimit, timeLimit, false, validUsersFilter, queriedAttributes);
 		SearchResult result = connection.search(searchRequest);
-		
+
 		SearchResultEntry entry = result.getSearchEntry(dn);
 		if (entry == null)
 			throw new LdapAuthenticationException("User is not matching the valid users filter");
 		return entry;
 	}
-	
+
 	private RemotelyAuthenticatedInput assembleBaseResult(SearchResultEntry entry)
 	{
 		RemotelyAuthenticatedInput ret = new RemotelyAuthenticatedInput(idpName);
@@ -373,28 +371,28 @@ public class LdapClient
 		ret.addIdentity(new RemoteIdentity(entry.getDN(), X500Identity.ID));
 		return ret;
 	}
-	
+
 	private void findGroupsMembership(LDAPConnection connection, SearchResultEntry userEntry,
-			LdapClientConfiguration configuration, Map<String, RemoteGroupMembership> ret) 
-					throws LDAPException
+									  LdapClientConfiguration configuration, Map<String, RemoteGroupMembership> ret)
+			throws LDAPException
 	{
 		if (nonEmpty(configuration.getMemberOfAttribute()))
 			groupHelper.findMemberOfGroups(ret, userEntry, configuration);
-		
+
 		if (nonEmpty(configuration.getGroupsBaseName()))
 			searchGroupsForMember(connection, ret, userEntry, configuration);
 	}
-	
+
 	/**
 	 * Complex variant: groups needs to be retrieved and searched for the user being a member.
 	 * @param connection
 	 * @param ret
 	 * @param userEntry
 	 * @param configuration
-	 * @throws LDAPException 
+	 * @throws LDAPException
 	 */
 	private void searchGroupsForMember(LDAPConnection connection, Map<String, RemoteGroupMembership> ret,
-			SearchResultEntry userEntry, LdapClientConfiguration configuration) throws LDAPException
+									   SearchResultEntry userEntry, LdapClientConfiguration configuration) throws LDAPException
 	{
 		String base = configuration.getGroupsBaseName();
 		List<GroupSpecification> gss = configuration.getGroupSpecifications();
@@ -402,7 +400,7 @@ public class LdapClient
 		Set<String> attributes = new HashSet<>();
 		attributes.add("objectClass");
 
-		String searchFilter = groupHelper.buildGroupFilter(userEntry, gss, 
+		String searchFilter = groupHelper.buildGroupFilter(userEntry, gss,
 				configuration.isDelegateGroupFiltering());
 
 		for (GroupSpecification gs: gss)
@@ -420,21 +418,21 @@ public class LdapClient
 			filter = Filter.create(searchFilter);
 		} catch (LDAPException e)
 		{
-			throw new LDAPException(e.getResultCode(), 
+			throw new LDAPException(e.getResultCode(),
 					"Specification of group object class is wrong. Unable to create a filter, " +
-					"which was: " + searchFilter, e);
+							"which was: " + searchFilter, e);
 		}
 
 		if (log.isDebugEnabled())
 			log.debug("Will search groups, from base "+ base + " with filter " + searchFilter +
 					" collecting attributes " + attributes);
-		
-		ReadOnlySearchRequest searchRequest = new SearchRequest(base, SearchScope.SUB, 
-					configuration.getDereferencePolicy(), 
-					configuration.getResultEntriesLimit(), configuration.getSearchTimeLimit(), 
-					false, filter, attributes.toArray(new String[attributes.size()]));
+
+		ReadOnlySearchRequest searchRequest = new SearchRequest(base, SearchScope.SUB,
+				configuration.getDereferencePolicy(),
+				configuration.getResultEntriesLimit(), configuration.getSearchTimeLimit(),
+				false, filter, attributes.toArray(new String[attributes.size()]));
 		SearchResult result = connection.search(searchRequest);
-		
+
 		for (SearchResultEntry groupEntry: result.getSearchEntries())
 		{
 			String[] classes = groupEntry.getObjectClassValues();
@@ -448,11 +446,11 @@ public class LdapClient
 				}
 			}
 		}
-	}	
+	}
 
-	
-	private void performAdditionalQueries(LDAPConnection connection, LdapClientConfiguration configuration, 
-			String user, RemotelyAuthenticatedInput principalData) throws LDAPException
+
+	private void performAdditionalQueries(LDAPConnection connection, LdapClientConfiguration configuration,
+										  String user, RemotelyAuthenticatedInput principalData) throws LDAPException
 	{
 		int timeLimit = configuration.getSearchTimeLimit();
 		int sizeLimit = configuration.getResultEntriesLimit();
@@ -461,26 +459,26 @@ public class LdapClient
 		List<SearchSpecification> searchSpecs = configuration.getSearchSpecifications();
 		for (SearchSpecification searchSpec: searchSpecs)
 		{
-			SearchResult result = performSearch(connection, searchSpec, user, 
+			SearchResult result = performSearch(connection, searchSpec, user,
 					timeLimit, sizeLimit, derefPolicy);
 			consolidateAttributes(result, principalData);
 		}
 	}
-	
+
 	private SearchResult performSearch(LDAPConnection connection, SearchSpecification searchSpec,
-			String username, int timeLimit, int sizeLimit, DereferencePolicy derefPolicy) throws LDAPException
+									   String username, int timeLimit, int sizeLimit, DereferencePolicy derefPolicy) throws LDAPException
 	{
 		String[] queriedAttributes = searchSpec.getSplitedAttributes();
 		Filter validUsersFilter = searchSpec.getFilter(username);
 		String base = searchSpec.getBaseDN(username);
 		SearchScope scope = searchSpec.getScope().getInternalScope();
-		log.debug("Performing LDAP search filter: [" + validUsersFilter + "] base: [" + base + 
+		log.debug("Performing LDAP search filter: [" + validUsersFilter + "] base: [" + base +
 				"] scope: [" + scope +"]");
-		ReadOnlySearchRequest searchRequest = new SearchRequest(base, scope, derefPolicy, 
+		ReadOnlySearchRequest searchRequest = new SearchRequest(base, scope, derefPolicy,
 				sizeLimit, timeLimit, false, validUsersFilter, queriedAttributes);
 		return connection.search(searchRequest);
 	}
-	
+
 	private void consolidateAttributes(SearchResult result, RemotelyAuthenticatedInput principalData)
 	{
 		Map<String, Set<String>> attributes = new HashMap<String, Set<String>>();
@@ -497,7 +495,7 @@ public class LdapClient
 				Collections.addAll(curValues, a.getValues());
 			}
 		}
-		
+
 		for (Map.Entry<String, Set<String>> e: attributes.entrySet())
 		{
 			principalData.addAttribute(new RemoteAttribute(e.getKey(), e.getValue().toArray()));

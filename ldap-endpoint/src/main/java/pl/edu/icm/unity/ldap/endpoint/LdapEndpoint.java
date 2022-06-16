@@ -6,6 +6,7 @@ package pl.edu.icm.unity.ldap.endpoint;
 
 import java.io.File;
 import java.io.StringReader;
+import java.net.URL;
 import java.util.List;
 import java.util.Properties;
 
@@ -13,7 +14,7 @@ import org.apache.logging.log4j.Logger;
 
 import eu.emi.security.authn.x509.X509Credential;
 import eu.unicore.util.configuration.ConfigurationException;
-import java.security.cert.X509Certificate;
+import pl.edu.icm.unity.engine.server.JettyServer;
 import pl.edu.icm.unity.base.utils.Log;
 import pl.edu.icm.unity.engine.api.AttributesManagement;
 import pl.edu.icm.unity.engine.api.EntityManagement;
@@ -22,6 +23,7 @@ import pl.edu.icm.unity.engine.api.authn.AuthenticationFlow;
 import pl.edu.icm.unity.engine.api.authn.AuthenticatorInstance;
 import pl.edu.icm.unity.engine.api.config.UnityServerConfiguration;
 import pl.edu.icm.unity.engine.api.endpoint.AbstractEndpoint;
+import pl.edu.icm.unity.engine.api.pki.NamedCertificate;
 import pl.edu.icm.unity.engine.api.server.NetworkServer;
 import pl.edu.icm.unity.engine.api.session.SessionManagement;
 import pl.edu.icm.unity.exceptions.EngineException;
@@ -79,10 +81,14 @@ public class LdapEndpoint extends AbstractEndpoint
 	@Override
 	public void start() throws EngineException
 	{
-		AuthenticatorInstance firstFactorAuthenticator = authenticationFlows.get(0)
+		try {
+			AuthenticatorInstance firstFactorAuthenticator = authenticationFlows.get(0)
 				.getFirstFactorAuthenticators().iterator().next();
-		LdapSimpleBindRetrieval rpr = (LdapSimpleBindRetrieval) firstFactorAuthenticator.getRetrieval();
-		startLdapEmbeddedServer(rpr);
+			LdapSimpleBindRetrieval rpr = (LdapSimpleBindRetrieval) firstFactorAuthenticator.getRetrieval();
+			startLdapEmbeddedServer(rpr);
+		} catch(Exception ex) {
+			throw new EngineException(ex);
+		}
 	}
 
 	@Override
@@ -97,12 +103,26 @@ public class LdapEndpoint extends AbstractEndpoint
 		stopLdapEmbeddedServer();
 	}
 
-	private void startLdapEmbeddedServer(LdapSimpleBindRetrieval rpr)
+	private String getAdvertisedHostFromServer(NetworkServer httpServer) {
+		//host = httpServer.getAdvertisedAddress().getHost();
+		JettyServer server = (JettyServer)httpServer;
+		URL[] urls = server.getUrls();
+		if(urls != null && urls.length > 0) {
+			return urls[0].getHost();
+		}
+		return null;
+	}
+
+	private void startLdapEmbeddedServer(LdapSimpleBindRetrieval rpr) throws Exception
 	{
 		String host = configuration.getValue(LdapServerProperties.HOST);
 		if (null == host || host.isEmpty())
 		{
-			host = httpServer.getAdvertisedAddress().getHost();
+			host = getAdvertisedHostFromServer(httpServer);
+		}
+		if (null == host || host.isEmpty())
+		{
+			throw new Exception("Host not found in sserver configuration (property name = ) and no advertised url found.");
 		}
 		int port = configuration.getIntValue(LdapServerProperties.LDAP_PORT);
 
@@ -118,9 +138,11 @@ public class LdapEndpoint extends AbstractEndpoint
                 
 		boolean startTlsEnabled = configuration
 				.getBooleanValue(LdapServerProperties.STARTTLS_ENABLED);
-                
-		String credentialName = configuration.getValue(LdapServerProperties.CREDENTIAL);
+
 		X509Credential credential = null;
+                /*
+		String credentialName = configuration.getValue(LdapServerProperties.CREDENTIAL);
+
                 
                 if(credentialName != null && !credentialName.isEmpty()) {
                     //X509Certificate cert;
@@ -133,13 +155,13 @@ public class LdapEndpoint extends AbstractEndpoint
                     }
                 }
                 LOG.info("Credential with name {} configued.", credentialName);
-                
+                */
 		
                 try {
-                    for(String name : pkiManagement.getCertificateNames()) {
+                    for(String name : pkiManagement.getAllCertificateNames()) {
                         LOG.info("Found certificate with name: "+name);
                     }
-                    X509Certificate cert = pkiManagement.getCertificate("MAIN");
+                    NamedCertificate cert = pkiManagement.getCertificate("MAIN");
                 } catch(EngineException ex) {
                          LOG.error("Failed to enumerate certificate names");
                 }
