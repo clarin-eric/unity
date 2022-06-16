@@ -4,7 +4,7 @@
 	<groupId>io.imunity</groupId>
 	<artifactId>unity-server-parent</artifactId>
 	<packaging>pom</packaging>
-	<version>3.9.0-1.0.0-SNAPSHOT</version>
+	<version>3.10.0-1.0.0-SNAPSHOT</version>
 	<name>UNITY aggregation and parent module</name>
 	<description>UNITY aggregation and parent module</description>
 	<url>https://unity-idm.eu</url>
@@ -19,7 +19,7 @@
 		<jetty.version>9.4.46.v20220331</jetty.version>
 		<slf4j.version>1.7.32</slf4j.version>
 		<log4j.version>2.17.2</log4j.version>
-		<spring.version>5.3.18</spring.version>
+		<spring.version>5.3.20</spring.version>
 		<vaadin.version>8.14.3</vaadin.version>
 		<cxf.version>3.4.5</cxf.version>
 		<apacheds.version>2.0.0.AM26</apacheds.version>
@@ -39,7 +39,7 @@
 		<connection>${scm.base}</connection>
 		<developerConnection>${scm.base}</developerConnection>
 		<url>https://github.com/unity-idm/unity</url>
-		<tag>unity-server-parent-3.9.0</tag>
+		<tag>HEAD</tag>
 	</scm>
 
 	<licenses>
