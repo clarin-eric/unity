@@ -32,17 +32,15 @@ import com.unboundid.ldap.sdk.SearchResult;
 import com.unboundid.ldap.sdk.SearchResultEntry;
 import com.unboundid.ldap.sdk.SearchScope;
 
-import pl.edu.icm.unity.engine.DBIntegrationTestBase;
 import pl.edu.icm.unity.engine.api.AuthenticatorManagement;
 import pl.edu.icm.unity.engine.api.authn.remote.RemoteIdentity;
 import pl.edu.icm.unity.engine.api.authn.remote.RemotelyAuthenticatedInput;
-import pl.edu.icm.unity.engine.authz.AuthorizationManagerImpl;
 import pl.edu.icm.unity.engine.authz.RoleAttributeTypeProvider;
 import pl.edu.icm.unity.exceptions.EngineException;
 import pl.edu.icm.unity.ldap.client.LdapAuthenticationException;
 import pl.edu.icm.unity.ldap.client.LdapClient;
-import pl.edu.icm.unity.ldap.client.LdapClientConfiguration;
-import pl.edu.icm.unity.ldap.client.LdapProperties;
+import pl.edu.icm.unity.ldap.client.config.LdapClientConfiguration;
+import pl.edu.icm.unity.ldap.client.config.LdapProperties;
 import pl.edu.icm.unity.ldap.endpoint.LdapEndpointFactory;
 import pl.edu.icm.unity.stdext.attr.EnumAttribute;
 import pl.edu.icm.unity.stdext.credential.pass.PasswordToken;
@@ -59,8 +57,9 @@ import pl.edu.icm.unity.types.confirmation.ConfirmationInfo;
 import pl.edu.icm.unity.types.endpoint.EndpointConfiguration;
 import pl.edu.icm.unity.types.endpoint.ResolvedEndpoint;
 
-public class LdapEndpointTests extends DBIntegrationTestBase
+public class LdapEndpointTests //extends DBIntegrationTestBase
 {
+	/*
 	@Autowired
 	private AuthenticatorManagement authnMan;
 	public static final String ldapEndpointHostname = "127.0.0.1";
@@ -490,4 +489,6 @@ public class LdapEndpointTests extends DBIntegrationTestBase
 			}
 		});
 	}
+
+	 */
 }

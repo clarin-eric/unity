@@ -32,19 +32,8 @@ import org.apache.directory.server.core.api.entry.ClonedServerEntry;
 import org.apache.directory.server.core.api.filtering.EntryFilteringCursor;
 import org.apache.directory.server.core.api.filtering.EntryFilteringCursorImpl;
 import org.apache.directory.server.core.api.interceptor.BaseInterceptor;
-import org.apache.directory.server.core.api.interceptor.context.AddOperationContext;
-import org.apache.directory.server.core.api.interceptor.context.BindOperationContext;
-import org.apache.directory.server.core.api.interceptor.context.CompareOperationContext;
-import org.apache.directory.server.core.api.interceptor.context.DeleteOperationContext;
-import org.apache.directory.server.core.api.interceptor.context.GetRootDseOperationContext;
-import org.apache.directory.server.core.api.interceptor.context.HasEntryOperationContext;
-import org.apache.directory.server.core.api.interceptor.context.LookupOperationContext;
-import org.apache.directory.server.core.api.interceptor.context.ModifyOperationContext;
-import org.apache.directory.server.core.api.interceptor.context.MoveAndRenameOperationContext;
-import org.apache.directory.server.core.api.interceptor.context.MoveOperationContext;
-import org.apache.directory.server.core.api.interceptor.context.RenameOperationContext;
-import org.apache.directory.server.core.api.interceptor.context.SearchOperationContext;
-import org.apache.directory.server.core.api.interceptor.context.UnbindOperationContext;
+import org.apache.directory.server.core.api.interceptor.context.*;
+import org.apache.directory.server.ldap.handlers.request.BindRequestHandler;
 import org.apache.logging.log4j.Logger;
 
 import pl.edu.icm.unity.base.utils.Log;
@@ -119,10 +108,22 @@ class LdapApacheDSInterceptor extends BaseInterceptor
                 this.ldapSearch.init(directoryService.getSchemaManager());
 	}
 
+	private String getDnNameFromContext(OperationContext ctxt) {
+		if(ctxt == null) {
+			return "Operation context is null";
+		}
+		if(ctxt.getDn() == null) {
+			return "Dn in operation context is null";
+		}
+		return ctxt.getDn().getName();
+	}
+
 	//FIXME what for is lookup? Do we need to support it?
 	@Override
 	public Entry lookup(LookupOperationContext lookupContext) throws LdapException
 	{
+		log.info("LDAP lookup: "+getDnNameFromContext(lookupContext));
+
 		// lookup is performed for many reasons, in case the user that performs
 		// the lookup is identified as `ADMIN_SYSTEM_DN` let LDAP core handle the search
 		if (!lookupContext.getDn().isEmpty())
@@ -184,6 +185,7 @@ class LdapApacheDSInterceptor extends BaseInterceptor
 	public EntryFilteringCursor search(SearchOperationContext searchContext)
 			throws LdapException
 	{
+		log.info("LDAP search: "+getDnNameFromContext(searchContext));
 		CoreSessionExt session = (CoreSessionExt) searchContext.getSession();
 		setUnityInvocationContext(session.getSession());
 		try
@@ -208,6 +210,7 @@ class LdapApacheDSInterceptor extends BaseInterceptor
 	@Override
 	public void bind(BindOperationContext bindContext) throws LdapException
 	{
+		log.info("LDAP bind: "+getDnNameFromContext(bindContext));
 		if (bindContext.isSaslBind())
 		{
 			log.debug("Blocking unsupported SASL bind");
@@ -274,10 +277,15 @@ class LdapApacheDSInterceptor extends BaseInterceptor
 	@Override
 	public void unbind(UnbindOperationContext unbindContext) throws LdapException
 	{
-		CoreSessionExt session = (CoreSessionExt) unbindContext.getSession();
-		LoginSession unitySession = session.getSession();
+		log.info("LDAP unbind"+getDnNameFromContext(unbindContext));
+		if(unbindContext.getSession() instanceof CoreSessionExt ) {
+			CoreSessionExt session = (CoreSessionExt) unbindContext.getSession();
+			LoginSession unitySession = session.getSession();
 
-		sessionMan.removeSession(unitySession.getId(), false);
+			sessionMan.removeSession(unitySession.getId(), false);
+		} else {
+			log.warn("Unbind session not of type CoreSessionExt, got "+unbindContext.getSession().getClass().toString()+" instead");
+		}
 		InvocationContext.setCurrent(null);
 	}
 
@@ -292,7 +300,7 @@ class LdapApacheDSInterceptor extends BaseInterceptor
 	@Override
 	public boolean compare(CompareOperationContext compareContext) throws LdapException
 	{
-                log.info("Compare: name="+compareContext.getName()+", value="+compareContext.getValue().toString()+", DN="+compareContext.getDn().toString()+", attribute type name="+compareContext.getAttributeType().getName());
+        log.info("LDAP compare: name="+compareContext.getName()+", value="+compareContext.getValue().toString()+", DN="+getDnNameFromContext(compareContext)+", attribute type name="+compareContext.getAttributeType().getName());
 		CoreSessionExt session = (CoreSessionExt) compareContext.getSession();
 		setUnityInvocationContext(session.getSession());
 		try

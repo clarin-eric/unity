@@ -6,7 +6,7 @@ package pl.edu.icm.unity.ldap.endpoint;
 
 import java.util.Optional;
 
-import org.apache.commons.lang.ArrayUtils;
+import org.apache.commons.lang3.ArrayUtils;
 import org.apache.directory.api.ldap.model.constants.SchemaConstants;
 import org.apache.directory.api.ldap.model.exception.LdapInvalidDnException;
 import org.apache.directory.api.ldap.model.filter.BranchNode;

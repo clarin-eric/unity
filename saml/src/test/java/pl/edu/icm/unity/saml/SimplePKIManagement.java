@@ -76,6 +76,12 @@ public class SimplePKIManagement implements PKIManagement
 	}
 
 	@Override
+	public NamedCertificate getCertificateWithoutAuthz(String name) throws EngineException
+	{
+		return null;
+	}
+
+	@Override
 	public void addVolatileCertificate(String name, X509Certificate updated)
 			throws EngineException
 	{

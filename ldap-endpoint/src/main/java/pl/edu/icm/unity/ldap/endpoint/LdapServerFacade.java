@@ -6,11 +6,14 @@ package pl.edu.icm.unity.ldap.endpoint;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
+import org.apache.directory.api.ldap.model.constants.SchemaConstants;
 import org.apache.directory.api.ldap.model.entry.*;
 import org.apache.directory.api.ldap.model.exception.LdapException;
 import org.apache.directory.api.ldap.model.name.Dn;
 import org.apache.directory.api.ldap.model.schema.AttributeType;
+import org.apache.directory.api.ldap.model.schema.Normalizer;
 import org.apache.directory.api.ldap.model.schema.SchemaManager;
+import org.apache.directory.api.ldap.model.schema.registries.Schema;
 import org.apache.directory.api.ldap.model.schema.registries.SchemaLoader;
 import org.apache.directory.api.ldap.schema.loader.LdifSchemaLoader;
 import org.apache.directory.api.ldap.schema.manager.impl.DefaultSchemaManager;
@@ -44,8 +47,7 @@ import pl.edu.icm.unity.base.utils.Log;
  */
 public class LdapServerFacade
 {
-        private static final Logger LOG = Log.getLogger(Log.U_SERVER_LDAP_ENDPOINT,
-			LdapServerFacade.class);
+	private static final Logger LOG = Log.getLogger(Log.U_SERVER_LDAP_ENDPOINT, LdapServerFacade.class);
         
 	private LdapServer impl;
 
@@ -59,14 +61,23 @@ public class LdapServerFacade
 
 	private String workdir;
 
-	public String partitionResource = "partitions.zip";
+	//If true allows for loading of schemas with errors, otherwise any schema with errors will fail to start the LDAP
+	//endpoint
+	private boolean relaxedSchemaLoading;
 
-	public LdapServerFacade(String host, int port, String nameOrNull, String workdir)
-	{
+	public String partitionResource = "default.zip";
+	public String partitionExtResource = "ext.zip";
+
+	public LdapServerFacade(String host, int port, String nameOrNull, String workdir) {
+		this(host, port, nameOrNull, workdir, false);
+	}
+
+	public LdapServerFacade(String host, int port, String nameOrNull, String workdir, boolean relaxedSchemaLoading) {
 		this.host = host;
 		this.port = port;
 		this.name = nameOrNull;
 		this.workdir = workdir;
+		this.relaxedSchemaLoading = relaxedSchemaLoading;
 
 		this.impl = null;
 		this.ds = null;
@@ -77,10 +88,8 @@ public class LdapServerFacade
 		return ds;
 	}
 
-	public Attribute getAttribute(String uid, String upId) throws LdapException
-	{
-		if (ds == null)
-		{
+	public Attribute getAttribute(String uid, String upId) throws LdapException {
+		if (ds == null) {
 			throw new NullPointerException("DirectoryService is null");
 		}
 		AttributeType at = ds.getSchemaManager()
@@ -100,60 +109,46 @@ public class LdapServerFacade
          * @param startTlsSupport
          * @throws java.lang.Exception
 	 */
-	public void init(boolean deleteWorkDir, BaseInterceptor interceptor, boolean ldapsEnabled, boolean startTlsEnabled, boolean startTlsForceConfidentiality, X509Credential credential, String keystoreFileName, String keystorePassword) throws Exception
-	{
-            /*
-            if(credential != null) {
-                credential.getCertificate();                    
-                credential.getCertificateChain();
-            }
-            */
+	public void init(boolean deleteWorkDir, BaseInterceptor interceptor, boolean ldapsEnabled, boolean startTlsEnabled, boolean startTlsForceConfidentiality, X509Credential credential, String keystoreFileName, String keystorePassword) throws Exception {
 		impl = new UnityLdapServer(credential);
-		impl.setServiceName(name);               
-                TcpTransport transport = new TcpTransport(host, port);
-                
-                if(ldapsEnabled || startTlsEnabled) {
-                     if(keystoreFileName != null && !keystoreFileName.isEmpty() && keystorePassword != null && !keystorePassword.isEmpty()) {
-                        impl.setKeystoreFile(LdapServerKeys.getKeystore(keystoreFileName, keystorePassword).getAbsolutePath());
-                        impl.setCertificatePassword(keystorePassword);
-                    }
-                }
-                
-                if(ldapsEnabled) { //LDAP over SSL
-                    transport.setEnableSSL(true);                  
-                } else if (startTlsEnabled) { //Plain LDAP with STARTTLS support                    
-                    StartTlsHandler handler = new StartTlsHandler();
-                    impl.addExtendedOperationHandler(handler);
-                    impl.setConfidentialityRequired(startTlsForceConfidentiality);
-                } 
-                
-                LOG.info("Enabling {} on port: {}", ldapsEnabled ? "LDAPS" : "LDAP", port);
-                if(!ldapsEnabled) {
-                    LOG.info("Starttls={}, force confidentiality=", startTlsEnabled, startTlsForceConfidentiality);
-                }
-                 
+		impl.setServiceName(name);
+		TcpTransport transport = new TcpTransport(host, port);
+
+		if(ldapsEnabled || startTlsEnabled) {
+			 if(keystoreFileName != null && !keystoreFileName.isEmpty() && keystorePassword != null && !keystorePassword.isEmpty()) {
+				impl.setKeystoreFile(LdapServerKeys.getKeystore(keystoreFileName, keystorePassword).getAbsolutePath());
+				impl.setCertificatePassword(keystorePassword);
+			}
+		}
+		if(ldapsEnabled) { //LDAP over SSL
+			transport.setEnableSSL(true);
+		} else if (startTlsEnabled) { //Plain LDAP with STARTTLS support
+			StartTlsHandler handler = new StartTlsHandler();
+			impl.addExtendedOperationHandler(handler);
+			impl.setConfidentialityRequired(startTlsForceConfidentiality);
+		}
+		LOG.info("Enabling {} on port: {}", ldapsEnabled ? "LDAPS" : "LDAP", port);
+		if(!ldapsEnabled) {
+			LOG.info("Starttls={}, force confidentiality=", startTlsEnabled, startTlsForceConfidentiality);
+		}
 		impl.setTransports(transport);
                 
 		ds = new DefaultDirectoryService();
 		ds.getChangeLog().setEnabled(false);
 		// ?
 		ds.setDenormalizeOpAttrsEnabled(true);
-
 		// prepare the working dir with all the required settings
 		boolean shouldStartClose = prepareWorkDir(deleteWorkDir);
 
 		// load the required data
 		loadData();
-                
 		// see https://issues.apache.org/jira/browse/DIRSERVER-1954
-		if (shouldStartClose)
-		{
+		if (shouldStartClose) {
 			ds.startup();
 			ds.shutdown();
 		}
 		impl.setDirectoryService(ds);
-                
-                interceptor.init(ds);
+		interceptor.init(ds);
                 
 		// "inject" unity's code                
 		setUnityInterceptor(interceptor);
@@ -162,15 +157,12 @@ public class LdapServerFacade
 	/**
 	 * Enable TLS support
 	 */
-	public void initTLS(boolean forceTls)
-	{
-		try
-		{
+	public void initTLS(boolean forceTls) {
+		try {
 			StartTlsHandler handler = new StartTlsHandler();
 			impl.addExtendedOperationHandler(handler);
 			impl.setConfidentialityRequired(forceTls);
-		} catch (Exception e)
-		{
+		} catch (Exception e) {
 			throw new ConfigurationException("Can not initialize TLS", e); 
 		}
 	}
@@ -187,90 +179,103 @@ public class LdapServerFacade
 	 *
 	 * @return True if the work directory has been cleaned
 	 */
-	private boolean prepareWorkDir(boolean delete_work_dir) throws IOException
-	{
+	private boolean prepareWorkDir(boolean delete_work_dir) throws IOException {
 		boolean fromScratch = false;
 		File workdirF = new File(workdir);
-		if (delete_work_dir && workdirF.exists())
-		{
+		if (delete_work_dir && workdirF.exists()) {
 			FileUtils.deleteDirectory(workdirF);
 		}
 		boolean shouldExtract = !workdirF.exists();
 		ds.setInstanceLayout(new InstanceLayout(workdirF));
 
-		if (shouldExtract)
-		{
+		if (shouldExtract) {
 			// indicate that we start for the first time
 			fromScratch = true;
+			if(!extractPartitionResource(workdirF, partitionResource)) {
+				throw new IOException("Failed to extract default LDAP schema from "+partitionExtResource);
+			}
+			if(!extractPartitionResource(workdirF, partitionExtResource)) {
+				LOG.warn("Failed to extract LDAP schema extension. "+partitionExtResource+" was not found.");
+			}
+		}
 
-			// copy resources (kind-of minimalistic version from
-			// apacheds) to the destination directory
-			InputStream jarZipIs = LdapServerFacade.class.getClassLoader()
-					.getResourceAsStream(partitionResource);
-			ZipInputStream zis = new ZipInputStream(jarZipIs);
+		return fromScratch;
+	}
+
+	private boolean extractPartitionResource(File workdir, String resource) throws IOException {
+		// copy resources (kind-of minimalistic version from apacheds) to the destination directory
+		InputStream jarZipIs = LdapServerFacade.class.getClassLoader().getResourceAsStream(resource);
+		if(jarZipIs == null) {
+			return false;
+		}
+		ZipInputStream zis = new ZipInputStream(jarZipIs);
+		try {
 			ZipEntry entry;
-			while ((entry = zis.getNextEntry()) != null)
-			{
-				File entryDestination = new File(workdirF, entry.getName());
-				if (entry.isDirectory())
-				{
+			while ((entry = zis.getNextEntry()) != null) {
+				File entryDestination = new File(workdir, entry.getName());
+				if (entry.isDirectory()) {
 					entryDestination.mkdirs();
-				} else
-				{
+				} else {
 					entryDestination.getParentFile().mkdirs();
 					OutputStream out = new FileOutputStream(entryDestination);
 					IOUtils.copy(zis, out);
 					out.close();
 				}
 			}
+		} finally {
 			zis.close();
 		}
 
-		return fromScratch;
+		return true;
 	}
 
 	/**
 	 * Load data required by the ldap directory implementation from a
 	 * directory.
 	 */
-	private void loadData() throws Exception
-	{
-		File schemaPartitionDirectory = new File(
-				ds.getInstanceLayout().getPartitionsDirectory(), "schema");
+	private void loadData() throws Exception {
+		File schemaPartitionDirectory = new File(ds.getInstanceLayout().getPartitionsDirectory(), "schema");
 		SchemaLoader loader = new LdifSchemaLoader(schemaPartitionDirectory);
 		SchemaManager schemaManager = new DefaultSchemaManager(loader);
+		if(this.relaxedSchemaLoading) {
+			schemaManager.setRelaxed();
+		}
 		schemaManager.loadAllEnabled();
 		ds.setSchemaManager(schemaManager);
 
-		LdifPartition schemaLdifPartition = new LdifPartition(schemaManager,
-				ds.getDnFactory());
+		int num_errors = schemaManager.getErrors().size();
+		if(schemaManager.isStrict() && num_errors > 0) {
+			LOG.error("Failed to start LDAP endpoint. Schema manager in strict mode, aborting with errors > 0 (errors="+num_errors+")");
+			for(Throwable t : schemaManager.getErrors()) {
+				LOG.error("\t"+t.getMessage());
+			}
+			throw new Exception("Failed to load schema data. Schema manager in strict mode encountered "+num_errors+" errors");
+		}
+
+		LdifPartition schemaLdifPartition = new LdifPartition(schemaManager, ds.getDnFactory());
 		schemaLdifPartition.setPartitionPath(schemaPartitionDirectory.toURI());
 		SchemaPartition schemaPartition = new SchemaPartition(schemaManager);
 		schemaPartition.setWrappedPartition(schemaLdifPartition);
 		ds.setSchemaPartition(schemaPartition);
 
-		JdbmPartition systemPartition = new JdbmPartition(ds.getSchemaManager(),
-				ds.getDnFactory());
+		JdbmPartition systemPartition = new JdbmPartition(ds.getSchemaManager(), ds.getDnFactory());
 		systemPartition.setId("system");
 		systemPartition.setPartitionPath(
 				new File(ds.getInstanceLayout().getPartitionsDirectory(),
-						systemPartition.getId()).toURI());
+				systemPartition.getId()).toURI());
 		systemPartition.setSuffixDn(new Dn(ServerDNConstants.SYSTEM_DN));
 		systemPartition.setSchemaManager(ds.getSchemaManager());
 
 		ds.setSystemPartition(systemPartition);
 	}
 
-	private void setUnityInterceptor(BaseInterceptor injectedInterceptor)
-	{
+	private void setUnityInterceptor(BaseInterceptor injectedInterceptor) {
 		List<Interceptor> interceptors = ds.getInterceptors();
 		// find Normalization interceptor in chain
 		int insertionPosition = -1;
-		for (int pos = 0; pos < interceptors.size(); ++pos)
-		{
+		for (int pos = 0; pos < interceptors.size(); ++pos) {
 			Interceptor interceptor = interceptors.get(pos);
-			if (interceptor instanceof NormalizationInterceptor)
-			{
+			if (interceptor instanceof NormalizationInterceptor) {
 				insertionPosition = pos;
 				break;
 			}
@@ -283,14 +288,13 @@ public class LdapServerFacade
 	/**
 	 * Start the directory service and the embedded ldap server
 	 */
-	public void start() throws Exception
-	{
+	public void start() throws Exception {
+		LOG.info("LdapServerFacade.start()");
 		ds.startup();
 		impl.start();
 	}
 
-	public void stop() throws Exception
-	{
+	public void stop() throws Exception {
 		impl.stop();
 		ds.shutdown();
 	}

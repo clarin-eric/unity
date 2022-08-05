@@ -189,6 +189,17 @@ public class PKIManagementImpl implements PKIManagement
 
 	@Transactional
 	@Override
+	public synchronized NamedCertificate getCertificateWithoutAuthz(String name) throws EngineException {
+		NamedCertificate cert = certificates.get(name);
+		if (cert == null)
+		{
+			cert = fromStoredCert(certDB.get(name));
+		}
+		return cert;
+	}
+
+	@Transactional
+	@Override
 	public synchronized NamedCertificate getCertificate(String name) throws EngineException
 	{
 		authz.checkAuthorization(AuthzCapability.maintenance);

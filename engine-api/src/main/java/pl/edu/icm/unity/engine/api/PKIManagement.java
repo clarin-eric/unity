@@ -57,7 +57,7 @@ public interface PKIManagement
 	 * @return method allows to quickly get {@link IAuthnAndTrustConfiguration} of the main server.
 	 */
 	IAuthnAndTrustConfiguration getMainAuthnAndTrust();
-		
+
 	/**
 	 * @return set with available certificate names
 	 * @throws EngineException
@@ -70,6 +70,8 @@ public interface PKIManagement
 	 * @throws EngineException
 	 */
 	NamedCertificate getCertificate(String name) throws EngineException;
+
+	NamedCertificate getCertificateWithoutAuthz(String name) throws EngineException;
 	
 	/**
 	 * Adds a new volatile certificate

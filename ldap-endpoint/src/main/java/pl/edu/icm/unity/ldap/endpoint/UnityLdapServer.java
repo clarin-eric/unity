@@ -37,8 +37,7 @@ import pl.edu.icm.unity.base.utils.Log;
  */
 class UnityLdapServer extends LdapServer {
 
-    private static final Logger LOG = 
-        Log.getLogger(Log.U_SERVER_LDAP_ENDPOINT, UnityLdapServer.class);
+    private static final Logger LOG = Log.getLogger(Log.U_SERVER_LDAP_ENDPOINT, UnityLdapServer.class);
 
     private X509Credential credential; //Optional, can be null
     private KeyManagerFactory unityKeyManagerFactory;

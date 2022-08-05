@@ -26,17 +26,17 @@
     </content>
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />
-    <orderEntry type="library" scope="TEST" name="Maven: org.springframework:spring-test:5.3.18" level="project" />
-    <orderEntry type="library" name="Maven: org.springframework:spring-core:5.3.18" level="project" />
-    <orderEntry type="library" name="Maven: org.springframework:spring-jcl:5.3.18" level="project" />
+    <orderEntry type="library" scope="TEST" name="Maven: org.springframework:spring-test:5.3.20" level="project" />
+    <orderEntry type="library" name="Maven: org.springframework:spring-core:5.3.20" level="project" />
+    <orderEntry type="library" name="Maven: org.springframework:spring-jcl:5.3.20" level="project" />
     <orderEntry type="module" module-name="unity-server-storage" scope="TEST" />
     <orderEntry type="library" scope="TEST" name="Maven: org.postgresql:postgresql:42.3.3" level="project" />
     <orderEntry type="library" name="Maven: org.checkerframework:checker-qual:3.5.0" level="project" />
     <orderEntry type="library" scope="TEST" name="Maven: org.mariadb.jdbc:mariadb-java-client:2.7.4" level="project" />
     <orderEntry type="library" scope="TEST" name="Maven: com.h2database:h2:1.4.199" level="project" />
     <orderEntry type="library" scope="TEST" name="Maven: org.mybatis:mybatis:3.5.7" level="project" />
-    <orderEntry type="library" scope="TEST" name="Maven: org.springframework:spring-jdbc:5.3.18" level="project" />
-    <orderEntry type="library" scope="TEST" name="Maven: org.springframework:spring-tx:5.3.18" level="project" />
+    <orderEntry type="library" scope="TEST" name="Maven: org.springframework:spring-jdbc:5.3.20" level="project" />
+    <orderEntry type="library" scope="TEST" name="Maven: org.springframework:spring-tx:5.3.20" level="project" />
     <orderEntry type="library" scope="TEST" name="Maven: org.mybatis:mybatis-spring:2.0.6" level="project" />
     <orderEntry type="library" scope="TEST" name="Maven: org.apache.geronimo.specs:geronimo-jta_1.0.1B_spec:1.1.1" level="project" />
     <orderEntry type="library" name="Maven: org.slf4j:slf4j-api:1.7.32" level="project" />
@@ -87,10 +87,10 @@
     <orderEntry type="library" name="Maven: edu.vt.middleware:vt-dictionary:3.0" level="project" />
     <orderEntry type="library" name="Maven: edu.vt.middleware:vt-crypt:2.1.4" level="project" />
     <orderEntry type="library" name="Maven: com.nulab-inc:zxcvbn:1.6.0" level="project" />
-    <orderEntry type="library" name="Maven: org.springframework:spring-context:5.3.18" level="project" />
-    <orderEntry type="library" name="Maven: org.springframework:spring-aop:5.3.18" level="project" />
-    <orderEntry type="library" name="Maven: org.springframework:spring-beans:5.3.18" level="project" />
-    <orderEntry type="library" name="Maven: org.springframework:spring-expression:5.3.18" level="project" />
+    <orderEntry type="library" name="Maven: org.springframework:spring-context:5.3.20" level="project" />
+    <orderEntry type="library" name="Maven: org.springframework:spring-aop:5.3.20" level="project" />
+    <orderEntry type="library" name="Maven: org.springframework:spring-beans:5.3.20" level="project" />
+    <orderEntry type="library" name="Maven: org.springframework:spring-expression:5.3.20" level="project" />
     <orderEntry type="library" name="Maven: org.aspectj:aspectjweaver:1.9.7" level="project" />
     <orderEntry type="library" name="Maven: org.apache.logging.log4j:log4j-core:2.17.2" level="project" />
     <orderEntry type="library" name="Maven: org.apache.logging.log4j:log4j-api:2.17.2" level="project" />

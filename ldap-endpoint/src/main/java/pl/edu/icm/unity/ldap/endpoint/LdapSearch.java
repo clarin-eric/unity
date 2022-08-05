@@ -199,23 +199,21 @@ class LdapSearch
 				for (AttributeTypeOptions ao : attributes)
 				{
 					String aName = ao.getAttributeType().getName();
-					if (aName.equals(alias))
-					{
-						String requestDn = String.format("%s=%s", alias,
-								username);
+					if (aName.equals(alias)) {
+						String requestDn = String.format("%s=%s", alias, username);
 						// FIXME: is this what we want
 						// in all cases?
 						if (null != searchContext.getDn())
 						{
-							requestDn += "," + searchContext.getDn()
-									.toString();
+							String dnFromSearchContext = searchContext.getDn().toString();
+							if(dnFromSearchContext != null && !dnFromSearchContext.isEmpty()) {
+								requestDn += "," + dnFromSearchContext;
+							}
 						}
+						requestDn += ",ou=system";
 						entry.setDn(requestDn);
-					} else
-					{
-						attributeUtils.addAttribute(aName, userEntity,
-								username, attrs, entry);
-
+					} else {
+						attributeUtils.addAttribute(aName, userEntity, username, attrs, entry);
 					}
 				}
 			}

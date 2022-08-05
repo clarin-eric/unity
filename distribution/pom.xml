@@ -258,8 +258,8 @@
 			<classifier>i18n</classifier>
 			<scope>test</scope>
 		</dependency>
-                <dependency>
-			<groupId>pl.edu.icm.unity</groupId>
+		<dependency>
+			<groupId>io.imunity</groupId>
 			<artifactId>unity-server-ldap-endpoint</artifactId>
 			<version>${project.version}</version>
 			<type>zip</type>
