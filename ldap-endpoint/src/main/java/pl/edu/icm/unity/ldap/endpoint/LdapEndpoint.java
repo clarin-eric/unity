@@ -109,26 +109,57 @@ public class LdapEndpoint extends AbstractEndpoint
 			host = getAdvertisedHostFromServer(httpServer);
 		}
 		if (null == host || host.isEmpty()) {
-			throw new Exception("Host not found in sserver configuration (property name = ) and no advertised url found.");
+			throw new Exception("Host not found in server configuration (property name = ) and no advertised url found.");
 		}
 		int port = configuration.getIntValue(LdapServerProperties.LDAP_PORT);
 
-		String workDirectory = new File(
-		mainConfig.getValue(UnityServerConfiguration.WORKSPACE_DIRECTORY),
-		SERVER_WORK_DIRECTORY).getPath();
-
+		File workDirectoryFile = new File(mainConfig.getValue(UnityServerConfiguration.WORKSPACE_DIRECTORY), SERVER_WORK_DIRECTORY);
+		/*
+		if(!workDirectoryFile.exists()) {
+			if(!workDirectoryFile.mkdirs()) {
+				throw new Exception("Failed to create ldap server work directory: " + workDirectoryFile.getPath());
+			} else {
+				LOG.info("Created ldap server work directory: " + workDirectoryFile.getPath());
+			}
+		}
+		*/
 		String keystoreBaseName = "ldap_certificate";
-		String keystoreFileName = new File(workDirectory, keystoreBaseName).getPath();
+		String keystoreFileName = new File(workDirectoryFile.getPath(), keystoreBaseName).getPath();
 		String keystorePassword = "verydifficulytoguesspassword";
 
 		boolean ldapsEnabled = configuration.getBooleanValue(LdapServerProperties.LDAPS_ENABLED);
 		boolean startTlsEnabled = configuration.getBooleanValue(LdapServerProperties.STARTTLS_ENABLED);
+		boolean startTlsForceConfidentiality = configuration.getBooleanValue(LdapServerProperties.STARTTLS_FORCE_CONFIDENTIALITY);
 
+		/*
 		X509Credential credential = null;
-		String credentialName = configuration.getValue(LdapServerProperties.CREDENTIAL);
-		if(credentialName == null || credentialName.isEmpty()) {
-			credentialName = "MAIN";
+
+		LOG.info("ldapsEnabled={}, startTlsEnabled={}, startTlsForceConfidentiality={}", ldapsEnabled, startTlsEnabled, startTlsForceConfidentiality);
+		//Load a credential if ldaps or starttls is enabled or throw an exception if loading of the credential fails
+		if(ldapsEnabled || startTlsEnabled) {
+			String credentialName = configuration.getValue(LdapServerProperties.CREDENTIAL);
+			boolean hasCredentialName = credentialName != null && !credentialName.isEmpty();
+			if (!hasCredentialName) {
+				credential = pkiManagement.getMainAuthnAndTrust().getCredential();
+				pkiManagement.getMainAuthnAndTrust().getValidator();
+				if(credential == null) {
+					throw new ConfigurationException("Main credential is required when ldaps or starttls is enabled and no alternative credential is configured");
+				} else {
+					LOG.info("Main credential configured for ldaps or starttls.");
+				}
+
+			} else {
+				credential = pkiManagement.getCredential(credentialName);
+				if(credential == null) {
+					throw new ConfigurationException("Credential with name = " + credentialName + " is required when ldaps or starttls is enabled");
+				} else {
+					LOG.info("Credential with name {} configured for ldaps or starttls.", credentialName);
+				}
+			}
+
 		}
+
+		 */
                 /*
 
 
@@ -143,33 +174,35 @@ public class LdapEndpoint extends AbstractEndpoint
                                             " configured as LDAP server credential", e1);
                     }
                 }
-                LOG.info("Credential with name {} configued.", credentialName);
+                LOG.info("Credential with name {} configured.", credentialName);
                 */
-		
+		/*
                 try {
                     //for(String name : pkiManagement.getAllCertificateNames()) {
 					//for(String name : pkiManagement.getAllCertificateNamesWithoutAuthz()) {
                     //    LOG.info("Found certificate with name: "+name);
                     //}
+
+
+
                     NamedCertificate cert = pkiManagement.getCertificateWithoutAuthz(credentialName);
                 } catch(EngineException ex) {
                          LOG.error("Failed to enumerate certificate names");
 					throw new ConfigurationException("Can not access " + credentialName +
 							" configured as LDAP server credential", ex);
                 }
-				LOG.info("Credential with name {} configued.", credentialName);
-                ////pkiManagement.getCertificate(host)
+		*/
+				////pkiManagement.getCertificate(host)
 
 		boolean relaxedSchemaLoading = configuration.getBooleanValue(LdapServerProperties.RELAXED_SCHEMA_LOADING);
-		ldapServerFacade = new LdapServerFacade(host, port, "ldap server interface", workDirectory, relaxedSchemaLoading);
+		ldapServerFacade = new LdapServerFacade(host, port, "ldap server interface", workDirectoryFile.getPath(), relaxedSchemaLoading);
 		LdapApacheDSInterceptor ladi = new LdapApacheDSInterceptor(rpr, sessionMan,
 				this.description.getRealm(), attributesMan, identitiesMan,
 				configuration, userMapper, ldapServerFacade, rpr.getAuthenticatorId());
 
 		try {
-			boolean startTlsForceConfidentiality = false;
-			ldapServerFacade.init(false, ladi, ldapsEnabled, startTlsEnabled, startTlsForceConfidentiality, credential, keystoreBaseName, keystorePassword);
-                        ladi.init(ldapServerFacade.getDs());
+			ldapServerFacade.init(false, ladi, ldapsEnabled, startTlsEnabled, startTlsForceConfidentiality, keystoreFileName, keystorePassword);
+			ladi.init(ldapServerFacade.getDs());
 			ldapServerFacade.start();
 		} catch (Exception e) {
 			throw new ConfigurationException("LDAP embedded server failed to start", e);

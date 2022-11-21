@@ -101,47 +101,58 @@ public class LdapServerFacade
 	/**
 	 * Initialise the LDAP server and the directory service.
 	 *
-	 * @param deleteWorkDir
-	 *                - should we reuse the LDAP initialisation data
-	 * @param interceptor
-	 *                - unity's LDAP interceptor
-         * @param credential
-         * @param startTlsSupport
-         * @throws java.lang.Exception
+	 * @param deleteWorkDir should we reuse the LDAP initialisation data
+	 * @param interceptor unity's LDAP interceptor
+	 * @param ldapsEnabled Use ldap over tls (will precede over starttls)
+	 * @param startTlsEnabled Use starttls (only if ldap is not running on tls)
+	 * @param startTlsForceConfidentiality Force confidentiality on starttls
+	 * @param credential The credential (X509 certificate) to use
+	 * @throws java.lang.Exception
 	 */
 	public void init(boolean deleteWorkDir, BaseInterceptor interceptor, boolean ldapsEnabled, boolean startTlsEnabled, boolean startTlsForceConfidentiality, X509Credential credential, String keystoreFileName, String keystorePassword) throws Exception {
-		impl = new UnityLdapServer(credential);
+		throw new UnsupportedOperationException("LDAP server with unity credential is currently not support. Configure separate keystore instead.");
+		//Unity credential with self signed certificate runs into cain validation (unkown_ca) issues.
+	}
+
+	public void init(boolean deleteWorkDir, BaseInterceptor interceptor, boolean ldapsEnabled, boolean startTlsEnabled, boolean startTlsForceConfidentiality, String keystoreFileName, String keystorePassword) throws Exception {
+		// prepare the working dir with all the required settings
+		boolean shouldStartClose = prepareWorkDir(deleteWorkDir);
+
+		impl = new LdapServer();
 		impl.setServiceName(name);
 		TcpTransport transport = new TcpTransport(host, port);
 
 		if(ldapsEnabled || startTlsEnabled) {
 			 if(keystoreFileName != null && !keystoreFileName.isEmpty() && keystorePassword != null && !keystorePassword.isEmpty()) {
+			 	LOG.info("Configuring ldap keystore, file = {}", keystoreFileName);
 				impl.setKeystoreFile(LdapServerKeys.getKeystore(keystoreFileName, keystorePassword).getAbsolutePath());
 				impl.setCertificatePassword(keystorePassword);
 			}
+
+			if(ldapsEnabled) { //LDAP over SSL
+				transport.setEnableSSL(true);
+				transport.setNeedClientAuth(false);
+				transport.setWantClientAuth(false);
+			} else if (startTlsEnabled) { //Plain LDAP with STARTTLS support
+				StartTlsHandler handler = new StartTlsHandler();
+				impl.addExtendedOperationHandler(handler);
+				impl.setConfidentialityRequired(startTlsForceConfidentiality);
+			}
 		}
-		if(ldapsEnabled) { //LDAP over SSL
-			transport.setEnableSSL(true);
-		} else if (startTlsEnabled) { //Plain LDAP with STARTTLS support
-			StartTlsHandler handler = new StartTlsHandler();
-			impl.addExtendedOperationHandler(handler);
-			impl.setConfidentialityRequired(startTlsForceConfidentiality);
-		}
-		LOG.info("Enabling {} on port: {}", ldapsEnabled ? "LDAPS" : "LDAP", port);
-		if(!ldapsEnabled) {
-			LOG.info("Starttls={}, force confidentiality=", startTlsEnabled, startTlsForceConfidentiality);
-		}
+
+		LOG.info("Enabling {} on port: {}, starttls={}, force confidentiality=", ldapsEnabled ? "LDAPS" : "LDAP", port, startTlsEnabled, startTlsForceConfidentiality);
+
 		impl.setTransports(transport);
                 
 		ds = new DefaultDirectoryService();
+		ds.setInstanceLayout(new InstanceLayout(new File(workdir)));
 		ds.getChangeLog().setEnabled(false);
 		// ?
 		ds.setDenormalizeOpAttrsEnabled(true);
-		// prepare the working dir with all the required settings
-		boolean shouldStartClose = prepareWorkDir(deleteWorkDir);
 
 		// load the required data
-		loadData();
+		loadData(ds, this.relaxedSchemaLoading);
+
 		// see https://issues.apache.org/jira/browse/DIRSERVER-1954
 		if (shouldStartClose) {
 			ds.startup();
@@ -186,7 +197,6 @@ public class LdapServerFacade
 			FileUtils.deleteDirectory(workdirF);
 		}
 		boolean shouldExtract = !workdirF.exists();
-		ds.setInstanceLayout(new InstanceLayout(workdirF));
 
 		if (shouldExtract) {
 			// indicate that we start for the first time
@@ -233,15 +243,15 @@ public class LdapServerFacade
 	 * Load data required by the ldap directory implementation from a
 	 * directory.
 	 */
-	private void loadData() throws Exception {
-		File schemaPartitionDirectory = new File(ds.getInstanceLayout().getPartitionsDirectory(), "schema");
+	private void loadData(DirectoryService _ds, boolean _relaxedSchemaLoading) throws Exception {
+		File schemaPartitionDirectory = new File(_ds.getInstanceLayout().getPartitionsDirectory(), "schema");
 		SchemaLoader loader = new LdifSchemaLoader(schemaPartitionDirectory);
 		SchemaManager schemaManager = new DefaultSchemaManager(loader);
-		if(this.relaxedSchemaLoading) {
+		if(_relaxedSchemaLoading) {
 			schemaManager.setRelaxed();
 		}
 		schemaManager.loadAllEnabled();
-		ds.setSchemaManager(schemaManager);
+		_ds.setSchemaManager(schemaManager);
 
 		int num_errors = schemaManager.getErrors().size();
 		if(schemaManager.isStrict() && num_errors > 0) {
@@ -252,21 +262,21 @@ public class LdapServerFacade
 			throw new Exception("Failed to load schema data. Schema manager in strict mode encountered "+num_errors+" errors");
 		}
 
-		LdifPartition schemaLdifPartition = new LdifPartition(schemaManager, ds.getDnFactory());
+		LdifPartition schemaLdifPartition = new LdifPartition(schemaManager, _ds.getDnFactory());
 		schemaLdifPartition.setPartitionPath(schemaPartitionDirectory.toURI());
 		SchemaPartition schemaPartition = new SchemaPartition(schemaManager);
 		schemaPartition.setWrappedPartition(schemaLdifPartition);
-		ds.setSchemaPartition(schemaPartition);
+		_ds.setSchemaPartition(schemaPartition);
 
-		JdbmPartition systemPartition = new JdbmPartition(ds.getSchemaManager(), ds.getDnFactory());
+		JdbmPartition systemPartition = new JdbmPartition(_ds.getSchemaManager(), _ds.getDnFactory());
 		systemPartition.setId("system");
 		systemPartition.setPartitionPath(
-				new File(ds.getInstanceLayout().getPartitionsDirectory(),
+				new File(_ds.getInstanceLayout().getPartitionsDirectory(),
 				systemPartition.getId()).toURI());
 		systemPartition.setSuffixDn(new Dn(ServerDNConstants.SYSTEM_DN));
-		systemPartition.setSchemaManager(ds.getSchemaManager());
+		systemPartition.setSchemaManager(_ds.getSchemaManager());
 
-		ds.setSystemPartition(systemPartition);
+		_ds.setSystemPartition(systemPartition);
 	}
 
 	private void setUnityInterceptor(BaseInterceptor injectedInterceptor) {

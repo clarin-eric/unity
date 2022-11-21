@@ -30,9 +30,10 @@ public class LdapServerProperties extends PropertiesHelper
 	public final static Map<String, PropertyMD> META = new HashMap<>();
 	
 	public static final String HOST = "host";
-	public static final String LDAP_PORT = "ldapPort";        
-	public static final String LDAPS_ENABLED = "ldaps";
-	public static final String STARTTLS_ENABLED = "starttls";
+	public static final String LDAP_PORT = "port";
+	public static final String LDAPS_ENABLED = "ldaps.enabled";
+	public static final String STARTTLS_ENABLED = "starttls.enabled";
+	public static final String STARTTLS_FORCE_CONFIDENTIALITY = "starttls.force_confidentiality";
 	public static final String CREDENTIAL = "credential";
 
 	public static final String RELAXED_SCHEMA_LOADING = "schema.loading.relaxed";
@@ -59,6 +60,8 @@ public class LdapServerProperties extends PropertiesHelper
 
 		META.put(STARTTLS_ENABLED, new PropertyMD().setCategory(main)
 			.setDescription("LDAP STARTTLS support").setDefault("false"));
+		META.put(STARTTLS_FORCE_CONFIDENTIALITY, new PropertyMD().setCategory(main)
+				.setDescription("LDAP STARTTLS force confidentiality").setDefault("false"));
 		META.put(CREDENTIAL, new PropertyMD().setCategory(main)
 			.setDescription("Name of Unity credential that will be used as LDAP server's own identity"));
 

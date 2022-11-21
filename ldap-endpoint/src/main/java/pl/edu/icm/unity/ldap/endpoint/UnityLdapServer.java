@@ -4,6 +4,7 @@
  */
 package pl.edu.icm.unity.ldap.endpoint;
 
+import java.io.IOException;
 import java.security.Security;
 
 import javax.net.ssl.KeyManagerFactory;
@@ -39,20 +40,16 @@ class UnityLdapServer extends LdapServer {
 
     private static final Logger LOG = Log.getLogger(Log.U_SERVER_LDAP_ENDPOINT, UnityLdapServer.class);
 
-    private X509Credential credential; //Optional, can be null
+    //private X509Credential credential; //Optional, can be null
     private KeyManagerFactory unityKeyManagerFactory;
 
-    UnityLdapServer(X509Credential credential) {
-        this.credential = credential;
-    }
-/*
-    @Override
-    public void loadKeyStore() throws Exception {
-        if (this.credential == null) {
+    UnityLdapServer(X509Credential credential) throws Exception {
+        //this.credential = credential;
+        if(credential == null) {
             //If no credential is set, fall back to the default implementation
             LOG.info("No unity credential configured");
 
-            super.loadKeyStore();
+            //super.loadKeyStore();
         } else {
             LOG.info("Using the unity credential");
             //Set the unity key manager factory based on the set credential
@@ -65,16 +62,40 @@ class UnityLdapServer extends LdapServer {
             unityKeyManagerFactory.init(credential.getKeyStore(), credential.getKeyPassword());
         }
     }
+/*
+    //@Override
+    public void loadKeyStore() throws Exception {
+        if (this.credential == null) {
+            //If no credential is set, fall back to the default implementation
+            LOG.info("No unity credential configured");
+
+            //super.loadKeyStore();
+        } else {
+            LOG.info("Using the unity credential");
+            //Set the unity key manager factory based on the set credential
+            String algorithm = Security.getProperty("ssl.KeyManagerFactory.algorithm");
+            if (algorithm == null) {
+                algorithm = KeyManagerFactory.getDefaultAlgorithm();
+            }
+            LOG.info("Algorithm: {}, default algorithm: {}", algorithm, KeyManagerFactory.getDefaultAlgorithm());
+            unityKeyManagerFactory = KeyManagerFactory.getInstance(algorithm);
+            unityKeyManagerFactory.init(credential.getKeyStore(), credential.getKeyPassword());
+        }
+    }
+*/
 
     @Override
     public KeyManagerFactory getKeyManagerFactory() {
         //If no credential is set, fall back to the default implementation
-        if (this.credential == null) {
+        if (this.unityKeyManagerFactory == null) {
             return super.getKeyManagerFactory();
         }
 
+        LOG.info("Using unity key manager factory");
+
+
+        //org.apache.mina.filter.ssl.SslFilter
         //Return the unity key manager factory
         return unityKeyManagerFactory;
     }
-*/
 }
