@@ -1,7 +1,7 @@
 sudo: false
 language: java
 jdk:
-- openjdk9
+- openjdk11
 
 before_install:
 - unset GEM_PATH
