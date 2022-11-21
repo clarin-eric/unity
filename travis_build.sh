@@ -8,7 +8,7 @@ function bell() {
 }
 bell &
 
-mvn install --show-version --log-file build.log --batch-mode -DskipTests
+mvn install --show-version --log-file build.log --batch-mode -DskipTests -Dgpg.skip
 EXIT=$?
 echo "Printing tail of build output: " && tail -n 1000 build.log
 
