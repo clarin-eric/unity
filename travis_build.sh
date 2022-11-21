@@ -1,5 +1,7 @@
 #!/bin/bash
 
+mvn -v
+
 function bell() {
   while true; do
     echo -e "Building..."
